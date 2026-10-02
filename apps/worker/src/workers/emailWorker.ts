@@ -37,23 +37,25 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
   const db = createAdminClient();
   const { orgId, projectId, contactId, step } = job.data;
 
-  // Idempotency: the unique constraint on (project_id, contact_id, channel, step)
-  // is the real guard — if this exact step was already claimed (by an earlier
-  // scheduler tick's job, even after a worker restart), this insert conflicts
-  // and we no-op instead of sending twice.
-  const { data: claimed, error: claimErr } = await db
-    .from("messages")
-    .insert({ org_id: orgId, project_id: projectId, contact_id: contactId, channel: "em", step, status: "queued" })
-    .select()
-    .single();
-  if (claimErr) {
-    if (claimErr.code === "23505") {
-      log.info({ projectId, contactId, step }, "email step already claimed, skipping");
-      return;
-    }
-    throw claimErr;
+  // Idempotency: claim_message_send is the real guard (see its migration for
+  // why a plain insert-and-treat-conflict-as-duplicate breaks retries). It
+  // returns SQL NULL if another attempt already holds or completed this slot —
+  // but PostgREST serializes a NULL composite as an object with every field
+  // null (row_to_json(NULL::messages) is a Postgres quirk), not JSON null, so
+  // we must check claimed.id rather than claimed itself.
+  const { data: claimed, error: claimErr } = await db.rpc("claim_message_send", {
+    p_org_id: orgId,
+    p_project_id: projectId,
+    p_contact_id: contactId,
+    p_channel: "em",
+    p_step: step,
+  });
+  if (claimErr) throw claimErr;
+  if (!claimed?.id) {
+    log.info({ projectId, contactId, step }, "email step already in flight or sent, skipping");
+    return;
   }
-  const messageId = claimed.id;
+  const messageId = (claimed as { id: string }).id;
 
   try {
     const [{ data: contact }, { data: project }, { data: template }, { data: conn }, { data: seq }, { data: channelSettings }] =

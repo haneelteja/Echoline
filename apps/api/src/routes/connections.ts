@@ -24,6 +24,10 @@ function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
 }
 
+// Every route here runs through req.supabase (the caller's own RLS context,
+// not a service-role bypass). provider_connections' RLS is admin-only — an
+// operator calling GET gets an empty list, not an error; writes get a 403.
+// That's intentional: connections management is an org-admin concern.
 export const connectionRoutes: FastifyPluginAsync = async (app) => {
   app.get("/projects/:id/connections", async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -58,6 +62,18 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
 
     const envelope = encryptCredentials(JSON.stringify(body.credentials), masterKey());
     const row = envelopeToRow(envelope);
+
+    // Only one *connected* provider per (project, kind) — replace, don't stack.
+    // Guarded on testResult.ok so a failed new attempt never disconnects a
+    // working existing connection.
+    if (testResult.ok) {
+      await req.supabase
+        .from("provider_connections")
+        .update({ status: "disconnected" })
+        .eq("project_id", id)
+        .eq("kind", body.kind)
+        .eq("status", "connected");
+    }
 
     const { data, error } = await req.supabase
       .from("provider_connections")

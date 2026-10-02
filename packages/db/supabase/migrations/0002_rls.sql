@@ -128,7 +128,11 @@ create policy message_events_select on message_events for select
 create policy message_events_insert on message_events for insert
   with check (can_write_project(project_id));
 
--- provider_connections: org-admin only (credentials are sensitive; operators get status via API, not direct table reads)
+-- provider_connections: org-admin only, full stop. Not just the encrypted
+-- credential columns — even status/account_label/scopes are admin-only, both
+-- here and in apps/api's connections routes (which read through this same
+-- RLS as the calling user, not a service-role bypass). Operators manage
+-- leads/templates/sequences but do not see provider connection state.
 create policy provider_connections_select on provider_connections for select
   using (can_admin_org(org_id));
 create policy provider_connections_write on provider_connections for all

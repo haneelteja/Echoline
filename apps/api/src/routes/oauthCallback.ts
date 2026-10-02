@@ -65,6 +65,18 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
         return reply.redirect(`${webUrl}/channels?oauth_error=project_not_found`);
       }
 
+      // Only one *connected* provider per (project, kind) — replace, don't
+      // stack (e.g. re-running the Gmail OAuth flow shouldn't leave two
+      // "connected" email providers for the worker to trip over).
+      if (testResult.ok) {
+        await supabase
+          .from("provider_connections")
+          .update({ status: "disconnected" })
+          .eq("project_id", statePayload.projectId)
+          .eq("kind", "email")
+          .eq("status", "connected");
+      }
+
       const { error: insertErr } = await supabase.from("provider_connections").insert({
         org_id: (project as any).org_id,
         project_id: statePayload.projectId,

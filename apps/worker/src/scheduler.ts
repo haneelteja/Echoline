@@ -93,8 +93,14 @@ async function processProject(
     counts[d.channel]++;
 
     const queue = d.channel === "em" ? emailQueue : whatsappQueue;
-    // BullMQ rejects custom job IDs containing ":" — underscore-joined instead.
-    const jobId = `${project.id}_${d.contactId}_${d.channel}_${d.step}`;
+    // Idempotency is enforced entirely by claim_message_send in the database
+    // (see its migration), NOT by this job ID — a deterministic ID would mean
+    // that once a job reaches a terminal state (failed or completed), BullMQ
+    // refuses to run a same-ID job again, permanently blocking any retry on
+    // the next tick or a manual "Run due steps now". The timestamp suffix
+    // keeps each enqueue a genuinely new, processable job; the prefix stays
+    // human-readable for log correlation. BullMQ also rejects ":" in job IDs.
+    const jobId = `${project.id}_${d.contactId}_${d.channel}_${d.step}_${Date.now()}`;
     await queue.add(
       "send",
       { orgId: project.org_id, projectId: project.id, contactId: d.contactId, step: d.step },
