@@ -12,7 +12,11 @@ const app = Fastify({
   },
 });
 
-await app.register(cors, { origin: process.env.NEXT_PUBLIC_API_URL ? true : true });
+const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+await app.register(cors, { origin: allowedOrigins });
 
 app.get("/health", async () => ({ ok: true }));
 

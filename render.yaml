@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: echoline-api
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @echoline/core build && pnpm --filter @echoline/db build && pnpm --filter @echoline/api build
+    startCommand: pnpm --filter @echoline/api start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: CORS_ORIGINS
+        sync: false # comma-separated list of allowed web origins, e.g. your Vercel domain(s)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

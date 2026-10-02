@@ -3,6 +3,7 @@ dist/
 .turbo/
 .next/
 *.log
+*.tsbuildinfo
 
 # env
 .env
@@ -17,3 +18,5 @@ packages/db/supabase/.temp/
 # os
 .DS_Store
 Thumbs.db
+
+.vercel
