@@ -68,9 +68,12 @@
   click-redirect/unsubscribe URL builders, 36 new vitest cases
 - `apps/worker` (new): BullMQ scheduler — a 5-minute repeatable tick walks every
   project, applies `nextDue`/send-window/business-day/daily-cap, enqueues sends with
-  jitter; send-email and send-whatsapp processors claim a unique
-  `(project_id, contact_id, channel, step)` row in `messages` *before* calling the
-  provider — the real idempotency guard, independent of BullMQ's own job-id dedup
+  jitter; send-email and send-whatsapp processors claim their slot via the
+  `claim_message_send` Postgres function *before* calling the provider — the real
+  idempotency guard, atomically distinguishing "already sent" from "previously
+  failed, safe to retry" (a plain insert-and-treat-conflict-as-duplicate, tried
+  first, silently broke every retry — see the fix-commit history and the
+  function's own migration comment for the full story)
 - WhatsApp sends are blocked unless the step's template is `Approved`, with the
   reason recorded in `message_events` (`blocked`) rather than silently dropped
 - `apps/api`: manual "Run due steps now" (operator+, bypasses the window but not
@@ -86,6 +89,18 @@
   bug) was correctly rejected by the database-level guard with zero duplicate email
   or row. The WhatsApp approval gate was verified the same way — blocked, reason
   recorded, contact left untouched.
+- A follow-up full-implementation review caught what that first round of live
+  testing missed: the duplicate-job test above proved concurrent/duplicate sends
+  were blocked, but never exercised a genuine **failure-then-retry**, which is
+  exactly where the original claim logic broke (see `claim_message_send` above).
+  Re-verified live with the actual failure scenario: a job given a wrong SMTP
+  port burned all 3 attempts and landed on `status='failed'`; a fresh job (the
+  next scheduler tick, credentials now corrected) reclaimed the *same* `messages`
+  row and sent successfully — one email, zero duplicates. The same review also
+  added missing uniqueness constraints that the workers' `.maybeSingle()` calls
+  were silently relying on (`provider_connections`: one connected per kind per
+  project; `templates`: one per project/channel/step) — both now enforced at the
+  database level, not just assumed.
 - **Known gaps**: real component/variable mapping for approved WhatsApp templates
   (Meta's numbered `{{1}}` placeholders) ships in Phase 6 — Phase 3 sends approved
   templates as registered, without dynamic parameters. Several WhatsApp adapters
