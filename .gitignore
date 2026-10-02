@@ -1,3 +1,22 @@
 node_modules/
-.env*
+dist/
+.turbo/
+.next/
+*.log
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# supabase local
+packages/db/supabase/.branches/
+packages/db/supabase/.temp/
+
+# os
 .DS_Store
+Thumbs.db
+
+.vercel

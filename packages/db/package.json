@@ -1,0 +1,22 @@
+{
+  "name": "@echoline/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "node ../../scripts/build-pkg.mjs src/index.ts && tsc -p tsconfig.json --emitDeclarationOnly --outDir dist",
+    "migrate": "supabase db push --workdir .",
+    "seed": "tsx src/seed.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "tsx": "^4.19.1",
+    "@types/node": "^22.7.5"
+  }
+}
