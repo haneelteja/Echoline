@@ -45,17 +45,20 @@ services:
       - key: MICROSOFT_OAUTH_CLIENT_SECRET
         sync: false
 
-  # Background worker: BullMQ scheduler (5-min repeatable tick) + send-email/
-  # send-whatsapp processors. Needs a paid plan — Render's free tier is
-  # web-services-only and spins down on inactivity, which a persistent queue
-  # consumer can't tolerate.
-  - type: worker
+  # BullMQ scheduler (5-min repeatable tick) + send-email/send-whatsapp
+  # processors. Deployed as a free Web Service (not a Background Worker,
+  # which requires a paid plan) by binding a trivial health endpoint
+  # (see src/healthServer.ts) — an external uptime pinger (UptimeRobot/
+  # cron-job.org) must hit it more often than Render's 15-min idle
+  # spin-down, or the process (and the BullMQ consumers inside it) sleeps.
+  - type: web
     name: echoline-worker
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @echoline/core build && pnpm --filter @echoline/db build && pnpm --filter @echoline/providers build && pnpm --filter @echoline/worker build
     startCommand: pnpm --filter @echoline/worker start
+    healthCheckPath: /
     envVars:
       - key: NODE_VERSION
         value: "22"

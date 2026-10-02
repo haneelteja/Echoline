@@ -5,6 +5,7 @@ import { getSchedulerQueue, SCHEDULER_QUEUE } from "./queues.js";
 import { runSchedulerForProject, runSchedulerTick } from "./scheduler.js";
 import { startEmailWorker } from "./workers/emailWorker.js";
 import { startWhatsAppWorker } from "./workers/whatsappWorker.js";
+import { startHealthServer } from "./healthServer.js";
 
 const log = pino({
   name: "echoline-worker",
@@ -15,6 +16,7 @@ const log = pino({
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
 async function main() {
+  const healthServer = startHealthServer();
   const schedulerQueue = getSchedulerQueue();
   // Re-adding an identical repeatable job on every restart is a no-op in
   // BullMQ (deduped by jobId + repeat pattern), so this is safe to call here.
@@ -43,6 +45,7 @@ async function main() {
   const shutdown = async () => {
     log.info("Shutting down...");
     await Promise.all([schedulerWorker.close(), emailWorker.close(), whatsappWorker.close(), schedulerQueue.close()]);
+    healthServer.close();
     process.exit(0);
   };
   process.on("SIGTERM", shutdown);
