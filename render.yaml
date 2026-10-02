@@ -4,7 +4,9 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @echoline/core build && pnpm --filter @echoline/db build && pnpm --filter @echoline/api build
+    # --prod=false: NODE_ENV=production (set below) makes pnpm skip devDependencies
+    # by default, but esbuild/typescript/etc. are devDependencies needed to build.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @echoline/core build && pnpm --filter @echoline/db build && pnpm --filter @echoline/api build
     startCommand: pnpm --filter @echoline/api start
     healthCheckPath: /health
     envVars:
