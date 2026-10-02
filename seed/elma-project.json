@@ -1,0 +1,186 @@
+{
+  "projects/elma": {
+    "name": "Elma Industries",
+    "brand": "Elma Industries",
+    "senderName": "Haneel Teja Nalluru",
+    "website": "https://elmawaterindustries.in/",
+    "waNumber": "916309060777",
+    "accent": "#3d1a5c",
+    "createdAt": "2026-10-01T09:00:00.000Z"
+  },
+  "projects/elma/settings/sequence": {
+    "dailyCap": 50,
+    "window": {
+      "start": "10:00",
+      "end": "18:00"
+    },
+    "stopOnReply": true,
+    "em": {
+      "enabled": true,
+      "steps": [
+        {
+          "delayDays": 0
+        },
+        {
+          "delayDays": 2
+        },
+        {
+          "delayDays": 5
+        }
+      ]
+    },
+    "wa": {
+      "enabled": true,
+      "steps": [
+        {
+          "delayDays": 0
+        },
+        {
+          "delayDays": 2
+        },
+        {
+          "delayDays": 5
+        }
+      ]
+    }
+  },
+  "projects/elma/settings/channels": {
+    "email": {
+      "provider": "gmail",
+      "fromName": "Haneel Teja Nalluru",
+      "connected": false,
+      "tracking": {}
+    },
+    "wa": {
+      "provider": "360dialog",
+      "number": "916309060777",
+      "lang": "en",
+      "connected": false,
+      "tracking": {}
+    }
+  },
+  "projects/elma/settings/brand": {
+    "about": "Elma Industries, Cherlapally, Hyderabad. Produces custom-labelled packaged drinking water for businesses.",
+    "offer": "Bottles in 250 ml, 500 ml, 750 ml and 1 litre. Label printing and delivery within Hyderabad included. We handle design, printing, filling and dispatch.",
+    "pricing": "Share the price list image; do not quote numbers unless listed in SKUs.",
+    "tone": "Warm, short, professional. No hard sell. Offer a free sample label mock-up.",
+    "cta": "Reply \"yes\" for a free sample label mock-up with their logo, or message on WhatsApp.",
+    "skus": [
+      {
+        "code": "ELMA-250",
+        "name": "Custom-label packaged drinking water",
+        "size": "250 ml",
+        "price": "",
+        "moq": ""
+      },
+      {
+        "code": "ELMA-500",
+        "name": "Custom-label packaged drinking water",
+        "size": "500 ml",
+        "price": "",
+        "moq": ""
+      },
+      {
+        "code": "ELMA-750",
+        "name": "Custom-label packaged drinking water",
+        "size": "750 ml",
+        "price": "",
+        "moq": ""
+      },
+      {
+        "code": "ELMA-1000",
+        "name": "Custom-label packaged drinking water",
+        "size": "1 litre",
+        "price": "",
+        "moq": ""
+      }
+    ]
+  },
+  "projects/elma/templates/em0": {
+    "channel": "email",
+    "step": 0,
+    "name": "Initial: a quick idea",
+    "subject": "A quick idea for {{company}}",
+    "body": "Hi team at {{company}},\n\nI came across {{company}}{{area_phrase}} and {{category_line}}\n\nAt Elma Industries (Cherlapally, Hyderabad), we produce custom-labelled packaged drinking water in 250 ml, 500 ml, 750 ml and 1 litre bottles. Label printing and delivery within Hyderabad are included, and we handle the design, printing, filling and dispatch.\n\n• Your branding stays visible throughout the customer experience\n• Your identity carries consistently across dining, events and takeaway\n• Every bottle becomes a consistent extension of your brand\n\nWould it be worth sending you a free sample label mock-up with your logo?\n\nJust reply \"yes\", or message us on WhatsApp.",
+    "categoryLines": {
+      "Restaurant": "thought water bottles with your own label could be a nice fit: your logo on every table, instead of a generic brand.",
+      "Car Dealer / Retail Showroom": "thought branded water bottles could be a nice touch for your showroom: something with your logo for every customer who walks in, browses or takes a test drive.",
+      "Banquet Hall / Catering / Convention Centre": "thought custom-labelled water bottles could be a nice fit for the weddings, events and functions you host: your venue's name on every table.",
+      "Hotel": "thought your own labelled water bottles could be a nice touch: in every room, at the front desk and at your events.",
+      "default": "thought water bottles with your own label could be a good fit for your business."
+    },
+    "createdAt": "2026-10-01T09:00:00.000Z"
+  },
+  "projects/elma/templates/em1": {
+    "channel": "email",
+    "step": 1,
+    "name": "Follow-up 1: did it reach you",
+    "subject": "Re: A quick idea for {{company}}",
+    "body": "Hi {{company}},\n\nJust following up on my note about custom branded water bottles for your business. Wanted to make sure it reached you.\n\nIf useful, share your preferred bottle size, quantity, delivery location and timeline, and I'll recommend options and pricing.",
+    "categoryLines": {
+      "default": ""
+    },
+    "createdAt": "2026-10-01T09:00:00.000Z"
+  },
+  "projects/elma/templates/em2": {
+    "channel": "email",
+    "step": 2,
+    "name": "Follow-up 2: door open",
+    "subject": "Re: A quick idea for {{company}}",
+    "body": "Hi {{company}},\n\nOne last note from my end. If custom branded water bottles aren't a priority right now, no worries at all.\n\nI'll leave the door open. Feel free to reach out anytime if it becomes useful for your business.",
+    "categoryLines": {
+      "default": ""
+    },
+    "createdAt": "2026-10-01T09:00:00.000Z"
+  },
+  "projects/elma/templates/wa0": {
+    "channel": "whatsapp",
+    "step": 0,
+    "name": "Initial: intro + product images",
+    "metaName": "elma_intro_v1",
+    "metaStatus": "Draft",
+    "body": "Hi {{company}} 👋 We're Elma Industries, a Hyderabad-based company that makes customised branded water bottles for businesses like yours. Here's a quick look at our product range:",
+    "categoryLines": {
+      "default": ""
+    },
+    "createdAt": "2026-10-01T09:00:00.000Z"
+  },
+  "projects/elma/templates/wa1": {
+    "channel": "whatsapp",
+    "step": 1,
+    "name": "Follow-up 1",
+    "metaName": "elma_followup_1",
+    "metaStatus": "Draft",
+    "body": "Hi {{company}} 👋 just following up on our note about custom branded water bottles. Did you get a chance to see it? Happy to share samples or pricing whenever convenient. — Haneel, Elma Industries",
+    "categoryLines": {
+      "default": ""
+    },
+    "createdAt": "2026-10-01T09:00:00.000Z"
+  },
+  "projects/elma/templates/wa2": {
+    "channel": "whatsapp",
+    "step": 2,
+    "name": "Follow-up 2: last check-in",
+    "metaName": "elma_followup_2",
+    "metaStatus": "Draft",
+    "body": "Hi {{company}}, one last check-in from Elma Industries. If custom branded water bottles aren't a priority right now, no worries at all! Feel free to reach out anytime in the future. Wishing you all the best 🙏 — Haneel",
+    "categoryLines": {
+      "default": ""
+    },
+    "createdAt": "2026-10-01T09:00:00.000Z"
+  },
+  "projects/elma/sources/onedrive": {
+    "type": "onedrive",
+    "name": "Excel on OneDrive",
+    "detail": "/ABS/Elma_Industries_MASTER_Leads.xlsx · Table1 · 📋 Master Leads",
+    "config": {
+      "path": "/ABS/Elma_Industries_MASTER_Leads.xlsx",
+      "table": "Table1",
+      "sheet": "📋 Master Leads"
+    },
+    "mode": "Hourly",
+    "lastSync": "",
+    "count": 0,
+    "createdAt": "2026-10-01T09:00:00.000Z"
+  }
+}

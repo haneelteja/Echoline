@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Echoline — email & WhatsApp outreach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#F3F5F8; --panel:#FFFFFF; --ink:#172033; --ink2:#4A5468; --muted:#7A8396; --line:#DFE3EA;
+  --email:#4C5BD4; --email-soft:#E8EAFB; --wa:#1E9E64; --wa-soft:#E2F4EB;
+  --warn:#B9790C; --warn-soft:#FBF0DA; --bad:#C2415B; --bad-soft:#FBE4E9; --ok:#1E9E64;
+  --side:#172033; --side-ink:#C9D0DE; --side-active:#26324B;
+  --r-s:6px; --r-m:10px; --r-l:16px;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E1320; --panel:#161D2E; --ink:#E7EBF3; --ink2:#B4BCCC; --muted:#8892A6; --line:#283149;
+  --email:#8D98F0; --email-soft:#232A4D; --wa:#45C489; --wa-soft:#163329;
+  --warn:#E5AE4A; --warn-soft:#3A2D12; --bad:#EE7790; --bad-soft:#3D1A24; --ok:#45C489;
+  --side:#0A0E18; --side-ink:#AEB7C9; --side-active:#1D2539;
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1320; --panel:#161D2E; --ink:#E7EBF3; --ink2:#B4BCCC; --muted:#8892A6; --line:#283149;
+  --email:#8D98F0; --email-soft:#232A4D; --wa:#45C489; --wa-soft:#163329;
+  --warn:#E5AE4A; --warn-soft:#3A2D12; --bad:#EE7790; --bad-soft:#3D1A24; --ok:#45C489;
+  --side:#0A0E18; --side-ink:#AEB7C9; --side-active:#1D2539;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.5 "Manrope",system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2,h3{font-family:"Bricolage Grotesque","Manrope",system-ui,sans-serif;margin:0;letter-spacing:-.01em}
+h1{font-size:28px;font-weight:700}
+h2{font-size:19px;font-weight:700}
+h3{font-size:15px;font-weight:700}
+button,input,select,textarea{font:inherit;color:inherit}
+img{max-width:100%}
+:focus-visible{outline:2px solid var(--email);outline-offset:2px}
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100%}
+aside{background:var(--side);color:var(--side-ink);padding:20px 14px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh;height:100dvh;overflow:auto}
+.logo{display:flex;align-items:center;gap:10px;color:#fff;font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:21px;padding:0 6px}
+.logo .mark{width:30px;height:30px;position:relative}
+.logo .mark span{position:absolute;width:20px;height:16px;border-radius:5px}
+.logo .mark span:first-child{background:#4C5BD4;left:0;top:2px}
+.logo .mark span:last-child{background:#1E9E64;right:0;bottom:2px;border-radius:5px 5px 5px 1px;opacity:.95}
+.projpick label{font-size:12px;color:#8C96AB;display:block;margin:0 6px 6px}
+.projpick select{width:100%;background:var(--side-active);border:1px solid #33405C;color:#fff;border-radius:var(--r-s);padding:8px 10px}
+nav{display:flex;flex-direction:column;gap:2px}
+nav button{all:unset;cursor:pointer;padding:9px 10px;border-radius:var(--r-s);display:flex;gap:10px;align-items:center;font-size:14px}
+nav button:hover{background:var(--side-active);color:#fff}
+nav button[aria-current="page"]{background:var(--side-active);color:#fff;box-shadow:inset 3px 0 0 #8D98F0}
+nav button:focus-visible{outline:2px solid #8D98F0}
+nav .grp{font-size:12px;color:#6F7A91;margin:12px 10px 4px}
+.side-foot{margin-top:auto;font-size:12px;color:#7F89A0;padding:0 6px}
+main{padding:28px clamp(16px,3vw,40px) 60px;min-width:0}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.top p{margin:4px 0 0;color:var(--ink2)}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:var(--r-s);padding:8px 14px;cursor:pointer;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.btn.email{background:var(--email);border-color:var(--email);color:#fff}
+.btn.wa{background:var(--wa);border-color:var(--wa);color:#fff}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-m);padding:18px}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:13px;font-weight:600;color:var(--ink2)}
+.field input,.field select,.field textarea,input.inp,select.inp{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-s);padding:8px 10px;width:100%}
+.field textarea{min-height:90px;resize:vertical}
+.hint{font-size:12px;color:var(--muted)}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-m);background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--ink2);font-size:13px;background:var(--bg);position:sticky;top:0}
+th,td{padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--bg)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--bg);color:var(--ink2);border:1px solid var(--line)}
+.pill.e{background:var(--email-soft);color:var(--email);border-color:transparent}
+.pill.w{background:var(--wa-soft);color:var(--wa);border-color:transparent}
+.pill.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.pill.bad{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.pill.ok{background:var(--wa-soft);color:var(--ok);border-color:transparent}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+
+/* Dashboard: the twin-lane funnel is the signature element */
+.lanes{display:grid;gap:14px}
+.lane{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center}
+.lane-name{display:flex;flex-direction:column}
+.lane-name b{font-family:"Bricolage Grotesque",sans-serif;font-size:18px}
+.track{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.stop{border-radius:var(--r-s);padding:10px 12px;min-height:74px;display:flex;flex-direction:column;justify-content:space-between;position:relative}
+.lane.e .stop{background:var(--email-soft)}
+.lane.w .stop{background:var(--wa-soft)}
+.stop .n{font-family:"Bricolage Grotesque",sans-serif;font-size:26px;font-weight:700;line-height:1}
+.lane.e .stop .n{color:var(--email)} .lane.w .stop .n{color:var(--wa)}
+.stop .l{font-size:12px;color:var(--ink2)}
+.stop .fill{position:absolute;left:0;bottom:0;height:3px;border-radius:0 0 0 var(--r-s)}
+.lane.e .fill{background:var(--email)} .lane.w .fill{background:var(--wa)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{border-left:3px solid var(--line);padding:4px 0 4px 12px}
+.kpi .v{font-family:"Bricolage Grotesque",sans-serif;font-size:24px;font-weight:700}
+.kpi .k{font-size:13px;color:var(--ink2)}
+.bars .b{display:grid;grid-template-columns:150px 1fr 80px;gap:10px;align-items:center;font-size:13px;margin:6px 0}
+.bars .bt{height:10px;background:var(--bg);border-radius:5px;overflow:hidden;display:flex}
+.bars .bt i{display:block;height:100%}
+.feed{list-style:none;margin:0;padding:0;max-height:360px;overflow:auto}
+.feed li{display:grid;grid-template-columns:62px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+
+/* Drawer */
+.scrim{position:fixed;inset:0;background:rgba(10,14,24,.45);display:none;z-index:20}
+.scrim.open{display:block}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(560px,100%);background:var(--panel);z-index:21;transform:translateX(100%);transition:transform .2s ease;display:flex;flex-direction:column;border-left:1px solid var(--line);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.drawer.open{transform:none}
+.drawer header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.drawer .body{padding:18px 20px;overflow:auto;flex:1}
+.drawer .foot{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){.drawer{transition:none}}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:10px 16px;border-radius:var(--r-s);font-size:14px;z-index:30;display:none;max-width:90vw}
+.toast.show{display:block}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+.tabs button{all:unset;cursor:pointer;padding:8px 14px;font-weight:600;font-size:14px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--ink)}
+.tpl-list{display:flex;flex-direction:column;gap:8px}
+.tpl{border:1px solid var(--line);border-radius:var(--r-s);padding:12px;cursor:pointer;background:var(--panel)}
+.tpl[aria-current="true"]{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.tpl .s{font-size:13px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+iframe.preview{width:100%;height:620px;border:1px solid var(--line);border-radius:var(--r-m);background:#f4f4f4}
+.wa-bubble{background:#DCF8C6;color:#111;border-radius:10px 10px 10px 2px;padding:10px 12px;max-width:380px;white-space:pre-wrap;font-size:14px;box-shadow:0 1px 0 rgba(0,0,0,.08)}
+.wa-screen{background:#ECE5DD;border-radius:var(--r-m);padding:18px;display:flex;flex-direction:column;gap:8px;min-height:200px}
+.wa-screen img{width:120px;height:120px;object-fit:cover;border-radius:8px;border:3px solid #fff}
+.kb-imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.kb-img{border:1px solid var(--line);border-radius:var(--r-s);overflow:hidden;background:var(--panel)}
+.kb-img img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--bg)}
+.kb-img .m{padding:8px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+.provider{border:1px solid var(--line);border-radius:var(--r-s);padding:10px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.provider[aria-checked="true"]{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:grid;grid-template-columns:36px 1fr;gap:12px;position:relative;padding-bottom:16px}
+.step .num{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff}
+.step::before{content:"";position:absolute;left:13px;top:30px;bottom:0;width:2px;background:var(--line)}
+.step:last-child::before{display:none}
+.banner{background:var(--warn-soft);color:var(--ink);border-radius:var(--r-s);padding:10px 14px;font-size:13px;margin-bottom:16px}
+.empty{text-align:center;padding:50px 20px}
+.empty p{color:var(--ink2);max-width:46ch;margin:8px auto 18px}
+code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12.5px}
+.mobile-top{display:none}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  aside{position:fixed;inset:0 auto 0 0;width:260px;z-index:25;transform:translateX(-100%);transition:transform .2s;height:100%;padding-top:calc(20px + env(safe-area-inset-top,0px))}
+  aside.open{transform:none}
+  .mobile-top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--side);color:#fff;position:sticky;top:env(safe-area-inset-top,0px);z-index:10}
+  .lane{grid-template-columns:1fr}
+  .track{grid-template-columns:repeat(5,minmax(88px,1fr));overflow-x:auto}
+  .bars .b{grid-template-columns:110px 1fr 60px}
+}
+/* ===== Echoline theme v2 ===== */
+:root{
+  --bg:#F4F3F9; --panel:#FFFFFF; --ink:#1A1530; --ink2:#4E4867; --muted:#8A85A0; --line:#E6E3F0;
+  --email:#5B4CF0; --email-soft:#ECEAFE; --wa:#0FA174; --wa-soft:#E0F5EE;
+  --warn:#C8811A; --warn-soft:#FCF1DE; --bad:#D9405F; --bad-soft:#FCE6EB; --ok:#0FA174;
+  --side:#16112B; --side-ink:#B9B3D1; --side-active:rgba(255,255,255,.08);
+  --hero:#1C1538; --hero-ink:#EDEAFB; --glow:#8B7CFF;
+  --r-s:8px; --r-m:14px; --r-l:20px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F0C1C; --panel:#18142B; --ink:#EEEBFA; --ink2:#BDB7D6; --muted:#8C86A6; --line:#2A2442;
+  --email:#9A8FFF; --email-soft:#262052; --wa:#3CCB9A; --wa-soft:#123329;
+  --warn:#EDB04F; --warn-soft:#3A2B12; --bad:#F27A93; --bad-soft:#3E1A26; --ok:#3CCB9A;
+  --side:#0B0816; --side-ink:#A9A3C4; --side-active:rgba(255,255,255,.07);
+  --hero:#1F1840; --hero-ink:#EDEAFB; --glow:#9A8FFF;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F0C1C; --panel:#18142B; --ink:#EEEBFA; --ink2:#BDB7D6; --muted:#8C86A6; --line:#2A2442;
+  --email:#9A8FFF; --email-soft:#262052; --wa:#3CCB9A; --wa-soft:#123329;
+  --warn:#EDB04F; --warn-soft:#3A2B12; --bad:#F27A93; --bad-soft:#3E1A26; --ok:#3CCB9A;
+  --side:#0B0816; --side-ink:#A9A3C4; --side-active:rgba(255,255,255,.07);
+  --hero:#1F1840; --hero-ink:#EDEAFB; --glow:#9A8FFF;
+}
+body{font-family:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif}
+.panel{border-radius:var(--r-m);padding:20px}
+.btn{border-radius:999px;padding:8px 16px}
+.btn.primary{background:var(--email);border-color:var(--email);color:#fff}
+.btn.small{padding:5px 12px}
+.tbl-wrap{border-radius:var(--r-m)}
+aside{padding:22px 14px;gap:20px;background:var(--side)}
+.logo{gap:11px;padding:2px 8px;font-size:22px;letter-spacing:-.02em}
+.logo svg{flex:none}
+.logo small{display:block;font-family:"Manrope",sans-serif;font-weight:500;font-size:11px;color:#8E87AE;letter-spacing:0;margin-top:1px}
+.projpick select{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:9px 12px}
+nav button{border-radius:10px;padding:9px 12px;color:var(--side-ink)}
+nav button[aria-current="page"]{background:var(--side-active);color:#fff;box-shadow:none}
+nav button[aria-current="page"] span{color:#A99EFF}
+nav .grp{color:#6C6688}
+.mobile-top{background:var(--side)}
+
+/* dashboard */
+.dash{display:grid;gap:16px;grid-template-columns:repeat(12,1fr)}
+.dash > *{min-width:0}
+.c12{grid-column:span 12}.c8{grid-column:span 8}.c7{grid-column:span 7}.c6{grid-column:span 6}.c5{grid-column:span 5}.c4{grid-column:span 4}
+@media (max-width:1100px){.c8,.c7,.c6,.c5,.c4{grid-column:span 12}}
+.card-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:14px}
+.card-h p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.hero{background:var(--hero);color:var(--hero-ink);border-radius:var(--r-l);padding:26px clamp(18px,3vw,32px);display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:clamp(18px,3vw,40px);align-items:center;position:relative;overflow:hidden}
+.hero h1{font-size:clamp(26px,3.2vw,36px);line-height:1.1;color:#fff}
+.hero .sub{color:#B7AFDA;margin:8px 0 18px;max-width:52ch}
+.hero .btn{border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff}
+.hero .btn.primary{background:#fff;color:var(--hero);border-color:#fff}
+.rings text{font-family:"Manrope",sans-serif}
+.ring-legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;margin-top:4px}
+.rl .v{font-family:"Bricolage Grotesque",sans-serif;font-size:30px;font-weight:700;line-height:1;color:#fff}
+.rl .k{font-size:13px;color:#B7AFDA;margin-top:4px;display:flex;align-items:center;gap:6px}
+.rl .k i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.rl .p{font-size:12px;color:#8E86B8}
+@media (max-width:760px){.hero{grid-template-columns:1fr}.hero svg{max-width:260px;margin:0 auto}}
+.chan{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;align-items:end}
+.chan .col{display:flex;flex-direction:column;gap:6px;min-width:0}
+.chan .barbox{height:120px;display:flex;align-items:flex-end;background:var(--bg);border-radius:10px;overflow:hidden}
+.chan .bar{width:100%;border-radius:10px 10px 0 0;min-height:3px}
+.chan .num{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:20px;line-height:1}
+.chan .lbl{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chan .drop{font-size:11px;color:var(--muted)}
+.chrow{display:grid;grid-template-columns:110px 1fr;gap:16px;align-items:end;padding:10px 0}
+.chrow + .chrow{border-top:1px solid var(--line)}
+.chname b{font-family:"Bricolage Grotesque",sans-serif;font-size:18px;display:block}
+.chname span{font-size:12px;color:var(--muted)}
+.rate{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.rate b{font-family:"Bricolage Grotesque",sans-serif;font-size:22px}
+.insights{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.insights li{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;font-size:14px;line-height:1.5}
+.insights .ic{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:14px;font-weight:700}
+.ic.g{background:var(--wa-soft);color:var(--wa)} .ic.e{background:var(--email-soft);color:var(--email)} .ic.w{background:var(--warn-soft);color:var(--warn)} .ic.b{background:var(--bad-soft);color:var(--bad)}
+.ai-box{margin-top:14px;padding:14px;border-radius:var(--r-s);background:var(--bg);font-size:14px;white-space:pre-wrap;line-height:1.6}
+.health .hb{margin-bottom:14px}
+.health .hb .t{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
+.meter{height:8px;border-radius:4px;background:var(--bad-soft);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--wa);border-radius:4px}
+.heat td,.heat th{white-space:nowrap;padding:9px 8px}.heat td:first-child{white-space:normal;min-width:140px}
+.heat .cell{display:inline-block;min-width:54px;text-align:right;padding:3px 8px;border-radius:6px;font-weight:600;font-size:13px}
+.heat tbody tr{cursor:default}
+.week{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;align-items:end}
+.week .d{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+.week .stack{width:100%;max-width:34px;height:90px;display:flex;flex-direction:column-reverse;border-radius:8px;background:var(--bg);overflow:hidden}
+.week .stack i{display:block;width:100%}
+.week .n{font-weight:700;color:var(--ink);font-size:12px}
+@media (max-width:760px){.chrow{grid-template-columns:1fr;gap:8px}.chname{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.chname .rate{flex-direction:row;align-items:baseline;margin:0}.chan .barbox{height:80px}.heat td:first-child{min-width:110px}}
+.hero{border:1px solid rgba(255,255,255,.06)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
+
+</style>
+</head>
+<body>
+<div class="mobile-top"><button class="btn small" id="menuBtn" aria-label="Open menu">☰</button><span style="font-family:'Bricolage Grotesque';font-weight:700;color:#fff">Echoline</span><span></span></div>
+<div class="app">
+  <aside id="side">
+    <div class="logo"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="9" cy="17" r="5" fill="#fff"/><path d="M17 8a12 12 0 0 1 0 18" fill="none" stroke="#8B7CFF" stroke-width="3" stroke-linecap="round"/><path d="M23 3.5a19 19 0 0 1 0 27" fill="none" stroke="#3CCB9A" stroke-width="3" stroke-linecap="round" opacity=".9"/></svg><div>Echoline<small>Email + WhatsApp outreach</small></div></div>
+    <div class="projpick">
+      <label for="projSel">Project</label>
+      <select id="projSel"></select>
+    </div>
+    <nav id="nav"></nav>
+    <div class="side-foot">Email + WhatsApp push sequences, one workspace per brand.</div>
+  </aside>
+  <main id="view"><div class="empty"><h2>Loading workspace…</h2></div></main>
+</div>
+<div class="scrim" id="scrim"></div>
+<div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+  <header><h2 id="drawerTitle"></h2><button class="btn small" id="drawerClose" aria-label="Close">✕</button></header>
+  <div class="body" id="drawerBody"></div>
+  <div class="foot" id="drawerFoot"></div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ---------- constants ---------- */
+const STAGE_LABEL = ["Not contacted","Initial sent","Follow-up 1 sent","Follow-up 2 sent","All steps sent"];
+const TERMINAL = {replied:"Replied",opted_out:"Opted out",invalid:"Invalid contact",bounced:"Bounced",failed:"Failed"};
+const STATUS_TONE = {not_contacted:"",initial_sent:"e",fu1_sent:"e",fu2_sent:"e",completed:"",replied:"ok",opted_out:"warn",invalid:"bad",bounced:"bad",failed:"bad"};
+const STATUS_KEYS = ["not_contacted","initial_sent","fu1_sent","fu2_sent","completed"];
+const EMAIL_PROVIDERS = [
+  ["gmail","Gmail / Google Workspace","OAuth, ~2,000/day per Workspace user"],
+  ["outlook","Microsoft 365 / Outlook","Graph API sendMail"],
+  ["ses","Amazon SES","High volume, cheapest per mail"],
+  ["sendgrid","SendGrid","Event webhooks for opens, clicks, bounces"],
+  ["brevo","Brevo","Built-in tracking, India-friendly pricing"],
+  ["smtp","Custom SMTP","Any mailbox with SMTP credentials"]];
+const WA_PROVIDERS = [
+  ["meta","Meta WhatsApp Cloud API","Direct from Meta, approved templates"],
+  ["360dialog","360dialog / 360messenger","BSP, used in the current Make scenario"],
+  ["gupshup","Gupshup","BSP, strong in India"],
+  ["interakt","Interakt","BSP with shared inbox"],
+  ["aisensy","AiSensy","BSP, campaign-focused"],
+  ["twilio","Twilio","Global BSP, programmable"]];
+const SOURCE_TYPES = [
+  ["upload","Excel / CSV upload","Import a file now"],
+  ["onedrive","Excel on OneDrive","Graph API, table rows (like the Make scenario)"],
+  ["gsheets","Google Sheets","Sheet + tab, scheduled sync"],
+  ["webhook","Webhook / API","POST leads from any system"],
+  ["form","Website form","Embed a form on your site"],
+  ["crm","CRM","Zoho, HubSpot, Salesforce"],
+  ["manual","Manual entry","Add one lead at a time"]];
+const NAV = [
+  ["dashboard","Dashboard","◧"],["contacts","Leads & status","☰"],["sequence","Sequence","↧"],
+  ["templates","Templates & AI","✎"],["kb","Knowledge base","▣"],
+  ["g","Connections"],["channels","Email & WhatsApp","⇄"],["sources","Lead sources","⇣"],["activity","Activity log","⋯"],["project","Project settings","⚙"]];
+
+/* ---------- state ---------- */
+const S = {db:null,user:null,assets:null,sample:null,uid:null,
+  projects:[],pid:null,contacts:[],kb:[],templates:[],sources:[],activity:[],
+  seq:null,channels:null,brand:null,view:"dashboard",subs:[],filters:{q:"",ch:"all",status:"all",cat:"all"},
+  tplChannel:"email",tplSel:null,canWrite:true};
+
+/* ---------- utils ---------- */
+const $ = s=>document.querySelector(s);
+const esc = v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const nowISO = ()=>new Date().toISOString();
+const today = ()=>new Date().toISOString().slice(0,10);
+const fmtT = iso=>iso?new Date(iso).toLocaleString(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+const rel = iso=>{ if(!iso) return "—"; const d=(new Date(iso)-Date.now())/36e5; const a=Math.abs(d);
+  const s = a<1? Math.round(a*60)+"m" : a<48? Math.round(a)+"h" : Math.round(a/24)+"d"; return d<0? s+" ago" : "in "+s; };
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),3200)}
+const strip = o=>{const c={...o}; delete c.id; return c};
+const proj = ()=>S.projects.find(p=>p.id===S.pid);
+const P = p=>"projects/"+S.pid+(p?"/"+p:"");
+const validEmail = e=>!!e && e!=="Not Publicly Listed" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+const normPhone = p=>{ if(!p||p==="Not Publicly Listed") return ""; let d=String(p).replace(/\D/g,""); if(d.length===10) d="91"+d; return d.length>=11&&d.length<=13?d:""; };
+const statusOf = (c,ch)=> c[ch+"_status"] || "not_contacted";
+function pill(c,ch){const st=statusOf(c,ch); const lbl=TERMINAL[st]||STAGE_LABEL[STATUS_KEYS.indexOf(st)]||st;
+  const tone=STATUS_TONE[st]; const cls= tone==="e"?(ch==="em"?"e":"w"):tone; return `<span class="pill ${cls}"><span class="dot"></span>${esc(lbl)}</span>`}
+async function safe(fn,msg){try{return await fn()}catch(e){console.error(e);toast((msg||"Couldn't save")+": "+(e.code||e.message||"error"));}}
+
+/* ---------- boot ---------- */
+(async function boot(){
+  renderNav();
+  if(!window.claude){ $("#view").innerHTML=`<div class="empty"><h2>Open this page in Claude</h2><p>Echoline stores projects and leads in the artifact's database, which is only available inside the Claude viewer.</p></div>`; return; }
+  const [db,user,assets,sample] = await Promise.all(["db","user","assets","sample"].map(n=>claude.use(n).catch(()=>null)));
+  Object.assign(S,{db,user,assets,sample});
+  if(!db){ $("#view").innerHTML=`<div class="empty"><h2>Sign in to use Echoline</h2><p>The workspace database isn't available in this view. Open the page while signed in to Claude.</p></div>`; return; }
+  if(user){ S.uid = await user.id().catch(()=>null); const cw = await (user.can?user.can("data.write"):null); if(cw===false) S.canWrite=false; }
+  S.db.collection("projects").onSnapshot(snap=>{
+    S.projects = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.createdAt||"").localeCompare(b.createdAt||""));
+    if(!S.pid || !S.projects.find(p=>p.id===S.pid)) selectProject(S.projects[0]?.id||null); else renderProjSel();
+    render();
+  }, e=>toast("Couldn't load projects: "+e.code));
+})();
+
+function selectProject(pid){
+  S.subs.forEach(u=>u()); S.subs=[];
+  Object.assign(S,{pid,contacts:[],kb:[],templates:[],sources:[],activity:[],seq:null,channels:null,brand:null,tplSel:null});
+  renderProjSel();
+  if(!pid){render();return}
+  const on=(ref,fn)=>S.subs.push(ref.onSnapshot(fn,e=>console.warn(e)));
+  on(S.db.collection(P("contacts")).limit(1000), s=>{S.contacts=s.docs.map(d=>({id:d.id,...d.data()}));render()});
+  on(S.db.collection(P("kb")), s=>{S.kb=s.docs.map(d=>({id:d.id,...d.data()}));render()});
+  on(S.db.collection(P("templates")), s=>{S.templates=s.docs.map(d=>({id:d.id,...d.data()}));render()});
+  on(S.db.collection(P("sources")), s=>{S.sources=s.docs.map(d=>({id:d.id,...d.data()}));render()});
+  on(S.db.collection(P("activity")).orderBy("date","desc").limit(14), s=>{S.activity=s.docs.map(d=>d.data());render()});
+  on(S.db.doc(P("settings/sequence")), d=>{S.seq=d.exists?d.data():defaultSeq();render()});
+  on(S.db.doc(P("settings/channels")), d=>{S.channels=d.exists?d.data():{email:{},wa:{}};render()});
+  on(S.db.doc(P("settings/brand")), d=>{S.brand=d.exists?d.data():{skus:[]};render()});
+}
+const defaultSeq = ()=>({dailyCap:50,window:{start:"10:00",end:"18:00"},stopOnReply:true,
+  em:{enabled:true,steps:[{delayDays:0},{delayDays:2},{delayDays:5}]},
+  wa:{enabled:true,steps:[{delayDays:0},{delayDays:2},{delayDays:5}]}});
+
+/* ---------- shell ---------- */
+function renderNav(){
+  $("#nav").innerHTML = NAV.map(n=> n[0]==="g" ? `<div class="grp">${n[1]}</div>` :
+    `<button data-v="${n[0]}" ${S.view===n[0]?'aria-current="page"':""}><span aria-hidden="true">${n[2]}</span>${n[1]}</button>`).join("");
+  $("#nav").onclick=e=>{const b=e.target.closest("button[data-v]"); if(!b) return; S.view=b.dataset.v; $("#side").classList.remove("open"); renderNav(); render(); window.scrollTo(0,0)};
+}
+function renderProjSel(){
+  const sel=$("#projSel");
+  sel.innerHTML = S.projects.map(p=>`<option value="${p.id}" ${p.id===S.pid?"selected":""}>${esc(p.name)}</option>`).join("") + `<option value="__new">+ New project</option>`;
+  sel.onchange=()=>{ if(sel.value==="__new"){ sel.value=S.pid||""; openProjectEditor(); } else { selectProject(sel.value); render(); } };
+}
+$("#menuBtn").onclick=()=>$("#side").classList.toggle("open");
+
+function render(){
+  const v=$("#view");
+  if(!S.pid){ v.innerHTML=`<div class="empty"><h1>Start with a project</h1><p>Each project is one brand or business line, with its own leads, product knowledge, templates, sender accounts and WhatsApp number.</p><button class="btn primary" id="np">Create project</button></div>`; $("#np").onclick=()=>openProjectEditor(); return; }
+  if(!S.seq||!S.channels||!S.brand){ v.innerHTML=`<div class="empty"><h2>Loading ${esc(proj()?.name||"project")}…</h2></div>`; return; }
+  ({dashboard:vDashboard,contacts:vContacts,sequence:vSequence,templates:vTemplates,kb:vKB,channels:vChannels,sources:vSources,activity:vActivity,project:vProject})[S.view]();
+}
+
+/* ---------- sequence engine (simulation of the worker) ---------- */
+function nextDue(c,ch){
+  const cfg=S.seq[ch]; if(!cfg?.enabled) return null;
+  const st=statusOf(c,ch); if(TERMINAL[st]) return null;
+  if(S.seq.stopOnReply && (c.em_status==="replied"||c.wa_status==="replied"||c.em_status==="opted_out"||c.wa_status==="opted_out")) return null;
+  const stage=c[ch+"_stage"]||0; if(stage>=cfg.steps.length) return null;
+  const valid = ch==="em"? validEmail(c.email) : !!normPhone(c.phone);
+  if(stage===0) return {step:0,at:new Date(0).toISOString(),valid};
+  const at=new Date(new Date(c[ch+"_last"]).getTime()+ (cfg.steps[stage].delayDays||0)*864e5).toISOString();
+  return {step:stage,at,valid};
+}
+function dueList(){
+  const out=[]; const now=Date.now();
+  for(const c of S.contacts) for(const ch of ["em","wa"]){const d=nextDue(c,ch); if(d && new Date(d.at).getTime()<=now) out.push({c,ch,...d});}
+  return out;
+}
+function upcomingList(){
+  const out=[]; const now=Date.now();
+  for(const c of S.contacts) for(const ch of ["em","wa"]){const d=nextDue(c,ch); if(d && new Date(d.at).getTime()>now) out.push({c,ch,...d});}
+  return out.sort((a,b)=>a.at.localeCompare(b.at));
+}
+async function logEvents(events){
+  if(!events.length) return;
+  const ref=S.db.doc(P("activity/"+today()));
+  const cur=await ref.get(); const prev=cur.exists?(cur.data().events||[]):[];
+  await ref.set({date:today(),events:[...events,...prev].slice(0,400)});
+}
+function pushHist(c,ch,ev){return [{t:nowISO(),ch,ev},...(c.hist||[])].slice(0,30)}
+async function runDue(){
+  if(!S.canWrite) return toast("You have view-only access");
+  const due=dueList(); const cap=S.seq.dailyCap||50; const counts={em:0,wa:0}; const events=[];
+  const t0=STATUS_KEYS;
+  for(const d of due){
+    if(d.valid && counts[d.ch]>=cap) continue;
+    const ref=S.db.doc(P("contacts/"+d.c.id)); const upd={};
+    const chName=d.ch==="em"?"Email":"WhatsApp";
+    if(!d.valid){ upd[d.ch+"_status"]="invalid"; upd.hist=pushHist(d.c,d.ch,`${chName} skipped: invalid ${d.ch==="em"?"email":"phone"}`);
+      events.push({t:nowISO(),ch:d.ch,name:d.c.name,ev:"Marked invalid"}); }
+    else { const stage=d.step+1; const total=S.seq[d.ch].steps.length;
+      upd[d.ch+"_stage"]=stage; upd[d.ch+"_last"]=nowISO(); upd[d.ch+"_status"]= stage>=total?"completed":t0[stage];
+      upd[d.ch+"_track"]="sent";
+      const lbl=["Initial","Follow-up 1","Follow-up 2"][d.step]||("Step "+stage);
+      upd.hist=pushHist(d.c,d.ch,`${chName} · ${lbl} sent`); counts[d.ch]++;
+      events.push({t:nowISO(),ch:d.ch,name:d.c.name,ev:lbl+" sent"}); }
+    d.c.hist=upd.hist;
+    await safe(()=>ref.update(upd),"Update failed");
+  }
+  await safe(()=>logEvents(events),"Log failed");
+  toast(`Run complete: ${counts.em} email, ${counts.wa} WhatsApp sent; ${events.filter(e=>e.ev==="Marked invalid").length} marked invalid`);
+}
+
+/* ---------- Dashboard ---------- */
+function vDashboard(){
+  const C=S.contacts, n=C.length, p=proj();
+  const pct=(a,b)=>b?Math.round(a/b*100):0, pctS=(a,b)=>b?Math.round(a/b*100)+"%":"—";
+  const isRep=c=>c.em_status==="replied"||c.wa_status==="replied";
+  const isEng=c=>isRep(c)||["opened","clicked"].includes(c.em_track)||c.wa_track==="read";
+  const isReach=c=>(c.em_stage||0)>0||(c.wa_stage||0)>0;
+  const reached=C.filter(isReach).length, engaged=C.filter(isEng).length, replied=C.filter(isRep).length;
+  const due=dueList(), dueE=due.filter(d=>d.ch==="em").length, dueW=due.length-dueE;
+  const repWeek=C.filter(c=>isRep(c)&&(c.hist||[]).some(h=>/replied/.test(h.ev)&&Date.now()-new Date(h.t)<7*864e5)).length;
+
+  /* hero rings: Leads > Reached > Engaged > Replied */
+  const R=120, rings=[[n,"Leads","rgba(255,255,255,.10)"],[reached,"Reached","#5B4CF0"],[engaged,"Engaged","#8B7CFF"],[replied,"Replied","#3CCB9A"]];
+  const rr=v=>n?Math.max(v?10:0,Math.sqrt(v/n)*R):0;
+  const svg=`<svg class="rings" viewBox="0 0 280 280" role="img" aria-label="Leads ${n}, reached ${reached}, engaged ${engaged}, replied ${replied}">
+    ${[1,2,3].map(i=>`<circle cx="140" cy="140" r="${R+i*12}" fill="none" stroke="rgba(255,255,255,${.09-i*.025})" stroke-width="1"/>`).join("")}
+    ${rings.map(([v,,col],i)=>`<circle cx="140" cy="${140+(R-rr(v))*0}" r="${n?rr(v):R*(1-i*.25)}" fill="${i===0?col:col}" fill-opacity="${i===0?1:.9}" ${i===0?'stroke="rgba(255,255,255,.18)"':""}/>`).join("")}
+    <text x="140" y="146" text-anchor="middle" fill="#fff" font-size="${replied?22:16}" font-weight="800">${n?pctS(replied,n):"No leads"}</text>
+    ${n?`<text x="140" y="164" text-anchor="middle" fill="rgba(255,255,255,.75)" font-size="11">reply rate</text>`:""}
+  </svg>`;
+  const legend=rings.map(([v,k,col],i)=>`<div class="rl"><div class="v">${v}</div><div class="k"><i style="background:${i?col:"rgba(255,255,255,.35)"}"></i>${k}</div><div class="p">${i?pctS(v,i===1?n:rings[i-1][0])+(i===1?" of leads":" of "+rings[i-1][1].toLowerCase()):"in "+esc(p.name)}</div></div>`).join("");
+  const headline = !n? "Import your first leads" : due.length? `${due.length} follow-up${due.length>1?"s":""} ready to go` : replied? `${replied} conversation${replied>1?"s":""} started` : "Sequences are running";
+  const subline = !n? "Upload an Excel sheet or connect a source, then generate templates with AI." :
+    `${dueE} email and ${dueW} WhatsApp steps are due now. ${repWeek} repl${repWeek===1?"y":"ies"} in the last 7 days. Sequences ${S.seq.stopOnReply?"stop automatically when someone replies":"keep running after replies"}.`;
+
+  /* channel funnels */
+  const chan=(ch)=>{
+    const counts=[n, ...[1,2,3].map(s=>C.filter(c=>(c[ch+"_stage"]||0)>=s).length), C.filter(c=>c[ch+"_status"]==="replied").length];
+    const lbls=["Leads","Initial","Follow-up 1","Follow-up 2","Replied"]; const mx=Math.max(1,counts[0]);
+    const col=ch==="em"?"var(--email)":"var(--wa)";
+    const sent=counts[1], eng=ch==="em"?C.filter(c=>["opened","clicked"].includes(c.em_track)).length:C.filter(c=>c.wa_track==="read").length;
+    const inval=C.filter(c=>c[ch+"_status"]==="invalid").length;
+    return `<div class="chrow"><div class="chname"><b>${ch==="em"?"Email":"WhatsApp"}</b><span>${inval} invalid</span>
+      <div class="rate"><b style="color:${col}">${pctS(eng,sent)}</b><span class="small muted">${ch==="em"?"open rate":"read rate"}</span></div></div>
+      <div class="chan">${counts.map((v,i)=>`<div class="col"><span class="num">${v}</span><div class="barbox"><div class="bar" style="height:${v/mx*100}%;background:${i===4?"var(--ok)":col};opacity:${i===0?.25:1}"></div></div><span class="lbl">${lbls[i]}</span><span class="drop">${i?pctS(v,counts[i===4?1:i-1])+(i===4?" of sent":""):"&nbsp;"}</span></div>`).join("")}</div></div>`;
+  };
+
+  /* 14-day send trend */
+  const days=[...Array(14)].map((_,i)=>{const d=new Date(Date.now()-(13-i)*864e5); return d.toISOString().slice(0,10)});
+  const byDay={}; S.activity.forEach(a=>{byDay[a.date]={em:0,wa:0,rep:0}; (a.events||[]).forEach(e=>{ if(/sent/.test(e.ev)&&(e.ch==="em"||e.ch==="wa")) byDay[a.date][e.ch]++; if(/replied/.test(e.ev)) byDay[a.date].rep++; })});
+  const tr=days.map(d=>byDay[d]||{em:0,wa:0,rep:0}); const tmx=Math.max(1,...tr.map(t=>t.em+t.wa));
+  const W=560,H=150,bw=W/14;
+  const trend=`<svg viewBox="0 0 ${W} ${H+22}" width="100%" role="img" aria-label="Messages sent per day, last 14 days">
+    ${[.5,1].map(f=>`<line x1="0" x2="${W}" y1="${H-H*f}" y2="${H-H*f}" stroke="var(--line)" stroke-dasharray="3 4"/>`).join("")}
+    ${tr.map((t,i)=>{const he=t.em/tmx*(H-26), hw=t.wa/tmx*(H-26), x=i*bw+bw*.18, w=bw*.64;
+      return `<rect x="${x}" y="${H-he}" width="${w}" height="${he}" rx="3" fill="var(--email)"><title>${days[i]}: ${t.em} email</title></rect>
+      <rect x="${x}" y="${H-he-hw}" width="${w}" height="${hw}" rx="3" fill="var(--wa)"><title>${days[i]}: ${t.wa} WhatsApp</title></rect>
+      ${t.rep?`<circle cx="${x+w/2}" cy="${H-he-hw-9}" r="4" fill="var(--warn)"><title>${t.rep} replies</title></circle>`:""}
+      <text x="${x+w/2}" y="${H+16}" text-anchor="middle" font-size="10" fill="var(--muted)">${i%2?"":new Date(days[i]).getDate()}</text>`}).join("")}
+  </svg>`;
+  const sentTotal=tr.reduce((a,t)=>a+t.em+t.wa,0);
+
+  /* next 7 days schedule */
+  const up=upcomingList(); const wk=[...Array(7)].map((_,i)=>{const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+i+1); return d});
+  const sched=[{l:"Now",em:dueE,wa:dueW},...wk.map(d=>{const e=d.getTime(), s=e-864e5; const xs=up.filter(u=>{const t=new Date(u.at).getTime(); return t>s&&t<=e}); return {l:d.toLocaleDateString(undefined,{weekday:"short"}),em:xs.filter(x=>x.ch==="em").length,wa:xs.filter(x=>x.ch==="wa").length}})];
+  const smx=Math.max(1,...sched.map(s=>s.em+s.wa));
+
+  /* data health */
+  const vE=C.filter(c=>validEmail(c.email)).length, vP=C.filter(c=>normPhone(c.phone)).length, none=C.filter(c=>!validEmail(c.email)&&!normPhone(c.phone)).length, noCat=C.filter(c=>!c.category).length;
+  const hb=(lbl,v,tot,note)=>`<div class="hb"><div class="t"><span>${lbl}</span><b>${pctS(v,tot)}</b></div><div class="meter"><i style="width:${pct(v,tot)}%"></i></div>${note?`<div class="hint" style="margin-top:4px">${note}</div>`:""}</div>`;
+
+  /* category heat table */
+  const cats={}; C.forEach(c=>{const k=c.category||"Uncategorised"; const o=cats[k]=cats[k]||{n:0,r:0,e:0,re:0,ro:0,wr:0}; o.n++; if(isReach(c))o.r++; if(isEng(c))o.e++; if(isRep(c))o.re++; if(["opened","clicked"].includes(c.em_track))o.ro++; if(c.wa_track==="read")o.wr++;});
+  const catRows=Object.entries(cats).sort((a,b)=>b[1].n-a[1].n).slice(0,8);
+  const heat=(v,col)=>`<span class="cell" style="background:color-mix(in srgb, ${col} ${Math.round(8+v*.6)}%, transparent);color:${v>55?"#fff":"var(--ink)"}">${v}%</span>`;
+
+  /* areas */
+  const areas={}; C.forEach(c=>{const k=c.area&&c.area!=="Not Publicly Listed"?c.area:"Unknown"; areas[k]=areas[k]||{n:0,r:0,re:0}; areas[k].n++; if(isReach(c))areas[k].r++; if(isRep(c))areas[k].re++;});
+  const areaRows=Object.entries(areas).sort((a,b)=>b[1].n-a[1].n).slice(0,7); const amx=Math.max(1,...areaRows.map(a=>a[1].n));
+
+  /* insights (rule-based) */
+  const ins=[]; const sentE=C.filter(c=>(c.em_stage||0)>0).length, sentW=C.filter(c=>(c.wa_stage||0)>0).length;
+  const oE=pct(C.filter(c=>["opened","clicked"].includes(c.em_track)).length,sentE), rW=pct(C.filter(c=>c.wa_track==="read").length,sentW);
+  if(due.length) ins.push(["e","→",`<b>${due.length} steps are waiting.</b> Running them now keeps the 2-day and 5-day gaps on schedule.`]);
+  if(sentE>=3&&sentW>=3) ins.push(oE>=rW?["e","✉",`Email is pulling harder: <b>${oE}% opened</b> vs ${rW}% of WhatsApp read.`]:["g","◎",`WhatsApp gets seen: <b>${rW}% read</b> vs ${oE}% of emails opened. Lead with WhatsApp for new segments.`]);
+  const best=catRows.filter(([,v])=>v.r>=3).sort((a,b)=>b[1].re/b[1].r-a[1].re/a[1].r)[0];
+  if(best&&best[1].re) ins.push(["g","★",`<b>${esc(best[0])}</b> replies most: ${pctS(best[1].re,best[1].r)} of those reached. Worth sourcing more leads like these.`]);
+  const cold=catRows.filter(([,v])=>v.r>=4&&!v.re)[0]; if(cold) ins.push(["w","!",`<b>${esc(cold[0])}</b>: ${cold[1].r} reached, no replies yet. Try an AI rewrite of the opening line for this category.`]);
+  if(none) ins.push(["b","×",`<b>${none} lead${none>1?"s have":" has"} no usable email or phone</b> and can't be contacted. Enrich them or remove them.`]);
+  const bo=C.filter(c=>c.em_status==="bounced").length; if(sentE&&bo/sentE>.05) ins.push(["b","↯",`Bounce rate is <b>${pctS(bo,sentE)}</b>. Above 5% hurts deliverability; verify emails before sending.`]);
+  const oo=C.filter(c=>c.em_status==="opted_out"||c.wa_status==="opted_out").length; if(reached&&oo/reached>.08) ins.push(["w","↓",`${pctS(oo,reached)} of reached leads opted out. Check targeting and message frequency.`]);
+  if(!ins.length) ins.push(["e","i", n?"Not enough activity yet for patterns. Insights appear as sends and replies build up.":"Import leads to start seeing insights."]);
+
+  $("#view").innerHTML=`<div class="dash">
+  <section class="hero c12">
+    <div>${svg}</div>
+    <div><h1>${headline}</h1><p class="sub">${subline}</p>
+      <div class="row" style="margin-bottom:22px"><button class="btn primary" id="runBtn" ${due.length?"":"disabled"}>Run ${due.length} due step${due.length===1?"":"s"}</button><button class="btn" id="goLeads">Add leads</button><button class="btn" id="goTpl">Templates</button></div>
+      <div class="ring-legend">${legend}</div></div>
+  </section>
+
+  <section class="panel c7"><div class="card-h"><div><h2>Channel funnels</h2><p>How far leads get through each sequence</p></div></div>${chan("em")}${chan("wa")}</section>
+  <section class="panel c5"><div class="card-h"><div><h2>Insights</h2><p>What the numbers are telling you</p></div>${S.sample?`<button class="btn small" id="aiIns">✦ Ask AI</button>`:""}</div>
+    <ul class="insights">${ins.slice(0,5).map(([t,ic,tx])=>`<li><span class="ic ${t}">${ic}</span><span>${tx}</span></li>`).join("")}</ul><div id="aiOut"></div></section>
+
+  <section class="panel c8"><div class="card-h"><div><h2>Messages sent</h2><p>Last 14 days · ${sentTotal} sent</p></div><div class="legend"><span><i style="background:var(--email)"></i>Email</span><span><i style="background:var(--wa)"></i>WhatsApp</span><span><i style="background:var(--warn);border-radius:50%"></i>Replies</span></div></div>${trend}</section>
+  <section class="panel c4"><div class="card-h"><div><h2>Coming up</h2><p>Scheduled steps, next 7 days</p></div></div>
+    <div class="week">${sched.map(s=>`<div class="d"><span class="n">${s.em+s.wa||""}</span><div class="stack" title="${s.em} email, ${s.wa} WhatsApp"><i style="height:${s.em/smx*100}%;background:var(--email)"></i><i style="height:${s.wa/smx*100}%;background:var(--wa)"></i></div><span>${s.l}</span></div>`).join("")}</div></section>
+
+  <section class="panel c7"><div class="card-h"><div><h2>Segments</h2><p>Performance by lead category</p></div></div>
+    ${catRows.length?`<div class="tbl-wrap heat" style="border:none"><table><thead><tr><th>Category</th><th style="text-align:right">Leads</th><th style="text-align:right">Reached</th><th style="text-align:right">Engaged</th><th style="text-align:right">Replied</th></tr></thead><tbody>
+    ${catRows.map(([k,v])=>`<tr><td><b>${esc(k)}</b></td><td style="text-align:right">${v.n}</td><td style="text-align:right">${heat(pct(v.r,v.n),"var(--email)")}</td><td style="text-align:right">${heat(pct(v.e,v.r),"#8B7CFF")}</td><td style="text-align:right">${heat(pct(v.re,v.r),"var(--ok)")}</td></tr>`).join("")}</tbody></table></div>`:`<p class="muted small">Segments appear once leads have categories.</p>`}</section>
+  <section class="panel c5"><div class="card-h"><div><h2>Data health</h2><p>Can every lead actually be reached?</p></div></div><div class="health">
+    ${hb("Valid email",vE,n,`${n-vE} missing or "Not Publicly Listed"`)}${hb("Valid WhatsApp number",vP,n,`${n-vP} missing or malformed`)}${hb("Has a category",n-noCat,n,"Needed for personalised opening lines")}
+    ${none?`<button class="btn small" id="fixNone">Review ${none} unreachable lead${none>1?"s":""}</button>`:""}</div></section>
+
+  <section class="panel c12"><div class="card-h"><div><h2>Areas</h2><p>Where your leads are, and how many you've reached</p></div><div class="legend"><span><i style="background:var(--ok)"></i>Replied</span><span><i style="background:var(--email)"></i>Reached</span><span><i style="background:var(--line)"></i>Not yet</span></div></div>
+    <div class="bars">${areaRows.map(([k,v])=>`<div class="b"><span>${esc(k)}</span><span class="bt" style="height:12px"><i style="width:${v.re/amx*100}%;background:var(--ok)"></i><i style="width:${(v.r-v.re)/amx*100}%;background:var(--email)"></i><i style="width:${(v.n-v.r)/amx*100}%;background:var(--line)"></i></span><span class="small muted">${v.n} leads</span></div>`).join("")||`<p class="muted small">No areas yet.</p>`}</div></section>
+  </div>`;
+  $("#runBtn").onclick=runDue;
+  $("#goLeads").onclick=()=>{S.view="sources";renderNav();render()};
+  $("#goTpl").onclick=()=>{S.view="templates";renderNav();render()};
+  if($("#fixNone")) $("#fixNone").onclick=()=>{S.filters={q:"",ch:"all",status:"all",cat:"all"}; S.view="contacts"; renderNav(); render();};
+  if($("#aiIns")) $("#aiIns").onclick=async()=>{
+    const out=$("#aiOut"); out.innerHTML=`<div class="ai-box">Reading your numbers…</div>`; $("#aiIns").disabled=true;
+    const stats={leads:n,reached,engaged,replied,due:due.length,email:{sent:sentE,openRate:oE},whatsapp:{sent:sentW,readRate:rW},categories:Object.fromEntries(catRows),areas:Object.fromEntries(areaRows),unreachable:none,last14days:tr};
+    try{ await S.sample(`You are a B2B outreach analyst for ${p.brand||p.name}. Here are campaign stats as JSON:\n${JSON.stringify(stats)}\nWrite 4 short, specific, actionable observations (max 2 sentences each) as plain text lines starting with "• ". Base everything on the numbers; say when data is too thin. No preamble.`,
+      {modelTier:"default",cache:false,onText:({text})=>{out.firstElementChild.textContent=text}}); }
+    catch(e){ out.innerHTML=`<div class="ai-box">AI analysis isn't available right now (${esc(e.code||"error")}).</div>`; }
+    $("#aiIns").disabled=false; };
+}
+
+/* ---------- Leads ---------- */
+function vContacts(){
+  const f=S.filters; const cats=[...new Set(S.contacts.map(c=>c.category).filter(Boolean))].sort();
+  let rows=S.contacts.filter(c=>{
+    if(f.q){const q=f.q.toLowerCase(); if(![c.name,c.area,c.email,c.phone,c.contactPerson].some(x=>String(x||"").toLowerCase().includes(q))) return false;}
+    if(f.cat!=="all" && c.category!==f.cat) return false;
+    if(f.status!=="all"){ const chs=f.ch==="all"?["em","wa"]:[f.ch]; if(!chs.some(ch=>statusOf(c,ch)===f.status)) return false; }
+    return true; }).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const allStatus=[...STATUS_KEYS,...Object.keys(TERMINAL)];
+  $("#view").innerHTML=`
+  <div class="top"><div><h1>Leads & status</h1><p>${rows.length} of ${S.contacts.length} leads</p></div>
+    <div class="row"><button class="btn" id="exp">Export CSV</button><button class="btn primary" id="add">Add lead</button></div></div>
+  <div class="row" style="margin-bottom:12px">
+    <input class="inp" style="max-width:260px" id="q" placeholder="Search name, area, email, phone" value="${esc(f.q)}">
+    <select class="inp" style="max-width:150px" id="fch"><option value="all">Both channels</option><option value="em" ${f.ch==="em"?"selected":""}>Email</option><option value="wa" ${f.ch==="wa"?"selected":""}>WhatsApp</option></select>
+    <select class="inp" style="max-width:190px" id="fst"><option value="all">Any status</option>${allStatus.map(s=>`<option value="${s}" ${f.status===s?"selected":""}>${TERMINAL[s]||STAGE_LABEL[STATUS_KEYS.indexOf(s)]}</option>`).join("")}</select>
+    <select class="inp" style="max-width:200px" id="fcat"><option value="all">All categories</option>${cats.map(c=>`<option ${f.cat===c?"selected":""}>${esc(c)}</option>`).join("")}</select>
+  </div>
+  ${S.contacts.length?`<div class="tbl-wrap" style="max-height:70vh"><table><thead><tr><th>Business</th><th>Category</th><th>Area</th><th>Email status</th><th>Last email</th><th>WhatsApp status</th><th>Last WhatsApp</th><th>Source</th></tr></thead><tbody>
+  ${rows.map(c=>`<tr data-id="${c.id}"><td><b>${esc(c.name)}</b>${c.demo?' <span class="pill">demo</span>':""}</td><td>${esc(c.category||"—")}</td><td>${esc(c.area||"—")}</td><td>${pill(c,"em")}${c.em_track&&c.em_track!=="sent"?` <span class="small muted">${esc(c.em_track)}</span>`:""}</td><td class="small muted">${rel(c.em_last)}</td><td>${pill(c,"wa")}${c.wa_track&&c.wa_track!=="sent"?` <span class="small muted">${esc(c.wa_track)}</span>`:""}</td><td class="small muted">${rel(c.wa_last)}</td><td class="small muted">${esc(c.source||"—")}</td></tr>`).join("")}
+  </tbody></table></div>`:`<div class="empty panel"><h2>No leads in this project</h2><p>Import an Excel or CSV file, connect a sheet, or add a lead by hand.</p><button class="btn primary" id="imp">Import leads</button></div>`}`;
+  const rer=()=>{vContacts(); const el=$("#q"); if(el){el.focus(); el.setSelectionRange(el.value.length,el.value.length);}};
+  $("#q").oninput=e=>{f.q=e.target.value; clearTimeout(vContacts._t); vContacts._t=setTimeout(rer,250)};
+  $("#fch").onchange=e=>{f.ch=e.target.value;vContacts()}; $("#fst").onchange=e=>{f.status=e.target.value;vContacts()}; $("#fcat").onchange=e=>{f.cat=e.target.value;vContacts()};
+  $("#add").onclick=()=>openContact(null); $("#exp").onclick=()=>exportCSV(rows);
+  if($("#imp")) $("#imp").onclick=()=>{S.view="sources";renderNav();render()};
+  document.querySelectorAll("tbody tr[data-id]").forEach(tr=>tr.onclick=()=>openContact(S.contacts.find(c=>c.id===tr.dataset.id)));
+}
+function exportCSV(rows){
+  const cols=["name","contactPerson","category","area","phone","email","source","em_status","em_last","em_track","wa_status","wa_last","wa_track"];
+  const csv=[cols.join(","),...rows.map(r=>cols.map(k=>`"${String(r[k]??"").replace(/"/g,'""')}"`).join(","))].join("\n");
+  claude.use("downloads").then(d=>d?d.save({filename:(proj().name||"leads").replace(/\W+/g,"_")+"_leads.csv",data:csv}).catch(()=>toast("Download cancelled")):toast("Downloads aren't available in this view"));
+}
+
+/* ---------- drawer ---------- */
+function openDrawer(title,body,foot){ $("#drawerTitle").textContent=title; $("#drawerBody").innerHTML=body; $("#drawerFoot").innerHTML=foot||"";
+  $("#drawer").classList.add("open"); $("#scrim").classList.add("open"); setTimeout(()=>$("#drawerClose").focus(),50); }
+function closeDrawer(){ $("#drawer").classList.remove("open"); $("#scrim").classList.remove("open"); }
+$("#drawerClose").onclick=closeDrawer; $("#scrim").onclick=closeDrawer; document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});
+
+function openContact(c){
+  const isNew=!c; c=c||{};
+  const fields=[["name","Business name"],["contactPerson","Contact person"],["category","Category"],["area","Area"],["phone","Phone (WhatsApp)"],["email","Email"],["source","Source"]];
+  const trackBtns = ch => ch==="em"
+    ? [["opened","Opened"],["clicked","Clicked"],["bounced","Bounced"],["replied","Replied"],["opted_out","Opted out"]]
+    : [["delivered","Delivered"],["read","Read"],["failed","Failed"],["replied","Replied"],["opted_out","Opted out"]];
+  openDrawer(isNew?"Add lead":c.name, `
+    ${fields.map(([k,l])=>`<div class="field"><label for="f_${k}">${l}</label><input id="f_${k}" value="${esc(c[k]||"")}" ${k==="category"?'list="catlist"':""}></div>`).join("")}
+    <datalist id="catlist">${[...new Set(S.contacts.map(x=>x.category).filter(Boolean))].map(x=>`<option>${esc(x)}</option>`).join("")}</datalist>
+    ${isNew?"":`
+    <h3 style="margin:18px 0 8px">Status</h3>
+    ${["em","wa"].map(ch=>{const nd=nextDue(c,ch); return `<div class="panel" style="margin-bottom:10px;padding:12px">
+      <div class="row" style="justify-content:space-between"><b>${ch==="em"?"Email":"WhatsApp"}</b>${pill(c,ch)}</div>
+      <p class="small muted" style="margin:6px 0">Last sent ${fmtT(c[ch+"_last"])} · Delivery: ${esc(c[ch+"_track"]||"—")} · Next: ${nd?(nd.valid?["Initial","Follow-up 1","Follow-up 2"][nd.step]+" "+(new Date(nd.at)<=new Date()?"due now":rel(nd.at)):"will be marked invalid"):"none"}</p>
+      <div class="row">${trackBtns(ch).map(([k,l])=>`<button class="btn small" data-mark="${ch}:${k}">${l}</button>`).join("")}<button class="btn small" data-mark="${ch}:reset">Restart</button></div></div>`}).join("")}
+    <p class="hint">In production these update automatically from provider webhooks (opens, clicks, bounces, read receipts) and inbox reply detection. Here you can set them by hand.</p>
+    <h3 style="margin:18px 0 8px">Timeline</h3>
+    ${(c.hist||[]).length?`<ul class="feed">${c.hist.map(h=>`<li><span class="small muted">${fmtT(h.t)}</span><span>${esc(h.ev)}</span></li>`).join("")}</ul>`:`<p class="muted small">No activity yet.</p>`}`}
+  `, `${isNew?"":`<button class="btn danger" id="delC">Delete</button>`}<button class="btn" id="cancelC">Cancel</button><button class="btn primary" id="saveC">${isNew?"Add lead":"Save changes"}</button>`);
+  $("#cancelC").onclick=closeDrawer;
+  $("#saveC").onclick=async()=>{ const data={}; fields.forEach(([k])=>data[k]=$("#f_"+k).value.trim()); if(!data.name) return toast("Business name is required");
+    if(isNew){ Object.assign(data,{createdAt:nowISO(),em_stage:0,wa_stage:0,em_status:"not_contacted",wa_status:"not_contacted",source:data.source||"Manual",hist:[]}); await safe(()=>S.db.collection(P("contacts")).add(data)); toast("Lead added"); }
+    else { await safe(()=>S.db.doc(P("contacts/"+c.id)).update(data)); toast("Changes saved"); }
+    closeDrawer(); };
+  if(!isNew){
+    $("#delC").onclick=async()=>{ if(!confirm("Delete "+c.name+"?")) return; await safe(()=>S.db.doc(P("contacts/"+c.id)).delete()); closeDrawer(); toast("Lead deleted"); };
+    document.querySelectorAll("[data-mark]").forEach(b=>b.onclick=async()=>{
+      const [ch,k]=b.dataset.mark.split(":"); const upd={}; const nm=ch==="em"?"Email":"WhatsApp";
+      if(k==="reset"){ Object.assign(upd,{[ch+"_stage"]:0,[ch+"_status"]:"not_contacted",[ch+"_last"]:"",[ch+"_track"]:""}); }
+      else if(["replied","opted_out","bounced","failed"].includes(k)) upd[ch+"_status"]=k;
+      else upd[ch+"_track"]=k;
+      if(k==="bounced"||k==="failed") upd[ch+"_track"]=k;
+      upd.hist=pushHist(c,ch,`${nm} · ${k==="reset"?"sequence restarted":k.replace("_"," ")}`);
+      await safe(()=>S.db.doc(P("contacts/"+c.id)).update(upd));
+      await safe(()=>logEvents([{t:nowISO(),ch,name:c.name,ev:k==="reset"?"sequence restarted":k.replace("_"," ")}]));
+      closeDrawer(); toast(nm+" status updated"); });
+  }
+}
+
+/* ---------- Sequence ---------- */
+function vSequence(){
+  const s=S.seq; const tplFor=(ch,i)=>S.templates.find(t=>t.channel===(ch==="em"?"email":"whatsapp")&&t.step===i);
+  const col=(ch,name,color)=>`<section class="panel"><div class="row" style="justify-content:space-between;margin-bottom:14px"><h2>${name}</h2>
+    <label class="row small"><input type="checkbox" data-en="${ch}" ${s[ch].enabled?"checked":""}> Active</label></div>
+    <div class="steps">${s[ch].steps.map((st,i)=>{const t=tplFor(ch,i); return `<div class="step"><span class="num" style="background:${color}">${i+1}</span><div>
+      <b>${["Initial message","Follow-up 1","Follow-up 2","Follow-up 3"][i]}</b>
+      <div class="row small" style="margin:6px 0">${i===0?"Sent as soon as a lead enters":`Wait <input class="inp" type="number" min="0" style="width:64px;padding:4px 6px" data-delay="${ch}:${i}" value="${st.delayDays}"> days after previous step`}</div>
+      <div class="small ${t?"":"muted"}">${t?`Template: <b>${esc(t.name||t.subject||"Untitled")}</b>`:"No template yet. Create one in Templates & AI."}</div>
+      ${i>0?`<button class="btn small danger" style="margin-top:6px" data-rm="${ch}:${i}">Remove step</button>`:""}</div></div>`}).join("")}</div>
+    ${s[ch].steps.length<4?`<button class="btn small" data-addstep="${ch}">Add follow-up</button>`:""}</section>`;
+  $("#view").innerHTML=`<div class="top"><div><h1>Sequence</h1><p>When each message goes out. Both channels run independently, like the two routes in your Make scenario.</p></div></div>
+  <div class="grid g2" style="margin-bottom:16px">${col("em","Email","var(--email)")}${col("wa","WhatsApp","var(--wa)")}</div>
+  <section class="panel"><h2>Sending rules</h2><div class="grid g3" style="margin-top:12px">
+    <div class="field"><label for="cap">Daily cap per channel</label><input id="cap" type="number" min="1" value="${s.dailyCap}"><span class="hint">Protects sender reputation and WhatsApp quality rating.</span></div>
+    <div class="field"><label for="ws">Send window start</label><input id="ws" type="time" value="${s.window?.start||"10:00"}"></div>
+    <div class="field"><label for="we">Send window end</label><input id="we" type="time" value="${s.window?.end||"18:00"}"><span class="hint">IST, business days.</span></div>
+    <div class="field"><label class="row"><input type="checkbox" id="sor" ${s.stopOnReply?"checked":""}> Stop both channels when a lead replies or opts out</label></div>
+  </div><button class="btn primary" id="saveSeq">Save sequence</button></section>`;
+  const save=async(ns,msg)=>{await safe(()=>S.db.doc(P("settings/sequence")).set(ns)); if(msg) toast(msg)};
+  const clone=()=>JSON.parse(JSON.stringify(S.seq));
+  document.querySelectorAll("[data-en]").forEach(el=>el.onchange=()=>{const n=clone(); n[el.dataset.en].enabled=el.checked; save(n,"Sequence updated")});
+  document.querySelectorAll("[data-addstep]").forEach(el=>el.onclick=()=>{const n=clone(); n[el.dataset.addstep].steps.push({delayDays:3}); save(n)});
+  document.querySelectorAll("[data-rm]").forEach(el=>el.onclick=()=>{const [ch,i]=el.dataset.rm.split(":"); const n=clone(); n[ch].steps.splice(+i,1); save(n)});
+  $("#saveSeq").onclick=()=>{const n=clone(); document.querySelectorAll("[data-delay]").forEach(el=>{const [ch,i]=el.dataset.delay.split(":"); n[ch].steps[+i].delayDays=Math.max(0,+el.value||0)});
+    n.dailyCap=Math.max(1,+$("#cap").value||50); n.window={start:$("#ws").value,end:$("#we").value}; n.stopOnReply=$("#sor").checked; save(n,"Sequence saved")};
+}
+
+/* ---------- Templates & AI ---------- */
+function fill(text,c,t){
+  const p=proj()||{}; const cl=t?.categoryLines||{};
+  const map={company:c.name||"there",contact_name:c.contactPerson||"team",area:c.area||"",area_phrase:c.area&&c.area!=="Not Publicly Listed"?" in "+c.area:"",
+    category:c.category||"",category_line:cl[c.category]||cl.default||"",sender_name:p.senderName||"",brand:p.brand||p.name||"",website:p.website||"",whatsapp_number:p.waNumber||""};
+  return String(text||"").replace(/\{\{\s*(\w+)\s*\}\}/g,(m,k)=>k in map?map[k]:m);
+}
+function emailHTML(t,c){
+  const p=proj()||{}; const accent=p.accent||"#3d1a5c";
+  const imgs=S.kb.filter(k=>k.assetId&&(k.tags||[]).includes("email")).slice(0,3);
+  const logo=S.kb.find(k=>k.assetId&&(k.tags||[]).includes("logo"));
+  const wa=p.waNumber?`https://wa.me/${p.waNumber.replace(/\D/g,"")}?text=${encodeURIComponent("Hi "+(p.brand||p.name)+", I'm interested")}`:"#";
+  const paras=fill(t.body,c,t).split(/\n{2,}/).map(x=>x.trim()).filter(Boolean)
+    .map(x=>x.startsWith("•")||x.startsWith("- ")?`<table role="presentation" width="100%"><tr><td style="border-left:3px solid ${accent};background:#f8f6fb;padding:14px 18px;font-size:15px;line-height:1.9">${esc(x).replace(/\n/g,"<br>")}</td></tr></table><br>`:`<p style="margin:0 0 16px;font-size:15px;line-height:1.7">${esc(x).replace(/\n/g,"<br>")}</p>`).join("");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#f4f4f4;font-family:Arial,sans-serif;color:#1a1a1a">
+  <table role="presentation" width="100%" style="padding:20px 0"><tr><td align="center"><table role="presentation" width="100%" style="max-width:680px;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e0e0e0">
+  <tr><td style="background:${accent};padding:16px 24px;text-align:center">${logo?`<img src="/_blob/${logo.assetId}" width="100" style="background:#fff;border-radius:8px;padding:6px 12px">`:`<span style="color:#fff;font-weight:700;font-size:18px">${esc(p.brand||p.name)}</span>`}</td></tr>
+  <tr><td style="padding:22px 24px 30px">${paras}
+  ${imgs.length?`<table role="presentation" width="100%"><tr>${imgs.map(i=>`<td style="padding:4px"><img src="/_blob/${i.assetId}" width="100%" style="border-radius:6px;display:block"></td>`).join("")}</tr></table><br>`:""}
+  ${p.waNumber?`<p style="text-align:center"><a href="${wa}" style="background:#25D366;color:#fff;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:24px;display:inline-block">💬 Chat with us on WhatsApp</a></p>`:""}
+  <p style="margin:18px 0 2px;font-weight:600">${esc(p.senderName||"")}</p><p style="margin:0;color:#6b7280;font-size:14px">${esc(p.brand||p.name)}${p.website?` · <a href="${esc(p.website)}" style="color:${accent}">${esc(p.website.replace(/^https?:\/\//,""))}</a>`:""}</p>
+  <p style="margin:16px 0 0;font-size:11px;color:#9ca3af">Not relevant? Reply "no" and we won't follow up.</p></td></tr></table></td></tr></table></body></html>`;
+}
+function vTemplates(){
+  const ch=S.tplChannel; const list=S.templates.filter(t=>t.channel===ch).sort((a,b)=>(a.step??9)-(b.step??9));
+  if(!S.tplSel || !list.find(t=>t.id===S.tplSel)) S.tplSel=list[0]?.id||null;
+  const t=list.find(x=>x.id===S.tplSel);
+  const sampleC = S.contacts.find(c=>!c.demo)||S.contacts[0]||{name:"Sample Restaurant",category:"Restaurant",area:"Gachibowli",contactPerson:"Ravi"};
+  const cats=[...new Set(S.contacts.map(c=>c.category).filter(Boolean))];
+  $("#view").innerHTML=`<div class="top"><div><h1>Templates & AI</h1><p>Placeholders: <code>{{company}}</code> <code>{{area_phrase}}</code> <code>{{category_line}}</code> <code>{{contact_name}}</code> <code>{{brand}}</code> <code>{{sender_name}}</code></p></div>
+    <div class="row"><button class="btn" id="newT">New template</button><button class="btn ${ch==="email"?"email":"wa"}" id="aiT" ${S.sample?"":"disabled title='AI is not available in this view'"}>✦ Generate with AI</button></div></div>
+  <div class="tabs" role="tablist"><button role="tab" aria-selected="${ch==="email"}" data-ch="email">Email</button><button role="tab" aria-selected="${ch==="whatsapp"}" data-ch="whatsapp">WhatsApp</button></div>
+  ${ch==="whatsapp"?`<div class="banner">Cold, business-initiated WhatsApp messages must use a <b>Meta-approved template</b>. Free-text messages only work inside 24 hours of the customer's last message. Record the approved template name and status for each step.</div>`:""}
+  <div class="grid" style="grid-template-columns:minmax(220px,280px) 1fr">
+    <div class="tpl-list">${list.length?list.map(x=>`<div class="tpl" tabindex="0" data-t="${x.id}" aria-current="${x.id===S.tplSel}"><b>${esc(x.name||"Untitled")}</b><div class="s">Step ${(x.step??0)+1}${x.channel==="whatsapp"&&x.metaStatus?" · "+esc(x.metaStatus):""}${x.subject?" · "+esc(x.subject):""}</div></div>`).join(""):`<p class="muted small">No ${ch==="email"?"email":"WhatsApp"} templates yet. Generate a full 3-step set with AI, or write one yourself.</p>`}</div>
+    <div>${t?tplEditor(t,sampleC,cats):`<div class="panel empty"><h2>Let AI draft the sequence</h2><p>It reads this project's knowledge base (brand facts, SKUs, offer) and writes an initial message plus two follow-ups, with an opening line per lead category.</p></div>`}</div>
+  </div>`;
+  document.querySelectorAll("[data-ch]").forEach(b=>b.onclick=()=>{S.tplChannel=b.dataset.ch;S.tplSel=null;vTemplates()});
+  document.querySelectorAll("[data-t]").forEach(b=>{b.onclick=()=>{S.tplSel=b.dataset.t;vTemplates()}; b.onkeydown=e=>{if(e.key==="Enter")b.click()}});
+  $("#newT").onclick=async()=>{const ref=await safe(()=>S.db.collection(P("templates")).add({channel:ch,step:list.length,name:"New "+ch+" template",subject:"",body:"",categoryLines:{default:""}})); if(ref){S.tplSel=ref.id}};
+  $("#aiT").onclick=()=>aiGenerate(ch);
+  if(t) bindTplEditor(t,sampleC);
+}
+function tplEditor(t,c,cats){
+  const isE=t.channel==="email"; const cl=t.categoryLines||{}; const catKeys=[...new Set(["default",...cats,...Object.keys(cl)])];
+  const waImgs=S.kb.filter(k=>k.assetId&&(k.tags||[]).includes("whatsapp"));
+  return `<div class="grid g2"><section class="panel">
+    <div class="grid" style="grid-template-columns:1fr 90px;gap:10px"><div class="field"><label for="tn">Name</label><input id="tn" value="${esc(t.name)}"></div>
+    <div class="field"><label for="ts">Step</label><select id="ts">${[0,1,2,3].map(i=>`<option value="${i}" ${t.step===i?"selected":""}>${i+1}</option>`).join("")}</select></div></div>
+    ${isE?`<div class="field"><label for="tsub">Subject</label><input id="tsub" value="${esc(t.subject)}"></div>`:
+      `<div class="grid" style="grid-template-columns:1fr 1fr;gap:10px"><div class="field"><label for="tmeta">Meta template name</label><input id="tmeta" value="${esc(t.metaName||"")}" placeholder="elma_intro_v1"></div>
+      <div class="field"><label for="tmst">Approval status</label><select id="tmst">${["Draft","Submitted","Approved","Rejected"].map(s=>`<option ${t.metaStatus===s?"selected":""}>${s}</option>`).join("")}</select></div></div>`}
+    <div class="field"><label for="tb">${isE?"Body (blank line between paragraphs, start a block with • for a highlight box)":"Message"}</label><textarea id="tb" style="min-height:${isE?220:130}px">${esc(t.body)}</textarea></div>
+    <h3 style="margin:6px 0 8px">Opening line by category <span class="hint">fills {{category_line}}</span></h3>
+    ${catKeys.map(k=>`<div class="field"><label>${esc(k==="default"?"Any other category":k)}</label><input data-cl="${esc(k)}" value="${esc(cl[k]||"")}"></div>`).join("")}
+    ${!isE&&waImgs.length?`<p class="hint">${waImgs.length} product image${waImgs.length>1?"s":""} tagged “whatsapp” are sent after the initial message.</p>`:""}
+    <div class="row"><button class="btn primary" id="saveT">Save template</button><button class="btn" id="aiRw" ${S.sample?"":"disabled"}>✦ Rewrite with AI</button><button class="btn danger" id="delT">Delete</button></div>
+  </section>
+  <section><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3>Preview for ${esc(c.name)}</h3><span class="small muted">${esc(c.category||"")}</span></div>
+    ${isE?`<p class="small" style="margin:0 0 8px"><b>Subject:</b> ${esc(fill(t.subject,c,t))}</p><iframe class="preview" title="Email preview" id="pv"></iframe>`:
+    `<div class="wa-screen"><div class="wa-bubble">${esc(fill(t.body,c,t))}</div>${t.step===0?`<div class="row">${waImgs.slice(0,6).map(i=>`<img src="/_blob/${i.assetId}" alt="${esc(i.title||"")}">`).join("")}</div>`:""}</div>`}
+  </section></div>`;
+}
+function bindTplEditor(t,c){
+  const isE=t.channel==="email"; if(isE) $("#pv").srcdoc=emailHTML(t,c);
+  const read=()=>{const cl={}; document.querySelectorAll("[data-cl]").forEach(i=>{if(i.value.trim()) cl[i.dataset.cl]=i.value.trim()});
+    const d={name:$("#tn").value.trim(),step:+$("#ts").value,body:$("#tb").value,categoryLines:cl};
+    if(isE) d.subject=$("#tsub").value; else {d.metaName=$("#tmeta").value.trim(); d.metaStatus=$("#tmst").value} return d};
+  $("#tb").oninput=()=>{ if(isE) $("#pv").srcdoc=emailHTML({...t,...read()},c); };
+  $("#saveT").onclick=async()=>{await safe(()=>S.db.doc(P("templates/"+t.id)).set(strip({...t,...read(),channel:t.channel}))); toast("Template saved")};
+  $("#delT").onclick=async()=>{if(!confirm("Delete this template?"))return; await safe(()=>S.db.doc(P("templates/"+t.id)).delete()); toast("Template deleted")};
+  $("#aiRw").onclick=()=>aiRewrite(t,read());
+}
+function kbContext(){
+  const p=proj()||{}; const b=S.brand||{};
+  const cats=[...new Set(S.contacts.map(c=>c.category).filter(Boolean))];
+  return `BRAND: ${p.brand||p.name}. Sender: ${p.senderName||""}. Website: ${p.website||""}. WhatsApp: ${p.waNumber||""}.
+ABOUT: ${b.about||""}
+OFFER / USP: ${b.offer||""}
+PRICING NOTES: ${b.pricing||""}
+TONE: ${b.tone||"warm, concise, professional, Indian B2B"}
+CALL TO ACTION: ${b.cta||""}
+SKUS: ${(b.skus||[]).map(s=>[s.code,s.name,s.size,s.price&&("₹"+s.price),s.moq&&("MOQ "+s.moq)].filter(Boolean).join(" / ")).join("; ")||"none listed"}
+OTHER NOTES: ${S.kb.filter(k=>k.text).map(k=>k.title+": "+k.text).join(" | ").slice(0,3000)}
+LEAD CATEGORIES IN THIS PROJECT: ${cats.join(", ")||"Restaurant, Hotel, Banquet Hall, Car Dealer / Retail Showroom"}`;
+}
+async function aiGenerate(ch){
+  const isE=ch==="email"; const cats=[...new Set(S.contacts.map(c=>c.category).filter(Boolean))];
+  openDrawer("Generate "+(isE?"email":"WhatsApp")+" sequence",`
+    <div class="field"><label for="ai_goal">Goal of this campaign</label><textarea id="ai_goal">${esc(S.brand?.cta?("Get a reply asking for: "+S.brand.cta):"Book a call or get a reply asking for a free sample")}</textarea></div>
+    <div class="field"><label for="ai_steps">Steps</label><select id="ai_steps"><option value="3">Initial + 2 follow-ups</option><option value="2">Initial + 1 follow-up</option><option value="1">Initial only</option></select></div>
+    <div class="field"><label for="ai_extra">Anything else (optional)</label><input id="ai_extra" placeholder="e.g. mention Diwali gifting, keep under 90 words"></div>
+    <p class="hint">Uses this project's knowledge base and these categories: ${esc(cats.join(", ")||"defaults")}. Runs on your Claude account.</p>
+    <div id="ai_out" class="small muted"></div>`,
+    `<button class="btn" id="aiCancel">Cancel</button><button class="btn primary" id="aiGo">Generate</button>`);
+  $("#aiCancel").onclick=closeDrawer;
+  $("#aiGo").onclick=async()=>{
+    const n=+$("#ai_steps").value; $("#aiGo").disabled=true; $("#ai_out").textContent="Writing your sequence… this can take up to a minute.";
+    const prompt=`You write B2B outreach ${isE?"emails":"WhatsApp messages"} for an Indian business. Use only facts from the knowledge base below; never invent prices or claims.
+${kbContext()}
+CAMPAIGN GOAL: ${$("#ai_goal").value}
+EXTRA: ${$("#ai_extra").value}
+Write ${n} step(s): step 0 is the first cold message${n>1?", then follow-ups that are shorter, reference the earlier note, and add one new reason to reply":""}${n>2?"; the last is a polite final check-in that leaves the door open":""}.
+Use these placeholders exactly where relevant: {{company}}, {{area_phrase}} (renders as " in Gachibowli" or empty), {{category_line}} (a category-specific clause, step 0 only), {{contact_name}}, {{brand}}, {{sender_name}}.
+${isE?"Email body: plain text, paragraphs separated by a blank line; you may include one highlight block where every line starts with '• '. Do not include the signature or opt-out line (added automatically). Subject lines under 50 characters; follow-ups use 'Re: ' + the first subject.":"WhatsApp: under 400 characters, 1 emoji max, sign off with the sender's first name and brand. Suitable to submit as a Meta utility/marketing template."}
+For step 0 also write categoryLines: an object whose keys are each lead category listed plus "default", value = one clause completing "I came across {{company}}{{area_phrase}} and ..." tailored to that category.
+Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isE?"…":""}","body":"…","categoryLines":{"default":"…"}}]}`;
+    try{
+      const r=await S.sample.json(prompt,{modelTier:"default",cache:false});
+      const arr=(r&&r.templates)||[];
+      for(const x of arr){ await S.db.collection(P("templates")).add({channel:ch,step:+x.step||0,name:x.name||("Step "+((+x.step||0)+1)),subject:isE?(x.subject||""):"",body:x.body||"",categoryLines:x.categoryLines||{default:""},ai:true,createdAt:nowISO(),...(isE?{}:{metaStatus:"Draft"})}); }
+      closeDrawer(); toast(`Generated ${arr.length} ${isE?"email":"WhatsApp"} template${arr.length===1?"":"s"}`);
+    }catch(e){ $("#aiGo").disabled=false; $("#ai_out").textContent = e.code==="not_granted"?"AI wasn't allowed in this view.":e.code==="rate_limited"?"Too many requests. Try again in a minute.":"Generation failed ("+(e.code||"error")+"). Try again."; }
+  };
+}
+async function aiRewrite(t,cur){
+  openDrawer("Rewrite with AI",`<div class="field"><label for="rw">What should change?</label><textarea id="rw" placeholder="Shorter, more direct, mention the 250 ml size for banquets…"></textarea></div><div id="rw_out" class="small muted"></div>`,
+    `<button class="btn" id="rwC">Cancel</button><button class="btn primary" id="rwGo">Rewrite</button>`);
+  $("#rwC").onclick=closeDrawer;
+  $("#rwGo").onclick=async()=>{ $("#rwGo").disabled=true; $("#rw_out").textContent="Rewriting…";
+    try{ const r=await S.sample.json(`Rewrite this ${t.channel} outreach template. Keep placeholders like {{company}} intact. Use only facts from the knowledge base.
+${kbContext()}
+CURRENT: ${JSON.stringify({subject:cur.subject,body:cur.body,categoryLines:cur.categoryLines})}
+INSTRUCTION: ${$("#rw").value}
+Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`,{modelTier:"default",cache:false});
+      await S.db.doc(P("templates/"+t.id)).update({body:r.body||cur.body,subject:r.subject??cur.subject??"",categoryLines:r.categoryLines||cur.categoryLines,name:cur.name,step:cur.step});
+      closeDrawer(); toast("Template rewritten"); }
+    catch(e){ $("#rwGo").disabled=false; $("#rw_out").textContent="Rewrite failed ("+(e.code||"error")+")."; } };
+}
+
+/* ---------- Knowledge base ---------- */
+function vKB(){
+  const b=S.brand||{}; const imgs=S.kb.filter(k=>k.assetId); const notes=S.kb.filter(k=>!k.assetId);
+  const skus=b.skus||[];
+  $("#view").innerHTML=`<div class="top"><div><h1>Knowledge base</h1><p>What the AI and your templates know about ${esc(proj().name)}.</p></div></div>
+  <div class="grid g2" style="margin-bottom:16px"><section class="panel"><h2 style="margin-bottom:12px">Brand facts</h2>
+    ${[["about","About the business","Who you are, where you're based, what you make"],["offer","Offer and USP","Free label design, delivery included, fast turnaround…"],["pricing","Pricing notes","Ranges or rules the AI may mention"],["tone","Tone of voice","Warm, concise, no hard sell"],["cta","Main call to action","Reply 'yes' for a free label mock-up"]].map(([k,l,ph])=>`<div class="field"><label for="b_${k}">${l}</label><textarea id="b_${k}" placeholder="${ph}" style="min-height:${k==="about"?90:60}px">${esc(b[k]||"")}</textarea></div>`).join("")}
+    <button class="btn primary" id="saveB">Save brand facts</button></section>
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>SKU list</h2><button class="btn small" id="addSku">Add SKU</button></div>
+    <div class="tbl-wrap" style="margin-top:12px"><table><thead><tr><th>Code</th><th>Product</th><th>Size</th><th>Price ₹</th><th>MOQ</th><th></th></tr></thead><tbody id="skuBody">
+    ${skus.map((s,i)=>`<tr data-i="${i}" style="cursor:default">${["code","name","size","price","moq"].map(k=>`<td><input class="inp" data-k="${k}" value="${esc(s[k]||"")}" style="min-width:${k==="name"?140:70}px;padding:5px 7px"></td>`).join("")}<td><button class="btn small danger" data-rmsku="${i}" aria-label="Remove">✕</button></td></tr>`).join("")||`<tr style="cursor:default"><td colspan="6" class="muted small">No SKUs yet.</td></tr>`}
+    </tbody></table></div>
+    <div class="row" style="margin-top:10px"><button class="btn primary" id="saveSku">Save SKUs</button><label class="btn small" style="cursor:pointer">Import SKUs from Excel/CSV<input type="file" id="skuFile" accept=".xlsx,.xls,.csv" hidden></label></div>
+    <h2 style="margin:22px 0 8px">Notes & FAQs</h2>
+    ${notes.map(n=>`<div class="panel" style="padding:10px 12px;margin-bottom:8px"><div class="row" style="justify-content:space-between"><b>${esc(n.title)}</b><button class="btn small danger" data-rmkb="${n.id}">Remove</button></div><p class="small" style="margin:4px 0 0;white-space:pre-wrap">${esc(n.text)}</p></div>`).join("")}
+    <div class="field"><input id="nt" placeholder="Title, e.g. Delivery areas"></div><div class="field"><textarea id="nx" placeholder="Details the AI can use"></textarea></div><button class="btn small" id="addNote">Add note</button>
+  </section></div>
+  <section class="panel"><div class="row" style="justify-content:space-between"><div><h2>Product images</h2><p class="small muted" style="margin:2px 0 0">Tag images for email (gallery under the body), WhatsApp (media sent after the first message) or logo.</p></div>
+    ${S.assets?`<label class="btn primary" style="cursor:pointer">Upload images<input type="file" id="imgUp" accept="image/*" multiple hidden></label>`:`<span class="small muted">Uploading needs editor access</span>`}</div>
+    <div class="kb-imgs" style="margin-top:14px">${imgs.map(i=>`<div class="kb-img"><img src="/_blob/${i.assetId}" alt="${esc(i.title)}"><div class="m"><input class="inp" data-ttl="${i.id}" value="${esc(i.title||"")}" style="padding:4px 6px">
+      <div class="row">${["email","whatsapp","logo"].map(tg=>`<label class="small row" style="gap:3px"><input type="checkbox" data-tag="${i.id}:${tg}" ${(i.tags||[]).includes(tg)?"checked":""}>${tg}</label>`).join("")}</div>
+      <button class="btn small danger" data-rmimg="${i.id}">Remove</button></div></div>`).join("")||`<p class="muted small">No images yet.</p>`}</div></section>`;
+  $("#saveB").onclick=async()=>{const n={...S.brand}; ["about","offer","pricing","tone","cta"].forEach(k=>n[k]=$("#b_"+k).value.trim()); await safe(()=>S.db.doc(P("settings/brand")).set(n)); toast("Brand facts saved")};
+  const readSkus=()=>[...document.querySelectorAll("#skuBody tr[data-i]")].map(tr=>{const o={}; tr.querySelectorAll("[data-k]").forEach(i=>o[i.dataset.k]=i.value.trim()); return o});
+  $("#addSku").onclick=()=>{S.brand={...S.brand,skus:[...readSkus(),{code:"",name:"",size:"",price:"",moq:""}]}; vKB()};
+  document.querySelectorAll("[data-rmsku]").forEach(b=>b.onclick=()=>{const s=readSkus(); s.splice(+b.dataset.rmsku,1); S.brand={...S.brand,skus:s}; vKB()});
+  $("#saveSku").onclick=async()=>{await safe(()=>S.db.doc(P("settings/brand")).set({...S.brand,skus:readSkus().filter(s=>s.name||s.code)})); toast("SKUs saved")};
+  $("#skuFile").onchange=async e=>{const rows=await readSheet(e.target.files[0]); if(!rows) return;
+    const pick=(r,keys)=>{const k=Object.keys(r).find(h=>keys.some(x=>h.toLowerCase().includes(x))); return k?String(r[k]).trim():""};
+    const sk=rows.map(r=>({code:pick(r,["code","sku"]),name:pick(r,["name","product","item","desc"]),size:pick(r,["size","ml","volume","pack"]),price:pick(r,["price","rate","mrp"]),moq:pick(r,["moq","min"])})).filter(s=>s.name||s.code);
+    await safe(()=>S.db.doc(P("settings/brand")).set({...S.brand,skus:[...(S.brand.skus||[]),...sk]})); toast(sk.length+" SKUs imported")};
+  $("#addNote").onclick=async()=>{const t=$("#nt").value.trim(),x=$("#nx").value.trim(); if(!t||!x) return toast("Add a title and details"); await safe(()=>S.db.collection(P("kb")).add({title:t,text:x,createdAt:nowISO()})); };
+  document.querySelectorAll("[data-rmkb]").forEach(b=>b.onclick=()=>safe(()=>S.db.doc(P("kb/"+b.dataset.rmkb)).delete()));
+  if($("#imgUp")) $("#imgUp").onchange=async e=>{ const files=[...e.target.files]; toast("Uploading "+files.length+" image(s)…");
+    for(const f of files){ try{ const a=await S.assets.upload(f); await S.db.collection(P("kb")).add({title:f.name.replace(/\.[^.]+$/,""),assetId:a.id,tags:["email","whatsapp"],createdAt:nowISO()}); }catch(err){ toast("Upload failed: "+(err.code||"error")); } }
+    toast("Images added"); };
+  document.querySelectorAll("[data-ttl]").forEach(i=>i.onchange=()=>safe(()=>S.db.doc(P("kb/"+i.dataset.ttl)).update({title:i.value})));
+  document.querySelectorAll("[data-tag]").forEach(i=>i.onchange=()=>{const [id,tg]=i.dataset.tag.split(":"); const k=S.kb.find(x=>x.id===id); const tags=new Set(k.tags||[]); i.checked?tags.add(tg):tags.delete(tg); safe(()=>S.db.doc(P("kb/"+id)).update({tags:[...tags]}))});
+  document.querySelectorAll("[data-rmimg]").forEach(b=>b.onclick=async()=>{ if(!confirm("Remove this image?")) return; const k=S.kb.find(x=>x.id===b.dataset.rmimg);
+    await safe(()=>S.db.doc(P("kb/"+k.id)).delete()); if(S.assets) S.assets.delete(k.assetId).catch(()=>{}); });
+}
+
+/* ---------- Channels ---------- */
+function vChannels(){
+  const c=S.channels; const em=c.email||{}, wa=c.wa||{};
+  const hook=(kind)=>`https://api.echoline.app/hooks/${S.pid}/${kind}`;
+  const provGrid=(list,cur,key)=>`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin:10px 0 16px">${list.map(([id,n,d])=>`<div class="provider" role="radio" tabindex="0" aria-checked="${cur===id}" data-prov="${key}:${id}"><div><b class="small">${n}</b><div class="hint">${d}</div></div></div>`).join("")}</div>`;
+  const statusPill=x=>x?.connected?`<span class="pill ok"><span class="dot"></span>Connected</span>`:`<span class="pill warn"><span class="dot"></span>Not connected</span>`;
+  $("#view").innerHTML=`<div class="top"><div><h1>Email & WhatsApp</h1><p>Sender accounts for ${esc(proj().name)}. Each project has its own.</p></div></div>
+  <div class="banner">API keys and OAuth tokens are never stored on this page. Connecting a provider happens on the Echoline backend, which keeps credentials in an encrypted vault per project and only shows the connection status here.</div>
+  <div class="grid g2">
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Email</h2>${statusPill(em)}</div>
+    ${provGrid(EMAIL_PROVIDERS,em.provider,"email")}
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+    <div class="field"><label for="e_fn">From name</label><input id="e_fn" value="${esc(em.fromName||proj().senderName||"")}"></div>
+    <div class="field"><label for="e_fe">From address</label><input id="e_fe" value="${esc(em.fromEmail||"")}" placeholder="haneel@yourdomain.in"></div>
+    <div class="field"><label for="e_rt">Reply-to</label><input id="e_rt" value="${esc(em.replyTo||"")}"></div>
+    <div class="field"><label for="e_bcc">BCC to CRM (optional)</label><input id="e_bcc" value="${esc(em.bcc||"")}"></div></div>
+    <h3 style="margin:8px 0">Status tracking</h3>
+    ${[["opens","Track opens (tracking pixel)"],["clicks","Track link clicks (redirect links)"],["bounces","Mark bounces from provider webhook"],["replies","Detect replies by polling the inbox and stop the sequence"],["unsub","Add one-click unsubscribe header (List-Unsubscribe)"]].map(([k,l])=>`<label class="row small" style="margin-bottom:6px"><input type="checkbox" data-etr="${k}" ${(em.tracking||{})[k]!==false?"checked":""}> ${l}</label>`).join("")}
+    <div class="field" style="margin-top:10px"><label>Event webhook URL for your provider</label><input readonly value="${hook("email")}"></div>
+    <p class="hint">Before sending at volume: set SPF, DKIM and DMARC on the sending domain and warm it up (start around 30–50 a day).</p>
+    <div class="row"><button class="btn primary" id="saveE">Save email settings</button><button class="btn" id="conE">${em.connected?"Disconnect":"Mark as connected"}</button></div></section>
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>WhatsApp</h2>${statusPill(wa)}</div>
+    ${provGrid(WA_PROVIDERS,wa.provider,"wa")}
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+    <div class="field"><label for="w_num">Business number</label><input id="w_num" value="${esc(wa.number||proj().waNumber||"")}" placeholder="91XXXXXXXXXX"></div>
+    <div class="field"><label for="w_pid">Phone number ID / channel ID</label><input id="w_pid" value="${esc(wa.phoneId||"")}"></div>
+    <div class="field"><label for="w_waba">WABA ID</label><input id="w_waba" value="${esc(wa.waba||"")}"></div>
+    <div class="field"><label for="w_lang">Template language</label><select id="w_lang">${["en","en_US","hi","te"].map(l=>`<option ${wa.lang===l?"selected":""}>${l}</option>`).join("")}</select></div></div>
+    <h3 style="margin:8px 0">Status tracking</h3>
+    ${[["delivered","Delivered receipts"],["read","Read receipts"],["failed","Failed / undeliverable (marks number invalid)"],["replies","Inbound replies stop the sequence"],["optout","Keywords STOP / no / unsubscribe mark opted out"]].map(([k,l])=>`<label class="row small" style="margin-bottom:6px"><input type="checkbox" data-wtr="${k}" ${(wa.tracking||{})[k]!==false?"checked":""}> ${l}</label>`).join("")}
+    <div class="field" style="margin-top:10px"><label>Status webhook URL for your provider</label><input readonly value="${hook("whatsapp")}"></div>
+    <div class="row"><button class="btn primary" id="saveW">Save WhatsApp settings</button><button class="btn" id="conW">${wa.connected?"Disconnect":"Mark as connected"}</button></div></section>
+  </div>`;
+  const save=async(n,m)=>{await safe(()=>S.db.doc(P("settings/channels")).set(n)); if(m) toast(m)};
+  document.querySelectorAll("[data-prov]").forEach(el=>{el.onclick=()=>{const [k,id]=el.dataset.prov.split(":"); const n=JSON.parse(JSON.stringify(S.channels)); n[k]={...(n[k]||{}),provider:id,connected:false}; save(n)}; el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();el.click()}}});
+  $("#saveE").onclick=()=>{const tr={}; document.querySelectorAll("[data-etr]").forEach(i=>tr[i.dataset.etr]=i.checked);
+    save({...S.channels,email:{...em,fromName:$("#e_fn").value.trim(),fromEmail:$("#e_fe").value.trim(),replyTo:$("#e_rt").value.trim(),bcc:$("#e_bcc").value.trim(),tracking:tr}},"Email settings saved")};
+  $("#saveW").onclick=()=>{const tr={}; document.querySelectorAll("[data-wtr]").forEach(i=>tr[i.dataset.wtr]=i.checked);
+    save({...S.channels,wa:{...wa,number:$("#w_num").value.trim(),phoneId:$("#w_pid").value.trim(),waba:$("#w_waba").value.trim(),lang:$("#w_lang").value,tracking:tr}},"WhatsApp settings saved")};
+  $("#conE").onclick=()=>{ if(!em.provider) return toast("Pick an email provider first"); save({...S.channels,email:{...em,connected:!em.connected}},em.connected?"Email disconnected":"Email marked as connected")};
+  $("#conW").onclick=()=>{ if(!wa.provider) return toast("Pick a WhatsApp provider first"); save({...S.channels,wa:{...wa,connected:!wa.connected}},wa.connected?"WhatsApp disconnected":"WhatsApp marked as connected")};
+}
+
+/* ---------- Sources & import ---------- */
+async function readSheet(file){
+  if(!file) return null;
+  try{ if(!window.XLSX){toast("Spreadsheet reader didn't load");return null}
+    const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:"array"});
+    let best=null; for(const n of wb.SheetNames){const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:""}); if(!best||rows.length>best.rows.length) best={n,rows}}
+    return best.rows; }catch(e){ toast("Couldn't read that file"); return null; }
+}
+const MAPS={name:["business name","business","company","name","organisation","organization"],contactPerson:["contact person","owner","person","manager"],category:["category","type","segment","industry"],area:["area","location","locality","zone","city"],phone:["phone","mobile","whatsapp","contact no","number"],email:["email","e-mail","mail"]};
+function autoMap(headers){const m={}; for(const [k,keys] of Object.entries(MAPS)){ for(const key of keys){const h=headers.find(h=>h.toLowerCase().trim()===key)||headers.find(h=>h.toLowerCase().includes(key)); if(h&&!Object.values(m).includes(h)){m[k]=h;break}} } return m}
+function vSources(){
+  $("#view").innerHTML=`<div class="top"><div><h1>Lead sources</h1><p>Where leads come from. Every lead keeps its source so you can compare response by channel.</p></div></div>
+  <div class="grid g3" style="margin-bottom:20px">${SOURCE_TYPES.map(([id,n,d])=>`<div class="provider" role="button" tabindex="0" data-src="${id}"><div><b>${n}</b><div class="hint">${d}</div></div><span aria-hidden="true">＋</span></div>`).join("")}</div>
+  <h2 style="margin-bottom:10px">Connected sources</h2>
+  ${S.sources.length?`<div class="tbl-wrap"><table><thead><tr><th>Source</th><th>Type</th><th>Sync</th><th>Last sync</th><th>Leads</th><th></th></tr></thead><tbody>
+  ${S.sources.map(s=>`<tr style="cursor:default"><td><b>${esc(s.name)}</b><div class="hint">${esc(s.detail||"")}</div></td><td>${esc((SOURCE_TYPES.find(t=>t[0]===s.type)||[])[1]||s.type)}</td><td>${esc(s.mode||"Manual")}</td><td class="small muted">${fmtT(s.lastSync)}</td><td>${s.count||0}</td><td><button class="btn small danger" data-rmsrc="${s.id}">Remove</button></td></tr>`).join("")}</tbody></table></div>`:`<p class="muted small">No sources yet. Start with an Excel upload; it works right away.</p>`}`;
+  document.querySelectorAll("[data-src]").forEach(el=>{el.onclick=()=>openSource(el.dataset.src); el.onkeydown=e=>{if(e.key==="Enter")el.click()}});
+  document.querySelectorAll("[data-rmsrc]").forEach(b=>b.onclick=()=>safe(()=>S.db.doc(P("sources/"+b.dataset.rmsrc)).delete()));
+}
+function openSource(type){
+  if(type==="manual"){ openContact(null); return; }
+  if(type==="upload"){
+    openDrawer("Import leads from Excel or CSV",`<div class="field"><label for="upf">File</label><input type="file" id="upf" accept=".xlsx,.xls,.csv"><span class="hint">The sheet with the most rows is used. Duplicates (same email or phone) are skipped.</span></div><div id="mapArea"></div>`,
+      `<button class="btn" id="upC">Cancel</button><button class="btn primary" id="upGo" disabled>Import</button>`);
+    $("#upC").onclick=closeDrawer; let rows=null, map={};
+    $("#upf").onchange=async e=>{ rows=await readSheet(e.target.files[0]); if(!rows||!rows.length) return toast("No rows found");
+      const headers=Object.keys(rows[0]); map=autoMap(headers);
+      $("#mapArea").innerHTML=`<p class="small"><b>${rows.length}</b> rows found. Check the column mapping:</p>${Object.keys(MAPS).map(k=>`<div class="field"><label>${{name:"Business name",contactPerson:"Contact person",category:"Category",area:"Area",phone:"Phone",email:"Email"}[k]}</label><select data-map="${k}"><option value="">— not in file —</option>${headers.map(h=>`<option ${map[k]===h?"selected":""}>${esc(h)}</option>`).join("")}</select></div>`).join("")}`;
+      $("#upGo").disabled=false; };
+    $("#upGo").onclick=async()=>{ document.querySelectorAll("[data-map]").forEach(s=>map[s.dataset.map]=s.value); if(!map.name) return toast("Map the business name column");
+      $("#upGo").disabled=true; const fname=$("#upf").files[0].name; const seen=new Set(S.contacts.flatMap(c=>[c.email&&c.email.toLowerCase(),normPhone(c.phone)].filter(Boolean)));
+      let added=0,skipped=0; const todo=[];
+      for(const r of rows){ const d={}; for(const k of Object.keys(MAPS)) d[k]=map[k]?String(r[map[k]]??"").trim():""; if(!d.name){skipped++;continue}
+        const keys=[d.email&&d.email.toLowerCase(),normPhone(d.phone)].filter(k=>k&&k!=="not publicly listed"); if(keys.some(k=>seen.has(k))){skipped++;continue} keys.forEach(k=>seen.add(k));
+        todo.push({...d,source:fname,createdAt:nowISO(),em_stage:0,wa_stage:0,em_status:"not_contacted",wa_status:"not_contacted",hist:[]}); }
+      const col=S.db.collection(P("contacts"));
+      for(let i=0;i<todo.length;i+=4){ $("#upGo").textContent=`Importing ${Math.min(i+4,todo.length)}/${todo.length}…`;
+        const res=await Promise.allSettled(todo.slice(i,i+4).map(x=>col.add(x))); added+=res.filter(r=>r.status==="fulfilled").length;
+        const q=res.find(r=>r.status==="rejected"&&r.reason?.code==="quota_exceeded"); if(q){toast("The workspace is full. Remove old leads to import more.");break} }
+      await safe(()=>S.db.collection(P("sources")).add({type:"upload",name:fname,detail:"File upload",mode:"One-time",lastSync:nowISO(),count:added}));
+      await safe(()=>logEvents([{t:nowISO(),ch:"sys",name:fname,ev:`imported ${added} leads, ${skipped} skipped`}]));
+      closeDrawer(); toast(`Imported ${added} leads, skipped ${skipped}`); };
+    return;
+  }
+  const forms={
+    onedrive:[["path","Workbook path","/ABS/Elma_Industries_MASTER_Leads.xlsx"],["table","Table name","Table1"],["sheet","Worksheet","📋 Master Leads"]],
+    gsheets:[["url","Sheet URL",""],["tab","Tab name","Leads"]],
+    webhook:[["secret","Shared secret name (stored in vault)","LEADS_WEBHOOK_SECRET"]],
+    form:[["site","Website domain","elmawaterindustries.in"]],
+    crm:[["crm","CRM","Zoho CRM"],["view","List / view to sync","Open leads"]]};
+  const n=(SOURCE_TYPES.find(t=>t[0]===type)||[])[1];
+  const endpoint=`https://api.echoline.app/v1/projects/${S.pid}/leads`;
+  openDrawer("Connect "+n,`${(forms[type]||[]).map(([k,l,ph])=>`<div class="field"><label for="s_${k}">${l}</label><input id="s_${k}" placeholder="${esc(ph)}" value="${type==="onedrive"?esc(ph):""}"></div>`).join("")}
+    ${["webhook","form"].includes(type)?`<div class="field"><label>Endpoint</label><input readonly value="${endpoint}"><span class="hint">POST JSON: {"name","category","area","phone","email","contactPerson"}. Leads enter the sequence immediately.</span></div>`:""}
+    <div class="field"><label for="s_mode">Sync</label><select id="s_mode">${(["webhook","form"].includes(type)?["Real-time"]:["Every 15 minutes","Hourly","Daily at 9:00"]).map(m=>`<option>${m}</option>`).join("")}</select></div>
+    <p class="hint">Sync runs on the Echoline worker. New rows are de-duplicated by email and phone; existing statuses are never overwritten by the source.</p>`,
+    `<button class="btn" id="sC">Cancel</button><button class="btn primary" id="sGo">Save source</button>`);
+  $("#sC").onclick=closeDrawer;
+  $("#sGo").onclick=async()=>{const cfg={}; (forms[type]||[]).forEach(([k])=>cfg[k]=$("#s_"+k).value.trim());
+    await safe(()=>S.db.collection(P("sources")).add({type,name:n,detail:Object.values(cfg).filter(Boolean).join(" · "),config:cfg,mode:$("#s_mode").value,lastSync:"",count:0,createdAt:nowISO()}));
+    closeDrawer(); toast(n+" source saved")};
+}
+
+/* ---------- Activity ---------- */
+function vActivity(){
+  const ev=S.activity.flatMap(a=>a.events||[]);
+  $("#view").innerHTML=`<div class="top"><div><h1>Activity log</h1><p>Last 14 days of sends, status changes and imports.</p></div></div>
+  ${ev.length?`<div class="tbl-wrap"><table><thead><tr><th>Time</th><th>Channel</th><th>Lead</th><th>Event</th></tr></thead><tbody>${ev.map(e=>`<tr style="cursor:default"><td class="small muted">${fmtT(e.t)}</td><td><span class="pill ${e.ch==="em"?"e":e.ch==="wa"?"w":""}">${e.ch==="em"?"Email":e.ch==="wa"?"WhatsApp":"System"}</span></td><td>${esc(e.name)}</td><td>${esc(e.ev)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="panel empty"><h2>Nothing logged yet</h2><p>Run due steps from the dashboard or import leads to see activity.</p></div>`}`;
+}
+
+/* ---------- Project settings ---------- */
+function vProject(){
+  const p=proj();
+  $("#view").innerHTML=`<div class="top"><div><h1>Project settings</h1><p>Identity used in templates and email branding.</p></div></div>
+  <section class="panel" style="max-width:680px">${projFields(p)}<div class="row"><button class="btn primary" id="saveP">Save project</button><button class="btn danger" id="delDemo">Delete demo leads</button></div></section>`;
+  $("#saveP").onclick=async()=>{await safe(()=>S.db.doc("projects/"+p.id).set(strip({...p,...readProj()}))); toast("Project saved")};
+  $("#delDemo").onclick=async()=>{const d=S.contacts.filter(c=>c.demo); if(!d.length) return toast("No demo leads in this project"); if(!confirm(`Delete ${d.length} demo leads?`)) return;
+    for(const c of d) await safe(()=>S.db.doc(P("contacts/"+c.id)).delete()); toast("Demo leads deleted")};
+}
+const projFields=p=>`${[["name","Project name","Elma Industries"],["brand","Brand name in messages","Elma Industries"],["senderName","Sender name","Haneel Teja Nalluru"],["website","Website","https://"],["waNumber","WhatsApp number for click-to-chat","916309060777"],["accent","Email header colour","#3d1a5c"]].map(([k,l,ph])=>`<div class="field"><label for="p_${k}">${l}</label><input id="p_${k}" ${k==="accent"?'type="color"':""} placeholder="${esc(ph)}" value="${esc(p?.[k]||(k==="accent"?"#3d1a5c":""))}"></div>`).join("")}`;
+const readProj=()=>Object.fromEntries(["name","brand","senderName","website","waNumber","accent"].map(k=>[k,$("#p_"+k).value.trim()]));
+function openProjectEditor(){
+  openDrawer("New project",projFields(null),`<button class="btn" id="pc">Cancel</button><button class="btn primary" id="pg">Create project</button>`);
+  $("#pc").onclick=closeDrawer;
+  $("#pg").onclick=async()=>{const d=readProj(); if(!d.name) return toast("Give the project a name");
+    const ref=await safe(()=>S.db.collection("projects").add({...d,createdAt:nowISO()}),"Couldn't create project");
+    if(ref){ await safe(()=>ref.collection("settings").doc("sequence").set(defaultSeq())); closeDrawer(); S.view="kb"; renderNav(); selectProject(ref.id); toast("Project created. Add its knowledge base next."); }};
+}
+</script>
+</body>
+</html>
