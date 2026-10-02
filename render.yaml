@@ -2,7 +2,7 @@ services:
   - type: web
     name: echoline-api
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @echoline/core build && pnpm --filter @echoline/db build && pnpm --filter @echoline/api build
     startCommand: pnpm --filter @echoline/api start
