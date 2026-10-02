@@ -13,6 +13,7 @@
   "dependencies": {
     "@echoline/core": "workspace:*",
     "@echoline/db": "workspace:*",
+    "@echoline/providers": "workspace:*",
     "@fastify/cors": "^10.0.1",
     "@supabase/supabase-js": "^2.45.4",
     "fastify": "^5.1.0",

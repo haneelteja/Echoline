@@ -101,3 +101,18 @@ export interface LeadSourceRow {
   rows_skipped: number;
   rows_failed: number;
 }
+
+export type ConnectionStatus = "connected" | "needs_reconnect" | "disconnected";
+
+export interface ConnectionRow {
+  id: string;
+  project_id: string;
+  kind: "email" | "whatsapp";
+  provider: string;
+  account_label: string | null;
+  scopes: string[];
+  status: ConnectionStatus;
+  needs_reconnect_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}

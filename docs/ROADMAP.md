@@ -32,10 +32,35 @@
 - Verified against the live database: login, project switching, viewer blocked from writes,
   client_viewer scoped to assigned projects only (`packages/db/src/verify-phase1.ts`)
 
+## Implemented (Phase 2 — credential vault + provider connections)
+
+- `packages/db/src/vault.ts`: envelope encryption (AES-256-GCM, per-credential DEK wrapped
+  by a master key from `CREDENTIAL_VAULT_MASTER_KEY`), with vitest coverage including a
+  regression test for Postgres's `bytea` wire format (a real bug caught by testing against
+  the live DB, not just unit tests)
+- `packages/providers`: `testConnection` adapters for all 12 providers from the spec
+  (Gmail, Microsoft 365, SES, SendGrid, Brevo, SMTP, Meta Cloud API, 360dialog, Gupshup,
+  Interakt, AiSensy, Twilio), 41 vitest cases with mocked HTTP; Gmail/Outlook OAuth2
+  authorize/exchange/refresh against each provider's documented token endpoint
+- `apps/api`: connections CRUD (admin-only via RLS) that tests credentials before
+  persisting and never returns encrypted columns to the browser; a separate public
+  `/oauth/:provider/callback` (outside the authenticated group, since the browser's
+  redirect from Google/Microsoft carries no Authorization header) using an
+  **encrypted** `state` param to carry the user's session across that gap
+- `apps/web`: Channels page wired to connect (API-key form or OAuth redirect), test,
+  and disconnect every provider
+- Verified end-to-end against the live Supabase project and the real SendGrid API
+  (via `packages/db/src/verify-phase1.ts`-style manual checks): create → encrypt → store
+  → retrieve → decrypt → re-test → delete, plus RLS blocking a viewer's write
+- **Known gap**: Gmail/Microsoft 365 OAuth is built against each provider's documented
+  spec with full unit coverage, but not yet exercised against real Google Cloud /
+  Azure App Registration credentials — those don't exist yet. `GOOGLE_OAUTH_CLIENT_ID`
+  etc. unset means those two providers respond 503 until configured.
+
 ## To be implemented (backend)
 
-- Provider adapters. Email: Gmail, Microsoft 365, SES, SendGrid, Brevo, SMTP. WhatsApp: Meta Cloud API, 360dialog, Gupshup, Interakt, AiSensy, Twilio
-- Encrypted credential vault per project (OAuth tokens, API keys)
+- Full send implementations for the provider adapters above (Phase 2 only validates
+  credentials; `EmailProvider.send()` / `WhatsAppProvider.sendTemplate()` are Phase 3)
 - BullMQ scheduler that runs due steps inside the send window
 - Webhooks → status updates: opens, clicks, bounces, delivered/read receipts, replies, opt-out keywords
 - Live lead sync: OneDrive Excel, Google Sheets, CRMs; webhook and website-form intake

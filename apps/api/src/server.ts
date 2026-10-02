@@ -4,6 +4,8 @@ import { requireAuth } from "./auth.js";
 import { projectRoutes } from "./routes/projects.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { collectionRoutes } from "./routes/collections.js";
+import { connectionRoutes } from "./routes/connections.js";
+import { oauthCallbackRoutes } from "./routes/oauthCallback.js";
 
 const app = Fastify({
   logger: {
@@ -20,12 +22,17 @@ await app.register(cors, { origin: allowedOrigins });
 
 app.get("/health", async () => ({ ok: true }));
 
+// Public: hit directly by the browser's redirect from Google/Microsoft, never
+// by our own authenticated fetch client. Must stay outside the /v1 group.
+await app.register(oauthCallbackRoutes);
+
 await app.register(
   async (api) => {
     api.addHook("preHandler", requireAuth);
     await api.register(projectRoutes);
     await api.register(settingsRoutes);
     await api.register(collectionRoutes);
+    await api.register(connectionRoutes);
   },
   { prefix: "/v1" }
 );

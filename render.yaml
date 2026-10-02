@@ -6,7 +6,7 @@ services:
     region: oregon
     # --prod=false: NODE_ENV=production (set below) makes pnpm skip devDependencies
     # by default, but esbuild/typescript/etc. are devDependencies needed to build.
-    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @echoline/core build && pnpm --filter @echoline/db build && pnpm --filter @echoline/api build
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @echoline/core build && pnpm --filter @echoline/db build && pnpm --filter @echoline/providers build && pnpm --filter @echoline/api build
     startCommand: pnpm --filter @echoline/api start
     healthCheckPath: /health
     envVars:
@@ -23,4 +23,20 @@ services:
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CREDENTIAL_VAULT_MASTER_KEY
+        sync: false # base64, 32 bytes. Generate with: openssl rand -base64 32
+      - key: API_PUBLIC_URL
+        value: https://echoline-api.onrender.com
+      - key: WEB_PUBLIC_URL
+        value: https://echoline-omega.vercel.app
+      # OAuth (Phase 2) - unset until real Google Cloud / Azure App Registration
+      # credentials exist; gmail/outlook connections respond 503 until then.
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_OAUTH_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_OAUTH_CLIENT_SECRET
         sync: false
