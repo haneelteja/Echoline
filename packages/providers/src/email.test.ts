@@ -1,15 +1,42 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { testSendGrid } from "./email/sendgrid";
-import { testBrevo } from "./email/brevo";
-import { testGmail } from "./email/gmail";
-import { testOutlook } from "./email/outlook";
+import { testSendGrid, sendSendGrid } from "./email/sendgrid";
+import { testBrevo, sendBrevo } from "./email/brevo";
+import { testGmail, sendGmail } from "./email/gmail";
+import { testOutlook, sendOutlook } from "./email/outlook";
+import type { EmailMessage } from "./types";
 
-function mockFetchOnce(status: number, body: unknown) {
+const message: EmailMessage = {
+  from: "sender@brand.com",
+  to: "lead@customer.com",
+  subject: "Hello",
+  html: "<p>Hi</p>",
+  text: "Hi",
+  headers: { "List-Unsubscribe": "<https://x.test/u/1>" },
+};
+
+function mockFetchOnce(status: number, body: unknown, headers: Record<string, string> = {}) {
   const fn = vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
+    text: async () => JSON.stringify(body),
+    headers: { get: (k: string) => headers[k.toLowerCase()] ?? null },
   });
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
+function mockFetchSequence(responses: { status: number; body: unknown }[]) {
+  const fn = vi.fn();
+  for (const r of responses) {
+    fn.mockResolvedValueOnce({
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      json: async () => r.body,
+      text: async () => JSON.stringify(r.body),
+      headers: { get: () => null },
+    });
+  }
   vi.stubGlobal("fetch", fn);
   return fn;
 }
@@ -85,5 +112,63 @@ describe("testOutlook", () => {
     mockFetchOnce(200, { mail: null, userPrincipalName: "owner@tenant.onmicrosoft.com" });
     const result = await testOutlook({ accessToken: "eyJ.xxx" });
     expect(result.accountLabel).toBe("owner@tenant.onmicrosoft.com");
+  });
+});
+
+describe("sendSendGrid", () => {
+  it("sends with both text and html content, and reads the message id from the response header", async () => {
+    const fetchSpy = mockFetchOnce(202, {}, { "x-message-id": "sg-msg-123" });
+    const result = await sendSendGrid({ apiKey: "SG.xxx" }, message);
+    expect(result).toEqual({ providerMessageId: "sg-msg-123" });
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.sendgrid.com/v3/mail/send");
+    const body = JSON.parse(init.body as string);
+    expect(body.content).toEqual([
+      { type: "text/plain", value: "Hi" },
+      { type: "text/html", value: "<p>Hi</p>" },
+    ]);
+    expect(body.personalizations[0].headers).toEqual(message.headers);
+  });
+
+  it("throws on a failed send", async () => {
+    mockFetchOnce(401, { errors: [{ message: "bad key" }] });
+    await expect(sendSendGrid({ apiKey: "bad" }, message)).rejects.toThrow(/401/);
+  });
+});
+
+describe("sendBrevo", () => {
+  it("sends and returns Brevo's messageId", async () => {
+    mockFetchOnce(201, { messageId: "brevo-msg-456" });
+    const result = await sendBrevo({ apiKey: "xkeysib-xxx" }, message);
+    expect(result).toEqual({ providerMessageId: "brevo-msg-456" });
+  });
+});
+
+describe("sendGmail", () => {
+  it("sends a base64url-encoded raw MIME message and returns Gmail's id", async () => {
+    const fetchSpy = mockFetchOnce(200, { id: "gmail-msg-789" });
+    const result = await sendGmail({ accessToken: "ya29.xxx" }, message);
+    expect(result).toEqual({ providerMessageId: "gmail-msg-789" });
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(typeof body.raw).toBe("string");
+    // base64url round-trips back to a MIME message containing our content
+    const decoded = Buffer.from(body.raw, "base64url").toString("utf8");
+    expect(decoded).toContain("Hi</p>");
+    expect(decoded).toContain("List-Unsubscribe:");
+  });
+});
+
+describe("sendOutlook", () => {
+  it("creates a draft then sends it, returning the draft's id as providerMessageId", async () => {
+    const fetchSpy = mockFetchSequence([
+      { status: 201, body: { id: "AAMk-draft-id" } },
+      { status: 202, body: {} },
+    ]);
+    const result = await sendOutlook({ accessToken: "eyJ.xxx" }, message);
+    expect(result).toEqual({ providerMessageId: "AAMk-draft-id" });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls[0][0]).toBe("https://graph.microsoft.com/v1.0/me/messages");
+    expect(fetchSpy.mock.calls[1][0]).toBe("https://graph.microsoft.com/v1.0/me/messages/AAMk-draft-id/send");
   });
 });

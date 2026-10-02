@@ -26,6 +26,10 @@ services:
         sync: false
       - key: CREDENTIAL_VAULT_MASTER_KEY
         sync: false # base64, 32 bytes. Generate with: openssl rand -base64 32
+      - key: TRACKING_SIGNING_SECRET
+        sync: false # signs open-pixel/click-redirect/unsubscribe URLs — must match echoline-worker's value
+      - key: REDIS_URL
+        sync: false # Upstash Redis connection string (redis://..., the ioredis/TCP one, not the REST URL)
       - key: API_PUBLIC_URL
         value: https://echoline-api.onrender.com
       - key: WEB_PUBLIC_URL
@@ -40,3 +44,36 @@ services:
         sync: false
       - key: MICROSOFT_OAUTH_CLIENT_SECRET
         sync: false
+
+  # Background worker: BullMQ scheduler (5-min repeatable tick) + send-email/
+  # send-whatsapp processors. Needs a paid plan — Render's free tier is
+  # web-services-only and spins down on inactivity, which a persistent queue
+  # consumer can't tolerate.
+  - type: worker
+    name: echoline-worker
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @echoline/core build && pnpm --filter @echoline/db build && pnpm --filter @echoline/providers build && pnpm --filter @echoline/worker build
+    startCommand: pnpm --filter @echoline/worker start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CREDENTIAL_VAULT_MASTER_KEY
+        sync: false # must be the SAME value as echoline-api's
+      - key: TRACKING_SIGNING_SECRET
+        sync: false # must be the SAME value as echoline-api's
+      - key: REDIS_URL
+        sync: false # same Upstash Redis connection string as echoline-api's
+      - key: API_PUBLIC_URL
+        value: https://echoline-api.onrender.com

@@ -57,14 +57,48 @@
   Azure App Registration credentials — those don't exist yet. `GOOGLE_OAUTH_CLIENT_ID`
   etc. unset means those two providers respond 503 until configured.
 
+## Implemented (Phase 3 — real sending + scheduler)
+
+- `packages/core`: plain-text email alternative mirroring the HTML footer, RFC 8058
+  `List-Unsubscribe`/`List-Unsubscribe-Post` headers, `emailHTML`'s website/WhatsApp
+  links now run through an optional `rewriteLink` hook for click tracking
+- `packages/providers`: `send()`/`sendTemplate()`/`sendText()` implemented for all 12
+  adapters (raw-MIME for Gmail/SES to support custom headers; draft-then-send for
+  Outlook since Graph's one-shot `sendMail` returns no id), HMAC-signed open-pixel/
+  click-redirect/unsubscribe URL builders, 36 new vitest cases
+- `apps/worker` (new): BullMQ scheduler — a 5-minute repeatable tick walks every
+  project, applies `nextDue`/send-window/business-day/daily-cap, enqueues sends with
+  jitter; send-email and send-whatsapp processors claim a unique
+  `(project_id, contact_id, channel, step)` row in `messages` *before* calling the
+  provider — the real idempotency guard, independent of BullMQ's own job-id dedup
+- WhatsApp sends are blocked unless the step's template is `Approved`, with the
+  reason recorded in `message_events` (`blocked`) rather than silently dropped
+- `apps/api`: manual "Run due steps now" (operator+, bypasses the window but not
+  the cap or approval gate) enqueues onto the same queue the scheduler uses; public
+  `/t/o/:id` (open pixel), `/t/c/:id` (click redirect), `/u/:id` (unsubscribe, both
+  channels) — all fail open (never 404/500 a pixel or trap a click) and record
+  events when the signature is valid
+- `apps/web`: "Run due steps now" button on the Dashboard
+- **Verified live**, not just unit-tested: local Redis + Mailpit + the real Supabase
+  project — a lead actually received a real SMTP email with correct subject/body/
+  unsubscribe link, advanced `not_contacted → initial_sent`, and a deliberately
+  duplicated BullMQ job (different job ID, so BullMQ's own dedup couldn't mask a
+  bug) was correctly rejected by the database-level guard with zero duplicate email
+  or row. The WhatsApp approval gate was verified the same way — blocked, reason
+  recorded, contact left untouched.
+- **Known gaps**: real component/variable mapping for approved WhatsApp templates
+  (Meta's numbered `{{1}}` placeholders) ships in Phase 6 — Phase 3 sends approved
+  templates as registered, without dynamic parameters. Several WhatsApp adapters
+  (360dialog, Gupshup, Interakt, AiSensy) are implemented against documented API
+  shapes but unverified against live sandboxes — confirm before a real campaign.
+  `apps/worker` needs a paid Render plan (free tier is web-only) and the user's own
+  Upstash Redis instance; not yet deployed pending that `REDIS_URL`.
+
 ## To be implemented (backend)
 
-- Full send implementations for the provider adapters above (Phase 2 only validates
-  credentials; `EmailProvider.send()` / `WhatsAppProvider.sendTemplate()` are Phase 3)
-- BullMQ scheduler that runs due steps inside the send window
-- Webhooks → status updates: opens, clicks, bounces, delivered/read receipts, replies, opt-out keywords
+- Webhooks → status updates: opens, clicks, bounces, delivered/read receipts, replies, opt-out keywords (Phase 4 — provider-side webhooks; Phase 3 only covers our own open/click/unsubscribe endpoints)
 - Live lead sync: OneDrive Excel, Google Sheets, CRMs; webhook and website-form intake
-- Meta template submission and approval tracking
+- Meta template submission, approval tracking, and `{{n}}` variable mapping
 - Billing and plans (if sold as a product)
 
 ## Compliance notes

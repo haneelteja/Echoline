@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueList, nextDue } from "./sequence";
+import { dueList, isWithinSendWindow, nextDue } from "./sequence";
 import type { Contact, SequenceSettings } from "./types";
 
 const seq: SequenceSettings = {
@@ -83,5 +83,43 @@ describe("dueList", () => {
     const result = dueList([future, due], emOnly);
     expect(result.map((d) => d.contactId)).toContain("due");
     expect(result.map((d) => d.contactId)).not.toContain("future");
+  });
+});
+
+describe("isWithinSendWindow", () => {
+  const window = { start: "10:00", end: "18:00" };
+  const tz = "Asia/Kolkata";
+
+  it("allows a time inside the window on a weekday", () => {
+    // 2026-10-05 is a Monday
+    const at = new Date("2026-10-05T07:00:00.000Z"); // 12:30 IST
+    expect(isWithinSendWindow(at, window, tz)).toBe(true);
+  });
+
+  it("rejects a time before the window opens", () => {
+    const at = new Date("2026-10-05T03:00:00.000Z"); // 08:30 IST
+    expect(isWithinSendWindow(at, window, tz)).toBe(false);
+  });
+
+  it("rejects a time after the window closes", () => {
+    const at = new Date("2026-10-05T13:00:00.000Z"); // 18:30 IST
+    expect(isWithinSendWindow(at, window, tz)).toBe(false);
+  });
+
+  it("rejects Saturday even during window hours", () => {
+    const at = new Date("2026-10-03T07:00:00.000Z"); // Sat, 12:30 IST
+    expect(isWithinSendWindow(at, window, tz)).toBe(false);
+  });
+
+  it("rejects Sunday even during window hours", () => {
+    const at = new Date("2026-10-04T07:00:00.000Z"); // Sun, 12:30 IST
+    expect(isWithinSendWindow(at, window, tz)).toBe(false);
+  });
+
+  it("evaluates in the project's timezone, not the server's", () => {
+    // 18:30 UTC is within 10:00-18:00 in US/Pacific (UTC-7/8) but not in Asia/Kolkata
+    const at = new Date("2026-10-05T18:30:00.000Z");
+    expect(isWithinSendWindow(at, window, "America/Los_Angeles")).toBe(true);
+    expect(isWithinSendWindow(at, window, "Asia/Kolkata")).toBe(false);
   });
 });

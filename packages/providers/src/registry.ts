@@ -1,16 +1,16 @@
-import type { ConnectionTester, ProviderId } from "./types";
-import { testGmail } from "./email/gmail";
-import { testOutlook } from "./email/outlook";
-import { testSes } from "./email/ses";
-import { testSendGrid } from "./email/sendgrid";
-import { testBrevo } from "./email/brevo";
-import { testSmtp } from "./email/smtp";
-import { testMeta } from "./whatsapp/meta";
-import { test360Dialog } from "./whatsapp/360dialog";
-import { testGupshup } from "./whatsapp/gupshup";
-import { testInterakt } from "./whatsapp/interakt";
-import { testAiSensy } from "./whatsapp/aisensy";
-import { testTwilio } from "./whatsapp/twilio";
+import type { ConnectionTester, EmailProviderId, EmailSender, ProviderId, WhatsAppProviderId, WhatsAppTemplateSender, WhatsAppTextSender } from "./types";
+import { testGmail, sendGmail } from "./email/gmail";
+import { testOutlook, sendOutlook } from "./email/outlook";
+import { testSes, sendSes } from "./email/ses";
+import { testSendGrid, sendSendGrid } from "./email/sendgrid";
+import { testBrevo, sendBrevo } from "./email/brevo";
+import { testSmtp, sendSmtp } from "./email/smtp";
+import { testMeta, sendMetaTemplate, sendMetaText } from "./whatsapp/meta";
+import { test360Dialog, send360DialogTemplate } from "./whatsapp/360dialog";
+import { testGupshup, sendGupshupTemplate } from "./whatsapp/gupshup";
+import { testInterakt, sendInteraktTemplate } from "./whatsapp/interakt";
+import { testAiSensy, sendAiSensyTemplate } from "./whatsapp/aisensy";
+import { testTwilio, sendTwilioTemplate, sendTwilioText } from "./whatsapp/twilio";
 
 export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   gmail: testGmail,
@@ -29,4 +29,41 @@ export const connectionTesters: Record<ProviderId, ConnectionTester> = {
 
 export function getConnectionTester(providerId: string): ConnectionTester | undefined {
   return connectionTesters[providerId as ProviderId];
+}
+
+export const emailSenders: Record<EmailProviderId, EmailSender> = {
+  gmail: sendGmail,
+  outlook: sendOutlook,
+  ses: sendSes,
+  sendgrid: sendSendGrid,
+  brevo: sendBrevo,
+  smtp: sendSmtp,
+};
+
+export function getEmailSender(providerId: string): EmailSender | undefined {
+  return emailSenders[providerId as EmailProviderId];
+}
+
+export const whatsAppTemplateSenders: Record<WhatsAppProviderId, WhatsAppTemplateSender> = {
+  meta: sendMetaTemplate,
+  "360dialog": send360DialogTemplate,
+  gupshup: sendGupshupTemplate,
+  interakt: sendInteraktTemplate,
+  aisensy: sendAiSensyTemplate,
+  twilio: sendTwilioTemplate,
+};
+
+export function getWhatsAppTemplateSender(providerId: string): WhatsAppTemplateSender | undefined {
+  return whatsAppTemplateSenders[providerId as WhatsAppProviderId];
+}
+
+// Only meta and twilio have a well-documented session-text send path; the
+// others can be added once confirmed against their current docs.
+export const whatsAppTextSenders: Partial<Record<WhatsAppProviderId, WhatsAppTextSender>> = {
+  meta: sendMetaText,
+  twilio: sendTwilioText,
+};
+
+export function getWhatsAppTextSender(providerId: string): WhatsAppTextSender | undefined {
+  return whatsAppTextSenders[providerId as WhatsAppProviderId];
 }

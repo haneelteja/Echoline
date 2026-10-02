@@ -1,11 +1,31 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { dueList } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { toCoreContact, toCoreSequence } from "@/lib/adapt";
+import { apiFetch, ApiError } from "@/lib/apiClient";
 
 export default function DashboardPage() {
-  const { project, seq, contacts, loadingProject } = useWorkspace();
+  const { pid, project, seq, contacts, loadingProject, refreshProjectData } = useWorkspace();
+  const [running, setRunning] = useState(false);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
+
+  async function runDueNow() {
+    if (!pid) return;
+    setRunning(true);
+    setRunMessage(null);
+    try {
+      await apiFetch(`/v1/projects/${pid}/run-due`, { method: "POST" });
+      setRunMessage("Queued — due steps will send within a minute or two.");
+      setTimeout(() => refreshProjectData(), 5000);
+    } catch (e) {
+      setRunMessage(
+        e instanceof ApiError && e.status === 403 ? "You need operator access or above to run due steps." : "Couldn't trigger the run."
+      );
+    } finally {
+      setRunning(false);
+    }
+  }
 
   const stats = useMemo(() => {
     if (!seq) return null;
@@ -44,6 +64,12 @@ export default function DashboardPage() {
             {stats.n} leads · {stats.due} step{stats.due === 1 ? "" : "s"} due now
           </p>
         </div>
+        <div>
+          <button className="btn primary" onClick={runDueNow} disabled={running || stats.due === 0}>
+            {running ? "Queuing…" : `Run ${stats.due} due step${stats.due === 1 ? "" : "s"} now`}
+          </button>
+          {runMessage && <p className="small muted" style={{ marginTop: 6 }}>{runMessage}</p>}
+        </div>
       </div>
       <div className="dash">
         <section className="panel c12">
@@ -65,8 +91,9 @@ export default function DashboardPage() {
           </div>
           <p className="small muted">
             Sends go out {seq?.window_start.slice(0, 5)}–{seq?.window_end.slice(0, 5)} ({project?.timezone}), capped at{" "}
-            {seq?.daily_cap}/day per channel. Actual sending (Phase 3) and live provider/webhook tracking (Phase 4) land in
-            upcoming phases — numbers above reflect lead data already in the system.
+            {seq?.daily_cap}/day per channel. A background worker checks for due steps every 5 minutes automatically, or use
+            the button above to run them right now. Live delivery/open/click tracking from provider webhooks lands in
+            Phase 4 — numbers above reflect lead data already in the system.
           </p>
         </section>
       </div>

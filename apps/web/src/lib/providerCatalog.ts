@@ -29,6 +29,7 @@ export const PROVIDERS: ProviderInfo[] = [
       { key: "accessKeyId", label: "Access key ID" },
       { key: "secretAccessKey", label: "Secret access key", type: "password" },
       { key: "region", label: "Region", placeholder: "ap-south-1" },
+      { key: "fromEmail", label: "Send from (verified sender)", placeholder: "you@yourdomain.com" },
     ],
   },
   {
@@ -36,14 +37,20 @@ export const PROVIDERS: ProviderInfo[] = [
     label: "SendGrid",
     kind: "email",
     auth: "apikey",
-    fields: [{ key: "apiKey", label: "API key", type: "password" }],
+    fields: [
+      { key: "apiKey", label: "API key", type: "password" },
+      { key: "fromEmail", label: "Send from (verified sender)", placeholder: "you@yourdomain.com" },
+    ],
   },
   {
     id: "brevo",
     label: "Brevo",
     kind: "email",
     auth: "apikey",
-    fields: [{ key: "apiKey", label: "API key", type: "password" }],
+    fields: [
+      { key: "apiKey", label: "API key", type: "password" },
+      { key: "fromEmail", label: "Send from (verified sender)", placeholder: "you@yourdomain.com" },
+    ],
   },
   {
     id: "smtp",
@@ -56,6 +63,7 @@ export const PROVIDERS: ProviderInfo[] = [
       { key: "user", label: "Username" },
       { key: "pass", label: "Password", type: "password" },
       { key: "secure", label: "Secure (true/false)", placeholder: "false" },
+      { key: "fromEmail", label: "Send from (optional, defaults to username)", placeholder: "you@yourdomain.com" },
     ],
   },
   {

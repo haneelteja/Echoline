@@ -26,9 +26,36 @@ export function fill(text: string | null | undefined, ctx: FillContext): string 
   return String(text ?? "").replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (k in map ? map[k] : m));
 }
 
-/** Plain-text alternative: same paragraph fill, HTML stripped. */
-export function fillPlainText(text: string | null | undefined, ctx: FillContext): string {
-  return fill(text, ctx).trim();
+/**
+ * Plain-text alternative to emailHTML(), mirroring the same footer (sender
+ * name, brand/website, unsubscribe instructions) so clients that prefer
+ * text/plain don't lose the sign-off or opt-out path.
+ */
+export function fillPlainText(
+  text: string | null | undefined,
+  ctx: FillContext,
+  opts: { unsubscribeUrl?: string } = {}
+): string {
+  const p = ctx.project;
+  const body = fill(text, ctx).trim();
+  const signOff = [p.senderName, p.brand || p.name, p.website].filter(Boolean).join("\n");
+  const footer = [`Not relevant? Reply "no" and we won't follow up.`, opts.unsubscribeUrl ? `Unsubscribe: ${opts.unsubscribeUrl}` : null]
+    .filter(Boolean)
+    .join("\n");
+  return [body, signOff, footer].filter(Boolean).join("\n\n");
+}
+
+/**
+ * RFC 8058 one-click unsubscribe headers. Mail clients (Gmail, Outlook, etc.)
+ * use these to show a native "Unsubscribe" button instead of requiring the
+ * recipient to find a link in the body.
+ */
+export function buildUnsubscribeHeaders(unsubscribeUrl: string, unsubscribeMailto?: string): Record<string, string> {
+  const targets = [unsubscribeMailto ? `<mailto:${unsubscribeMailto}>` : null, `<${unsubscribeUrl}>`].filter(Boolean);
+  return {
+    "List-Unsubscribe": targets.join(", "),
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
 }
 
 export interface EmailAssets {
@@ -48,8 +75,9 @@ function escapeHtml(v: unknown): string {
 
 /**
  * Ported from the prototype's emailHTML(). Adds a footer unsubscribe link and
- * (when provided) an open-tracking pixel. Link rewriting for click tracking is
- * applied via `opts.rewriteLink` before this function sees the template body.
+ * (when provided) an open-tracking pixel. `opts.rewriteLink` — built by the
+ * caller (packages/providers' Node-only signing logic; this stays pure/web-safe)
+ * — wraps the website and WhatsApp CTA links for click tracking when provided.
  */
 export function emailHTML(
   template: Pick<Template, "body">,
@@ -59,8 +87,9 @@ export function emailHTML(
 ): string {
   const p = ctx.project;
   const accent = p.accent || "#3d1a5c";
+  const rewrite = opts.rewriteLink ?? ((url: string) => url);
   const wa = p.waNumber
-    ? `https://wa.me/${p.waNumber.replace(/\D/g, "")}?text=${encodeURIComponent("Hi " + (p.brand || p.name) + ", I'm interested")}`
+    ? rewrite(`https://wa.me/${p.waNumber.replace(/\D/g, "")}?text=${encodeURIComponent("Hi " + (p.brand || p.name) + ", I'm interested")}`)
     : "#";
 
   const paras = fill(template.body, ctx)
@@ -82,6 +111,6 @@ export function emailHTML(
   <tr><td style="padding:22px 24px 30px">${paras}
   ${imgs.length ? `<table role="presentation" width="100%"><tr>${imgs.map((src) => `<td style="padding:4px"><img src="${src}" width="100%" style="border-radius:6px;display:block"></td>`).join("")}</tr></table><br>` : ""}
   ${p.waNumber ? `<p style="text-align:center"><a href="${wa}" style="background:#25D366;color:#fff;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:24px;display:inline-block">💬 Chat with us on WhatsApp</a></p>` : ""}
-  <p style="margin:18px 0 2px;font-weight:600">${escapeHtml(p.senderName || "")}</p><p style="margin:0;color:#6b7280;font-size:14px">${escapeHtml(p.brand || p.name)}${p.website ? ` · <a href="${escapeHtml(p.website)}" style="color:${accent}">${escapeHtml(p.website.replace(/^https?:\/\//, ""))}</a>` : ""}</p>
+  <p style="margin:18px 0 2px;font-weight:600">${escapeHtml(p.senderName || "")}</p><p style="margin:0;color:#6b7280;font-size:14px">${escapeHtml(p.brand || p.name)}${p.website ? ` · <a href="${escapeHtml(rewrite(p.website))}" style="color:${accent}">${escapeHtml(p.website.replace(/^https?:\/\//, ""))}</a>` : ""}</p>
   <p style="margin:16px 0 0;font-size:11px;color:#9ca3af">Not relevant? Reply "no" and we won't follow up.${opts.unsubscribeUrl ? ` Or <a href="${opts.unsubscribeUrl}" style="color:#9ca3af">unsubscribe</a>.` : ""}</p></td></tr></table></td></tr></table>${opts.trackingPixelUrl ? `<img src="${opts.trackingPixelUrl}" width="1" height="1" alt="" style="display:none">` : ""}</body></html>`;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emailHTML, fill } from "./template";
+import { buildUnsubscribeHeaders, emailHTML, fill, fillPlainText } from "./template";
 import type { ProjectBrand } from "./types";
 
 const project: ProjectBrand = {
@@ -54,5 +54,61 @@ describe("emailHTML", () => {
     expect(html).toContain("https://x.test/u/1");
     expect(html).toContain("https://x.test/p/1");
     expect(html).toContain("Acme");
+  });
+
+  it("rewrites the website link through rewriteLink when provided (click tracking)", () => {
+    const html = emailHTML(
+      { body: "Hi {{company}}" },
+      { project, contact: { name: "Acme" } },
+      { galleryUrls: [] },
+      { rewriteLink: (url) => `https://track.test/c?u=${encodeURIComponent(url)}` }
+    );
+    expect(html).toContain(`https://track.test/c?u=${encodeURIComponent(project.website!)}`);
+    expect(html).not.toContain(`href="${project.website}"`);
+  });
+
+  it("rewrites the WhatsApp CTA link through rewriteLink too", () => {
+    const html = emailHTML(
+      { body: "Hi {{company}}" },
+      { project, contact: { name: "Acme" } },
+      { galleryUrls: [] },
+      { rewriteLink: (url) => `https://track.test/c?u=${encodeURIComponent(url)}` }
+    );
+    expect(html).toContain("https://track.test/c?u=https%3A%2F%2Fwa.me%2F916309060777");
+  });
+
+  it("leaves links untouched when no rewriteLink is given", () => {
+    const html = emailHTML({ body: "Hi {{company}}" }, { project, contact: { name: "Acme" } }, { galleryUrls: [] });
+    expect(html).toContain(`href="${project.website}"`);
+  });
+});
+
+describe("fillPlainText", () => {
+  it("includes the body, sign-off, and unsubscribe instructions", () => {
+    const text = fillPlainText("Hi {{company}}, nice to meet you.", { project, contact: { name: "Acme" } }, { unsubscribeUrl: "https://x.test/u/1" });
+    expect(text).toContain("Hi Acme, nice to meet you.");
+    expect(text).toContain("Haneel");
+    expect(text).toContain("Elma Industries");
+    expect(text).toContain("https://elmawaterindustries.in/");
+    expect(text).toContain("Unsubscribe: https://x.test/u/1");
+  });
+
+  it("omits the unsubscribe line when no URL is given", () => {
+    const text = fillPlainText("Hi there", { project, contact: { name: "Acme" } });
+    expect(text).not.toContain("Unsubscribe:");
+    expect(text).toContain(`Not relevant? Reply "no"`);
+  });
+});
+
+describe("buildUnsubscribeHeaders", () => {
+  it("builds RFC 8058 one-click headers from a URL only", () => {
+    const headers = buildUnsubscribeHeaders("https://x.test/u/1");
+    expect(headers["List-Unsubscribe"]).toBe("<https://x.test/u/1>");
+    expect(headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
+  });
+
+  it("includes a mailto target first when provided", () => {
+    const headers = buildUnsubscribeHeaders("https://x.test/u/1", "unsub@echoline.app");
+    expect(headers["List-Unsubscribe"]).toBe("<mailto:unsub@echoline.app>, <https://x.test/u/1>");
   });
 });

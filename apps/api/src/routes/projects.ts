@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { sendDbError } from "../errors.js";
+import { getSchedulerQueue } from "../schedulerQueue.js";
 
 const projectInput = z.object({
   name: z.string().min(1),
@@ -67,5 +68,30 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     if (error) return sendDbError(reply, error);
     if (!data) return reply.code(404).send({ error: "not_found" });
     return data;
+  });
+
+  // Manual "Run due steps now" — operator and above. Enqueues onto the same
+  // scheduler queue apps/worker's repeatable 5-minute tick uses; the worker
+  // does the actual work, this just triggers it immediately instead of
+  // waiting for the next tick.
+  app.post("/projects/:id/run-due", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
+    if (projErr) return sendDbError(reply, projErr);
+    if (!project) return reply.code(404).send({ error: "not_found" });
+
+    const { data: membership, error: memErr } = await req.supabase
+      .from("memberships")
+      .select("role")
+      .eq("org_id", (project as any).org_id)
+      .eq("user_id", req.userId)
+      .maybeSingle();
+    if (memErr) return sendDbError(reply, memErr);
+    if (!membership || !["owner", "admin", "operator"].includes((membership as any).role)) {
+      return reply.code(403).send({ error: "forbidden", message: "Operator access or above is required to run due steps." });
+    }
+
+    await getSchedulerQueue().add("manual-run-due", { projectId: id }, { removeOnComplete: 100, removeOnFail: 100 });
+    return { ok: true };
   });
 };

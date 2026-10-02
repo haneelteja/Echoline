@@ -6,6 +6,7 @@ import { settingsRoutes } from "./routes/settings.js";
 import { collectionRoutes } from "./routes/collections.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { oauthCallbackRoutes } from "./routes/oauthCallback.js";
+import { trackingRoutes } from "./routes/tracking.js";
 
 const app = Fastify({
   logger: {
@@ -25,6 +26,7 @@ app.get("/health", async () => ({ ok: true }));
 // Public: hit directly by the browser's redirect from Google/Microsoft, never
 // by our own authenticated fetch client. Must stay outside the /v1 group.
 await app.register(oauthCallbackRoutes);
+await app.register(trackingRoutes);
 
 await app.register(
   async (api) => {
