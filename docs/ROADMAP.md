@@ -253,6 +253,20 @@
   provider is connected yet — needs a real Anthropic/OpenAI/Gemini API key to exercise generation and
   rewrite end-to-end.
 
+## Fixed outside the 8-phase plan
+
+- Activity page was still Phase 1's dead-stub placeholder despite Phases 3-4 (sends + webhooks) having
+  been live for a while, with no way to actually see the opens/clicks/deliveries/bounces/replies
+  already being recorded. `GET /v1/projects/:id/activity` (read-only — `message_events` has no
+  update/delete RLS policy, deliberately not in `collections.ts`'s generic CRUD list) plus a real page
+  with cursor-based "load more" pagination and its own live realtime subscription. **Verified live**
+  against the deployed API with a real session: correct newest-first ordering, correct contact-name
+  join, correct payload data, on the Phase 3/4 smoke-test fixture's real events.
+- Found and fixed during a "double check the whole implementation" pass: migration `0008`
+  (`wa_templates.variable_map` + its unique constraint) had never actually been applied to production,
+  despite `0007` and `0009` being applied correctly — Phase 6/7's WhatsApp template submission and
+  send-time variable substitution were silently broken until this was caught and fixed.
+
 ## To be implemented (backend)
 
 - Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
@@ -261,7 +275,6 @@
 - OneDrive Excel / Google Sheets scheduled sync: needs Microsoft/Google OAuth app credentials
   (`GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID`), still unset.
 - CRM sync: no specific CRM has been named yet.
-- Meta template submission, approval tracking, and `{{n}}` variable mapping
 - Billing and plans (if sold as a product)
 
 ## Compliance notes
