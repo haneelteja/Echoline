@@ -53,6 +53,16 @@ export const PROVIDERS: ProviderInfo[] = [
     ],
   },
   {
+    id: "resend",
+    label: "Resend",
+    kind: "email",
+    auth: "apikey",
+    fields: [
+      { key: "apiKey", label: "API key", type: "password" },
+      { key: "fromEmail", label: "Send from (verified sender/domain)", placeholder: "you@yourdomain.com" },
+    ],
+  },
+  {
     id: "smtp",
     label: "Custom SMTP",
     kind: "email",

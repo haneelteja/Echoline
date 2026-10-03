@@ -3,6 +3,7 @@ import { testSendGrid, sendSendGrid } from "./email/sendgrid";
 import { testBrevo, sendBrevo } from "./email/brevo";
 import { testGmail, sendGmail } from "./email/gmail";
 import { testOutlook, sendOutlook } from "./email/outlook";
+import { testResend, sendResend } from "./email/resend";
 import type { EmailMessage } from "./types";
 
 const message: EmailMessage = {
@@ -115,6 +116,29 @@ describe("testOutlook", () => {
   });
 });
 
+describe("testResend", () => {
+  it("rejects missing apiKey without calling the network", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const result = await testResend({});
+    expect(result.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("succeeds on a valid key", async () => {
+    mockFetchOnce(200, { data: [] });
+    const result = await testResend({ apiKey: "re_xxx" });
+    expect(result.ok).toBe(true);
+  });
+
+  it("surfaces a non-2xx response as a failure", async () => {
+    mockFetchOnce(401, {});
+    const result = await testResend({ apiKey: "bad" });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/401/);
+  });
+});
+
 describe("sendSendGrid", () => {
   it("sends with both text and html content, and reads the message id from the response header", async () => {
     const fetchSpy = mockFetchOnce(202, {}, { "x-message-id": "sg-msg-123" });
@@ -141,6 +165,19 @@ describe("sendBrevo", () => {
     mockFetchOnce(201, { messageId: "brevo-msg-456" });
     const result = await sendBrevo({ apiKey: "xkeysib-xxx" }, message);
     expect(result).toEqual({ providerMessageId: "brevo-msg-456" });
+  });
+});
+
+describe("sendResend", () => {
+  it("sends and returns Resend's id", async () => {
+    mockFetchOnce(200, { id: "resend-msg-789" });
+    const result = await sendResend({ apiKey: "re_xxx" }, message);
+    expect(result).toEqual({ providerMessageId: "resend-msg-789" });
+  });
+
+  it("throws on a failed send", async () => {
+    mockFetchOnce(422, { message: "invalid from address" });
+    await expect(sendResend({ apiKey: "re_xxx" }, message)).rejects.toThrow(/422/);
   });
 });
 

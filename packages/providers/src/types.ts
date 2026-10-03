@@ -1,4 +1,4 @@
-export const EMAIL_PROVIDER_IDS = ["gmail", "outlook", "ses", "sendgrid", "brevo", "smtp"] as const;
+export const EMAIL_PROVIDER_IDS = ["gmail", "outlook", "ses", "sendgrid", "brevo", "smtp", "resend"] as const;
 export type EmailProviderId = (typeof EMAIL_PROVIDER_IDS)[number];
 
 export const WHATSAPP_PROVIDER_IDS = ["meta", "360dialog", "gupshup", "interakt", "aisensy", "twilio"] as const;

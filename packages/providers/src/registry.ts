@@ -5,6 +5,7 @@ import { testSes, sendSes } from "./email/ses";
 import { testSendGrid, sendSendGrid } from "./email/sendgrid";
 import { testBrevo, sendBrevo } from "./email/brevo";
 import { testSmtp, sendSmtp } from "./email/smtp";
+import { testResend, sendResend } from "./email/resend";
 import { testMeta, sendMetaTemplate, sendMetaText } from "./whatsapp/meta";
 import { test360Dialog, send360DialogTemplate } from "./whatsapp/360dialog";
 import { testGupshup, sendGupshupTemplate } from "./whatsapp/gupshup";
@@ -19,6 +20,7 @@ export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   sendgrid: testSendGrid,
   brevo: testBrevo,
   smtp: testSmtp,
+  resend: testResend,
   meta: testMeta,
   "360dialog": test360Dialog,
   gupshup: testGupshup,
@@ -38,6 +40,7 @@ export const emailSenders: Record<EmailProviderId, EmailSender> = {
   sendgrid: sendSendGrid,
   brevo: sendBrevo,
   smtp: sendSmtp,
+  resend: sendResend,
 };
 
 export function getEmailSender(providerId: string): EmailSender | undefined {
