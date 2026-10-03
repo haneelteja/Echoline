@@ -176,6 +176,11 @@
   phase. No specific CRM was named, so generic "CRM sync" wasn't buildable either. Both remain in
   the "to be implemented" list below.
 - No data model changes — reuses `lead_sources.config` (already schemaless jsonb) for the token hash.
+- **Verified live** against the deployed `echoline-api`: a valid JSON webhook post created a contact
+  (201), a form-urlencoded post with the token in the query string (simulating a plain HTML `<form>`)
+  also created a contact (201), a second post with the same email correctly skipped as a duplicate
+  (200, no new row) while still recording it in `rows_skipped`, and a request with a wrong token was
+  rejected (401). The source's `rows_added`/`rows_skipped` counters matched exactly (2/1).
 
 ## To be implemented (backend)
 
