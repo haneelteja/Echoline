@@ -7,6 +7,7 @@ import { collectionRoutes } from "./routes/collections.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { waTemplatesRoutes } from "./routes/waTemplates.js";
 import { aiTemplatesRoutes } from "./routes/aiTemplates.js";
+import { activityRoutes } from "./routes/activity.js";
 import { oauthCallbackRoutes } from "./routes/oauthCallback.js";
 import { trackingRoutes } from "./routes/tracking.js";
 import { webhookRoutes } from "./routes/webhooks.js";
@@ -64,6 +65,7 @@ await app.register(
     await api.register(sourcesRoutes);
     await api.register(waTemplatesRoutes);
     await api.register(aiTemplatesRoutes);
+    await api.register(activityRoutes);
   },
   { prefix: "/v1" }
 );

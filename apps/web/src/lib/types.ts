@@ -117,3 +117,14 @@ export interface ConnectionRow {
   created_at: string;
   updated_at: string;
 }
+
+export interface MessageEventRow {
+  id: string;
+  message_id: string | null;
+  contact_id: string | null;
+  channel: "em" | "wa" | null;
+  event_type: string;
+  payload: Record<string, unknown>;
+  occurred_at: string;
+  contacts: { name: string } | null;
+}
