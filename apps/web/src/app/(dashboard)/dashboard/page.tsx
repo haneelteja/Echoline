@@ -92,8 +92,8 @@ export default function DashboardPage() {
           <p className="small muted">
             Sends go out {seq?.window_start.slice(0, 5)}–{seq?.window_end.slice(0, 5)} ({project?.timezone}), capped at{" "}
             {seq?.daily_cap}/day per channel. A background worker checks for due steps every 5 minutes automatically, or use
-            the button above to run them right now. Live delivery/open/click tracking from provider webhooks lands in
-            Phase 4 — numbers above reflect lead data already in the system.
+            the button above to run them right now. Delivery, opens, clicks, bounces and replies are tracked live from
+            provider webhooks — see the Activity log for the full event stream.
           </p>
         </section>
       </div>
