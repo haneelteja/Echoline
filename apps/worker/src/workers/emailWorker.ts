@@ -119,7 +119,12 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     await Promise.all([
       db
         .from("messages")
-        .update({ status: "sent", provider_message_id: result.providerMessageId, sent_at: new Date().toISOString() })
+        .update({
+          status: "sent",
+          provider_message_id: result.providerMessageId,
+          provider_connection_id: (conn as any).id,
+          sent_at: new Date().toISOString(),
+        })
         .eq("id", messageId),
       db
         .from("contacts")

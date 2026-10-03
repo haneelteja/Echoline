@@ -60,6 +60,12 @@ export const PROVIDERS: ProviderInfo[] = [
     fields: [
       { key: "apiKey", label: "API key", type: "password" },
       { key: "fromEmail", label: "Send from (verified sender/domain)", placeholder: "you@yourdomain.com" },
+      {
+        key: "webhookSecret",
+        label: "Webhook signing secret (optional, for delivery/bounce tracking)",
+        placeholder: "whsec_...",
+        type: "password",
+      },
     ],
   },
   {

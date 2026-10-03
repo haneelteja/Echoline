@@ -109,9 +109,56 @@
   `apps/worker` needs a paid Render plan (free tier is web-only) and the user's own
   Upstash Redis instance; not yet deployed pending that `REDIS_URL`.
 
+## Implemented (Phase 4 — provider webhooks: delivery, bounces, replies, opt-out)
+
+- `packages/providers/src/webhooks/verify.ts`: signature verification for Resend (Svix HMAC), SendGrid
+  (ECDSA Signed Event Webhook), Meta Cloud API (HMAC-SHA256 app secret), and Twilio (HMAC-SHA1 over the
+  full URL + sorted params) — 16 vitest cases covering valid, tampered, and malformed-header inputs
+- `apps/api/src/routes/webhooks.ts`: public routes (outside `/v1` auth, same as tracking) for each
+  provider; an unverified or unrecognized request always gets a 200 (never retry-storms the provider)
+  but writes nothing
+  - **Resend**: per-connection webhook secret — the payload's `email_id` maps to exactly one
+    message → project → connection, so the right secret is resolved before trusting anything else in
+    the payload. `delivered`/`bounced`/`complained` map to `messages.status` + a terminal
+    `contacts.em_status` (bounced → `bounced`, complained → `opted_out` on both channels)
+  - **SendGrid**: signs its whole batch POST as one unit (not per-message), so unlike Resend there's
+    no single connection to resolve a key from before verifying — assumes one account's verification
+    key per deployment (`SENDGRID_WEBHOOK_VERIFICATION_KEY`), same pattern as
+    `CREDENTIAL_VAULT_MASTER_KEY`/`META_APP_SECRET`. Revisit if multiple SendGrid-connected projects
+    ever need independent keys.
+  - **Meta WhatsApp Cloud API**: `GET` handshake (`hub.challenge`) plus signed `POST` events; one Meta
+    App receives webhooks for every WABA number subscribed to it, so the app secret
+    (`META_APP_SECRET`) is global, not per-connection. Delivery/read statuses update `messages`;
+    inbound messages resolve the owning project by matching `metadata.display_phone_number` against
+    `projects.wa_number`, then the contact by phone
+  - **Twilio**: per-connection auth token, resolved via the project whose `wa_number` matches either
+    `From` (status callbacks, about our own sent message) or `To` (inbound messages)
+  - Inbound WhatsApp replies (Meta + Twilio) set `wa_status: replied` unless the message body is an
+    opt-out keyword (stop/unsubscribe/cancel/end/quit/opt out), in which case both channels go to
+    `opted_out` — mirroring the existing unsubscribe-link flow. `packages/core`'s `dueList` already
+    treats `replied`/`opted_out` as terminal on either channel (respecting `stopOnReply`), so no
+    sequence-engine changes were needed.
+  - Brevo, SES, Gmail, Outlook, 360dialog, Gupshup, Interakt, AiSensy: stubbed to 200 (acknowledged,
+    no-op) — built out when first actually used for a live campaign, same pattern as Phase 2's
+    unconfigured Google/Microsoft OAuth.
+- Fixed a related gap found while building this: `messages.provider_connection_id` existed in the
+  schema since Phase 1 but was never actually set by either worker — webhooks need it to resolve the
+  right connection's secret, so both `emailWorker.ts` and `whatsappWorker.ts` now populate it on send.
+- New index (`0007_messages_provider_message_id_idx.sql`): webhooks look up messages by the
+  provider's own message ID, not ours.
+- No data model or status-name changes — `message_events.event_type` was already free text and both
+  `messages.status` and `contact_channel_status` already had every value this phase needed, defined
+  back in Phase 1.
+- **Not yet verified live**: unit-tested only (signature verification, 16 cases). Still needs a real
+  Resend webhook endpoint configured (pointing at `https://echoline-api.onrender.com/webhooks/email/resend`)
+  and its signing secret set as the `webhookSecret` credential on the Elma project's Resend connection
+  before an actual `email.delivered`/`email.bounced` event can be exercised end-to-end.
+
 ## To be implemented (backend)
 
-- Webhooks → status updates: opens, clicks, bounces, delivered/read receipts, replies, opt-out keywords (Phase 4 — provider-side webhooks; Phase 3 only covers our own open/click/unsubscribe endpoints)
+- Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
+  would need SendGrid Inbound Parse or a dedicated mailbox) — WhatsApp replies are covered, email
+  replies are not yet.
 - Live lead sync: OneDrive Excel, Google Sheets, CRMs; webhook and website-form intake
 - Meta template submission, approval tracking, and `{{n}}` variable mapping
 - Billing and plans (if sold as a product)

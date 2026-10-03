@@ -7,12 +7,32 @@ import { collectionRoutes } from "./routes/collections.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { oauthCallbackRoutes } from "./routes/oauthCallback.js";
 import { trackingRoutes } from "./routes/tracking.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 
 const app = Fastify({
   logger: {
     level: process.env.LOG_LEVEL ?? "info",
     transport: process.env.NODE_ENV === "production" ? undefined : { target: "pino-pretty" },
   },
+});
+
+// Provider webhook signatures (Resend/SendGrid/Meta) are computed over the
+// exact raw request bytes — Fastify's default JSON parser doesn't retain
+// those, so this override stashes them on req.rawBody before parsing. Also
+// adds application/x-www-form-urlencoded support (Twilio's webhook format),
+// which nothing else in this app previously needed.
+app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+  (req as unknown as { rawBody: string }).rawBody = body as string;
+  if (!body) return done(null, {});
+  try {
+    done(null, JSON.parse(body as string));
+  } catch (err) {
+    done(err as Error, undefined);
+  }
+});
+app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (req, body, done) => {
+  (req as unknown as { rawBody: string }).rawBody = body as string;
+  done(null, Object.fromEntries(new URLSearchParams(body as string)));
 });
 
 const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000")
@@ -27,6 +47,7 @@ app.get("/health", async () => ({ ok: true }));
 // by our own authenticated fetch client. Must stay outside the /v1 group.
 await app.register(oauthCallbackRoutes);
 await app.register(trackingRoutes);
+await app.register(webhookRoutes);
 
 await app.register(
   async (api) => {
