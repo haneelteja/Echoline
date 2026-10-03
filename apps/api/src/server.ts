@@ -50,6 +50,9 @@ const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000")
 await app.register(cors, { origin: allowedOrigins });
 
 app.get("/health", async () => ({ ok: true }));
+app.get("/sentry-test", async () => {
+  throw new Error("Deliberate test error — confirming Sentry capture works live");
+});
 
 // Public: hit directly by the browser's redirect from Google/Microsoft, never
 // by our own authenticated fetch client. Must stay outside the /v1 group.
