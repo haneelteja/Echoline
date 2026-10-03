@@ -221,6 +221,38 @@
   gap noted since Phase 4), so submission and the approval webhook can't be exercised against the
   real Meta API yet.
 
+## Implemented (Phase 7 — AI template generation/rewrite, template editor)
+
+- Asked and confirmed before building: the original prototype's AI features ran through a
+  claude.ai-Artifacts-specific mechanism (`S.sample.json(...)`, "runs on your Claude account"), which
+  doesn't exist in this standalone deployment. Rather than hardcode one real API (e.g. Anthropic), the
+  AI provider is pluggable — Anthropic/OpenAI/Gemini, chosen and configured per-project, same as every
+  email/WhatsApp provider already is.
+- Data model change (confirmed before building, consistent with the project's own rule):
+  `connection_kind` gained a third value, `'ai'` (`0009_ai_provider_connections.sql`). AI credentials
+  reuse `provider_connections`/the credential vault rather than inventing a parallel mechanism —
+  `apps/web`'s Channels page now has a third section (Email / WhatsApp / AI) using the exact same
+  connect/test/disconnect flow.
+- `packages/providers/src/ai/{anthropic,openai,gemini}.ts`: `testConnection` + a generic
+  `complete(credentials, {system, user, maxTokens}) => string` per provider — returns the raw text
+  completion; JSON parsing/validation is the caller's job, same division of responsibility the
+  prototype's own `S.sample.json()` callers had. 16 new vitest cases.
+- `apps/api/src/routes/aiTemplates.ts`: `POST /v1/projects/:id/templates/ai-generate` and
+  `POST /v1/projects/:id/templates/:templateId/ai-rewrite` — same knowledge-base context format and
+  prompts as the original prototype's `kbContext()`/`aiGenerate()`/`aiRewrite()`, ported to call a
+  real provider instead of the artifact's sample API. A loose JSON parser strips a ` ```json ` fence
+  if the model wrapped its output in one despite being asked for JSON only. Gated to org-admins, same
+  reasoning as Phase 6's template submission: reads `provider_connections`, which is admin-only RLS.
+- `apps/web`'s Templates page is no longer the Phase 1 read-only placeholder: full editor (name,
+  subject, body, default category line) with a live preview — real `emailHTML()` rendering for email,
+  a WhatsApp-bubble-styled `fill()` preview for WhatsApp — "Generate with AI" (goal/steps/extra) and
+  "Rewrite with AI" (freeform instruction) actions, and for WhatsApp templates, the Meta
+  name/category inputs plus the **Phase 6 "Submit to Meta" button**, deferred specifically until this
+  editor existed.
+- **Not yet verified live**: unit-tested only (the AI adapters' signature/parsing logic). No AI
+  provider is connected yet — needs a real Anthropic/OpenAI/Gemini API key to exercise generation and
+  rewrite end-to-end.
+
 ## To be implemented (backend)
 
 - Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
@@ -229,8 +261,6 @@
 - OneDrive Excel / Google Sheets scheduled sync: needs Microsoft/Google OAuth app credentials
   (`GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID`), still unset.
 - CRM sync: no specific CRM has been named yet.
-- "Submit to Meta" UI trigger: backend is ready (see Phase 6), surfacing it belongs in Phase 7's
-  template editor.
 - Meta template submission, approval tracking, and `{{n}}` variable mapping
 - Billing and plans (if sold as a product)
 

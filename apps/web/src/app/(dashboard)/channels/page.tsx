@@ -119,8 +119,9 @@ export default function ChannelsPage() {
 
   const emailConns = connections.filter((c) => c.kind === "email");
   const waConns = connections.filter((c) => c.kind === "whatsapp");
+  const aiConns = connections.filter((c) => c.kind === "ai");
 
-  function section(kind: "email" | "whatsapp", title: string, conns: ConnectionRow[]) {
+  function section(kind: "email" | "whatsapp" | "ai", title: string, conns: ConnectionRow[]) {
     return (
       <section className="panel">
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
@@ -210,6 +211,7 @@ export default function ChannelsPage() {
         <div className="grid g2">
           {section("email", "Email", emailConns)}
           {section("whatsapp", "WhatsApp", waConns)}
+          {section("ai", "AI (template generation & rewrite)", aiConns)}
         </div>
       )}
 

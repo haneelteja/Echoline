@@ -12,7 +12,7 @@ export interface CredentialField {
 export interface ProviderInfo {
   id: string;
   label: string;
-  kind: "email" | "whatsapp";
+  kind: "email" | "whatsapp" | "ai";
   auth: "oauth" | "apikey";
   fields: CredentialField[];
 }
@@ -132,6 +132,36 @@ export const PROVIDERS: ProviderInfo[] = [
     fields: [
       { key: "accountSid", label: "Account SID" },
       { key: "authToken", label: "Auth token", type: "password" },
+    ],
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic (Claude)",
+    kind: "ai",
+    auth: "apikey",
+    fields: [
+      { key: "apiKey", label: "API key", type: "password" },
+      { key: "model", label: "Model (optional)", placeholder: "claude-sonnet-4-5" },
+    ],
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    kind: "ai",
+    auth: "apikey",
+    fields: [
+      { key: "apiKey", label: "API key", type: "password" },
+      { key: "model", label: "Model (optional)", placeholder: "gpt-4o" },
+    ],
+  },
+  {
+    id: "gemini",
+    label: "Google Gemini",
+    kind: "ai",
+    auth: "apikey",
+    fields: [
+      { key: "apiKey", label: "API key", type: "password" },
+      { key: "model", label: "Model (optional)", placeholder: "gemini-2.0-flash" },
     ],
   },
 ];

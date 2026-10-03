@@ -1,15 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { decryptCredentials, encryptCredentials, envelopeToRow, loadMasterKey, rowToEnvelope } from "@echoline/db";
-import { EMAIL_PROVIDER_IDS, WHATSAPP_PROVIDER_IDS, getConnectionTester, buildGoogleAuthUrl, buildMicrosoftAuthUrl } from "@echoline/providers";
+import { EMAIL_PROVIDER_IDS, WHATSAPP_PROVIDER_IDS, AI_PROVIDER_IDS, getConnectionTester, buildGoogleAuthUrl, buildMicrosoftAuthUrl } from "@echoline/providers";
 import { sendDbError } from "../errors.js";
 import { encodeOAuthState } from "../oauthState.js";
 import { getOAuthConfig, isEmailOAuthProvider } from "../oauthProviders.js";
 
-const ALL_PROVIDER_IDS = [...EMAIL_PROVIDER_IDS, ...WHATSAPP_PROVIDER_IDS] as const;
+const ALL_PROVIDER_IDS = [...EMAIL_PROVIDER_IDS, ...WHATSAPP_PROVIDER_IDS, ...AI_PROVIDER_IDS] as const;
 
 const createConnectionInput = z.object({
-  kind: z.enum(["email", "whatsapp"]),
+  kind: z.enum(["email", "whatsapp", "ai"]),
   provider: z.enum(ALL_PROVIDER_IDS),
   accountLabel: z.string().optional(),
   credentials: z.record(z.string()),
@@ -46,7 +46,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
 
     const emailProviders: readonly string[] = EMAIL_PROVIDER_IDS;
     const whatsappProviders: readonly string[] = WHATSAPP_PROVIDER_IDS;
-    const expectedKind = emailProviders.includes(body.provider) ? "email" : "whatsapp";
+    const expectedKind = emailProviders.includes(body.provider) ? "email" : whatsappProviders.includes(body.provider) ? "whatsapp" : "ai";
     if (body.kind !== expectedKind) {
       return reply.code(400).send({ error: "validation_error", message: `${body.provider} is a ${expectedKind} provider` });
     }

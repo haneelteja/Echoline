@@ -1,4 +1,4 @@
-import type { ConnectionTester, EmailProviderId, EmailSender, ProviderId, WhatsAppProviderId, WhatsAppTemplateSender, WhatsAppTextSender } from "./types";
+import type { AiCompleter, AiProviderId, ConnectionTester, EmailProviderId, EmailSender, ProviderId, WhatsAppProviderId, WhatsAppTemplateSender, WhatsAppTextSender } from "./types";
 import { testGmail, sendGmail } from "./email/gmail";
 import { testOutlook, sendOutlook } from "./email/outlook";
 import { testSes, sendSes } from "./email/ses";
@@ -12,6 +12,9 @@ import { testGupshup, sendGupshupTemplate } from "./whatsapp/gupshup";
 import { testInterakt, sendInteraktTemplate } from "./whatsapp/interakt";
 import { testAiSensy, sendAiSensyTemplate } from "./whatsapp/aisensy";
 import { testTwilio, sendTwilioTemplate, sendTwilioText } from "./whatsapp/twilio";
+import { testAnthropic, completeAnthropic } from "./ai/anthropic";
+import { testOpenAi, completeOpenAi } from "./ai/openai";
+import { testGemini, completeGemini } from "./ai/gemini";
 
 export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   gmail: testGmail,
@@ -27,6 +30,9 @@ export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   interakt: testInterakt,
   aisensy: testAiSensy,
   twilio: testTwilio,
+  anthropic: testAnthropic,
+  openai: testOpenAi,
+  gemini: testGemini,
 };
 
 export function getConnectionTester(providerId: string): ConnectionTester | undefined {
@@ -69,4 +75,14 @@ export const whatsAppTextSenders: Partial<Record<WhatsAppProviderId, WhatsAppTex
 
 export function getWhatsAppTextSender(providerId: string): WhatsAppTextSender | undefined {
   return whatsAppTextSenders[providerId as WhatsAppProviderId];
+}
+
+export const aiCompleters: Record<AiProviderId, AiCompleter> = {
+  anthropic: completeAnthropic,
+  openai: completeOpenAi,
+  gemini: completeGemini,
+};
+
+export function getAiCompleter(providerId: string): AiCompleter | undefined {
+  return aiCompleters[providerId as AiProviderId];
 }

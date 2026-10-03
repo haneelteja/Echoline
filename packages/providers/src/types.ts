@@ -4,7 +4,10 @@ export type EmailProviderId = (typeof EMAIL_PROVIDER_IDS)[number];
 export const WHATSAPP_PROVIDER_IDS = ["meta", "360dialog", "gupshup", "interakt", "aisensy", "twilio"] as const;
 export type WhatsAppProviderId = (typeof WHATSAPP_PROVIDER_IDS)[number];
 
-export type ProviderId = EmailProviderId | WhatsAppProviderId;
+export const AI_PROVIDER_IDS = ["anthropic", "openai", "gemini"] as const;
+export type AiProviderId = (typeof AI_PROVIDER_IDS)[number];
+
+export type ProviderId = EmailProviderId | WhatsAppProviderId | AiProviderId;
 
 export interface ConnectionTestResult {
   ok: boolean;
@@ -62,3 +65,13 @@ export type WhatsAppTemplateSender = (
 /** Only valid within the 24-hour customer-service window — enforced by the
  * caller (the worker), not by the adapter itself. */
 export type WhatsAppTextSender = (credentials: Record<string, string>, message: WhatsAppTextMessage) => Promise<SendResult>;
+
+export interface AiCompletionRequest {
+  system?: string;
+  user: string;
+  maxTokens?: number;
+}
+
+/** Returns the raw text completion — JSON parsing/validation is the caller's
+ * job, same as the original prototype's S.sample.json() callers did. */
+export type AiCompleter = (credentials: Record<string, string>, request: AiCompletionRequest) => Promise<string>;

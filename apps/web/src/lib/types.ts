@@ -78,6 +78,7 @@ export interface TemplateRow {
   category_lines: Record<string, string>;
   meta_name: string | null;
   meta_status: string | null;
+  ai: boolean;
 }
 
 export interface KbItemRow {
@@ -107,7 +108,7 @@ export type ConnectionStatus = "connected" | "needs_reconnect" | "disconnected";
 export interface ConnectionRow {
   id: string;
   project_id: string;
-  kind: "email" | "whatsapp";
+  kind: "email" | "whatsapp" | "ai";
   provider: string;
   account_label: string | null;
   scopes: string[];
