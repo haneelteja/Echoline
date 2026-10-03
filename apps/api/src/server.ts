@@ -5,6 +5,7 @@ import { projectRoutes } from "./routes/projects.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { collectionRoutes } from "./routes/collections.js";
 import { connectionRoutes } from "./routes/connections.js";
+import { waTemplatesRoutes } from "./routes/waTemplates.js";
 import { oauthCallbackRoutes } from "./routes/oauthCallback.js";
 import { trackingRoutes } from "./routes/tracking.js";
 import { webhookRoutes } from "./routes/webhooks.js";
@@ -60,6 +61,7 @@ await app.register(
     await api.register(collectionRoutes);
     await api.register(connectionRoutes);
     await api.register(sourcesRoutes);
+    await api.register(waTemplatesRoutes);
   },
   { prefix: "/v1" }
 );

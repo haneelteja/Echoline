@@ -26,6 +26,39 @@ export function fill(text: string | null | undefined, ctx: FillContext): string 
   return String(text ?? "").replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (k in map ? map[k] : m));
 }
 
+const KNOWN_PLACEHOLDER_KEYS = new Set([
+  "company",
+  "contact_name",
+  "area",
+  "area_phrase",
+  "category",
+  "category_line",
+  "sender_name",
+  "brand",
+  "website",
+  "whatsapp_number",
+]);
+
+/**
+ * Meta requires WhatsApp template bodies to use positional {{1}}, {{2}}, ...
+ * placeholders fixed at approval time, rather than our own named ones. This
+ * derives both directly from the template body: `variableMap` is the ordered
+ * list of our placeholder keys as they appear (duplicates kept, since a
+ * repeated {{company}} still needs its own {{n}} slot per Meta's rules), and
+ * `metaBody` is the same text with each occurrence replaced by its position.
+ * An unknown `{{something}}` is left as literal text (same fallback `fill()`
+ * uses), since Meta would otherwise reject a template built from a typo.
+ */
+export function deriveMetaTemplateComponents(body: string): { metaBody: string; variableMap: string[] } {
+  const variableMap: string[] = [];
+  const metaBody = String(body ?? "").replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key: string) => {
+    if (!KNOWN_PLACEHOLDER_KEYS.has(key)) return m;
+    variableMap.push(key);
+    return `{{${variableMap.length}}}`;
+  });
+  return { metaBody, variableMap };
+}
+
 /**
  * Plain-text alternative to emailHTML(), mirroring the same footer (sender
  * name, brand/website, unsubscribe instructions) so clients that prefer

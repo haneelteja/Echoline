@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildUnsubscribeHeaders, emailHTML, fill, fillPlainText } from "./template";
+import { buildUnsubscribeHeaders, deriveMetaTemplateComponents, emailHTML, fill, fillPlainText } from "./template";
 import type { ProjectBrand } from "./types";
 
 const project: ProjectBrand = {
@@ -10,6 +10,32 @@ const project: ProjectBrand = {
   waNumber: "916309060777",
   accent: "#3d1a5c",
 };
+
+describe("deriveMetaTemplateComponents", () => {
+  it("replaces known placeholders with positional {{n}} markers in order", () => {
+    const { metaBody, variableMap } = deriveMetaTemplateComponents("Hi {{company}}, {{category_line}} Regards, {{sender_name}}");
+    expect(metaBody).toBe("Hi {{1}}, {{2}} Regards, {{3}}");
+    expect(variableMap).toEqual(["company", "category_line", "sender_name"]);
+  });
+
+  it("gives a repeated placeholder its own separate position", () => {
+    const { metaBody, variableMap } = deriveMetaTemplateComponents("{{company}} ... {{company}} again");
+    expect(metaBody).toBe("{{1}} ... {{2}} again");
+    expect(variableMap).toEqual(["company", "company"]);
+  });
+
+  it("leaves an unknown placeholder as literal text instead of mapping it", () => {
+    const { metaBody, variableMap } = deriveMetaTemplateComponents("Hi {{company}}, {{typo_key}}");
+    expect(metaBody).toBe("Hi {{1}}, {{typo_key}}");
+    expect(variableMap).toEqual(["company"]);
+  });
+
+  it("returns an empty map for a body with no placeholders", () => {
+    const { metaBody, variableMap } = deriveMetaTemplateComponents("Plain text, no variables.");
+    expect(metaBody).toBe("Plain text, no variables.");
+    expect(variableMap).toEqual([]);
+  });
+});
 
 describe("fill", () => {
   it("substitutes placeholders from contact and project", () => {

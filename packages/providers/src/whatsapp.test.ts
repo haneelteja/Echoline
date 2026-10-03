@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { testMeta, sendMetaTemplate, sendMetaText } from "./whatsapp/meta";
+import { testMeta, sendMetaTemplate, sendMetaText, submitMetaTemplate } from "./whatsapp/meta";
 import { test360Dialog, send360DialogTemplate } from "./whatsapp/360dialog";
 import { testGupshup, sendGupshupTemplate } from "./whatsapp/gupshup";
 import { testInterakt, sendInteraktTemplate } from "./whatsapp/interakt";
@@ -45,6 +45,42 @@ describe("testMeta", () => {
     mockFetchOnce(401, { error: { message: "Error validating access token" } });
     const result = await testMeta({ accessToken: "expired", phoneNumberId: "123456" });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("submitMetaTemplate", () => {
+  it("requires accessToken and wabaId", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    await expect(submitMetaTemplate({ accessToken: "x" }, { name: "t", language: "en", category: "MARKETING", bodyText: "Hi {{1}}" })).rejects.toThrow(
+      /wabaId/
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("submits the body text and returns the pending template id/status", async () => {
+    const fetchSpy = mockFetchOnce(200, { id: "123456", status: "PENDING", category: "MARKETING" });
+    const result = await submitMetaTemplate(
+      { accessToken: "EAAG...", wabaId: "waba-1" },
+      { name: "initial_outreach", language: "en", category: "MARKETING", bodyText: "Hi {{1}}, {{2}}" }
+    );
+    expect(result).toEqual({ metaTemplateId: "123456", status: "PENDING" });
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://graph.facebook.com/v19.0/waba-1/message_templates");
+    const body = JSON.parse(init.body as string);
+    expect(body).toEqual({
+      name: "initial_outreach",
+      language: "en",
+      category: "MARKETING",
+      components: [{ type: "BODY", text: "Hi {{1}}, {{2}}" }],
+    });
+  });
+
+  it("throws on a rejected submission", async () => {
+    mockFetchOnce(400, { error: { message: "Template text is invalid" } });
+    await expect(
+      submitMetaTemplate({ accessToken: "EAAG...", wabaId: "waba-1" }, { name: "bad", language: "en", category: "MARKETING", bodyText: "x" })
+    ).rejects.toThrow(/400/);
   });
 });
 

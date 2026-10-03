@@ -5,3 +5,4 @@ export * from "./oauth/google";
 export * from "./oauth/microsoft";
 export * from "./tracking";
 export * from "./webhooks/verify";
+export { submitMetaTemplate, type MetaTemplateSubmission, type MetaTemplateSubmissionResult } from "./whatsapp/meta";

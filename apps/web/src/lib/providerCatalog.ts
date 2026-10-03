@@ -90,6 +90,7 @@ export const PROVIDERS: ProviderInfo[] = [
     fields: [
       { key: "accessToken", label: "Access token", type: "password" },
       { key: "phoneNumberId", label: "Phone number ID" },
+      { key: "wabaId", label: "WhatsApp Business Account ID (optional, for template submission)" },
     ],
   },
   {

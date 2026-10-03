@@ -44,6 +44,30 @@ async function decryptConnectionCredentials(db: ReturnType<typeof createAdminCli
   }
 }
 
+/**
+ * Template status-update events are WABA-level (one Meta App's webhook
+ * covers every WABA subscribed to it), so there's no phone number to match —
+ * only entry.id, the WABA ID itself. wabaId lives in each connection's
+ * encrypted credentials, not in plaintext anywhere queryable, so this
+ * decrypts every Meta connection to find the match. Fine at today's scale
+ * (a handful of connections); revisit if that ever stops being true.
+ */
+async function resolveProjectByWabaId(db: ReturnType<typeof createAdminClient>, wabaId: string): Promise<{ id: string; org_id: string } | null> {
+  const { data: connections } = await db.from("provider_connections").select("*").eq("kind", "whatsapp").eq("provider", "meta");
+  for (const conn of (connections as any[]) ?? []) {
+    try {
+      const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey()));
+      if (credentials.wabaId === wabaId) {
+        const { data: project } = await db.from("projects").select("id, org_id").eq("id", conn.project_id).maybeSingle();
+        if (project) return project as { id: string; org_id: string };
+      }
+    } catch {
+      // skip a connection we can't decrypt
+    }
+  }
+  return null;
+}
+
 async function recordEvent(
   db: ReturnType<typeof createAdminClient>,
   opts: {
@@ -195,14 +219,50 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(200).send({ ok: true });
     }
 
-    const body = req.body as {
-      entry?: { changes?: { value?: { metadata?: { display_phone_number?: string }; statuses?: any[]; messages?: any[] } }[] }[];
+const body = req.body as {
+      entry?: {
+        id?: string;
+        changes?: {
+          field?: string;
+          value?: {
+            metadata?: { display_phone_number?: string };
+            statuses?: any[];
+            messages?: any[];
+            event?: string;
+            message_template_name?: string;
+            message_template_language?: string;
+            reason?: string;
+          };
+        }[];
+      }[];
     };
 
     for (const entry of body.entry ?? []) {
       for (const change of entry.changes ?? []) {
         const value = change.value;
         if (!value) continue;
+
+        if (change.field === "message_template_status_update") {
+          const wabaId = entry.id;
+          if (!wabaId || !value.message_template_name) continue;
+          const project = await resolveProjectByWabaId(db, wabaId);
+          if (!project) continue;
+          // Meta's PENDING/APPROVED/REJECTED normalized to this app's Title
+          // Case convention (templates.meta_status defaults to "Draft").
+          const status = value.event ? value.event.charAt(0) + value.event.slice(1).toLowerCase() : "Pending";
+          const { data: waTemplate } = await db
+            .from("wa_templates")
+            .update({ status, rejection_reason: value.reason ?? null, updated_at: new Date().toISOString() })
+            .eq("project_id", project.id)
+            .eq("meta_name", value.message_template_name)
+            .eq("language", value.message_template_language ?? "en")
+            .select("template_id")
+            .maybeSingle();
+          const templateId = (waTemplate as { template_id: string | null } | null)?.template_id;
+          if (templateId) await db.from("templates").update({ meta_status: status }).eq("id", templateId);
+          continue;
+        }
+
         const displayNumber = normPhone(value.metadata?.display_phone_number);
         if (!displayNumber) continue;
         const { data: project } = await db.from("projects").select("id, org_id").eq("wa_number", value.metadata?.display_phone_number ?? "").maybeSingle();

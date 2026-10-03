@@ -182,6 +182,45 @@
   (200, no new row) while still recording it in `rows_skipped`, and a request with a wrong token was
   rejected (401). The source's `rows_added`/`rows_skipped` counters matched exactly (2/1).
 
+## Implemented (Phase 6 — Meta WhatsApp template submission, approval tracking, variable mapping)
+
+- `packages/core`: `deriveMetaTemplateComponents(body)` scans a template body for our own
+  `{{placeholder}}` tokens and returns both the Meta-numbered body text (`{{1}}`, `{{2}}`, ...) and
+  the ordered `variableMap` of placeholder keys — derived automatically from the existing body, not
+  hand-authored, so there's no separate "define your variable mapping" UI to build. A repeated
+  placeholder gets its own position (Meta requires a slot per occurrence even if the value repeats);
+  an unknown `{{typo}}` is left as literal text rather than silently mis-submitted. 4 new vitest cases.
+- `packages/providers`: `submitMetaTemplate()` — `POST /{wabaId}/message_templates`. Needs a new
+  `wabaId` credential (template management is WABA-level, not phone-number-level like sending), added
+  as an optional field on the Meta connection form. 3 new vitest cases.
+- `apps/api/src/routes/waTemplates.ts`: `POST /v1/projects/:id/templates/:templateId/submit-whatsapp`
+  — derives the variable map from the template's current body, submits to Meta, and upserts a
+  `wa_templates` row (one per template, enforced by a new unique constraint) plus mirrors the status
+  onto `templates.meta_status`, the field the worker actually gates sends on. Gated to org-admins
+  (not just operators) for the same reason `connections.ts` is: it reads the project's connected Meta
+  credentials, and `provider_connections` is admin-only via RLS. Runs entirely through the caller's
+  own RLS context — no admin-client bypass needed, since an admin already has both the connection-read
+  and templates-write access this needs.
+- `apps/api/src/routes/webhooks.ts`: extended the existing Meta webhook handler for
+  `message_template_status_update` events (approved/rejected, with Meta's rejection reason) — these
+  are WABA-level, not phone-number-level, so the project is resolved by decrypting each Meta
+  connection's credentials to match `wabaId` against the webhook's `entry.id` (same pragmatic
+  decrypt-and-compare approach as Phase 4's WABA-number resolution; fine at today's connection count).
+- `apps/worker/src/workers/whatsappWorker.ts`: now reads the submitted template's `variable_map` and
+  rebuilds the right positional component parameters from live contact/project context via `fill()`
+  at send time — a template with no variables sends with no components exactly as before, so this is
+  backward compatible with everything already sent in Phase 3.
+- New migration (`0008_wa_templates_variable_map.sql`): `wa_templates.variable_map jsonb`, plus a
+  unique constraint on `template_id` (confirmed and asked about before building, since it's a schema
+  change).
+- Deliberately **not** added: a "Submit to Meta" button in `apps/web`. The Templates page is still the
+  explicit read-only placeholder it's been since Phase 1 ("Editing and AI generation ship in Phase
+  7") — adding a one-off submission button there would cut across where the real template-editing UI
+  belongs. The backend is fully ready; the UI trigger is deferred to Phase 7's editor.
+- **Not yet verified live**: unit-tested only. No Meta WhatsApp Business Account is connected (same
+  gap noted since Phase 4), so submission and the approval webhook can't be exercised against the
+  real Meta API yet.
+
 ## To be implemented (backend)
 
 - Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
@@ -190,6 +229,8 @@
 - OneDrive Excel / Google Sheets scheduled sync: needs Microsoft/Google OAuth app credentials
   (`GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID`), still unset.
 - CRM sync: no specific CRM has been named yet.
+- "Submit to Meta" UI trigger: backend is ready (see Phase 6), surfacing it belongs in Phase 7's
+  template editor.
 - Meta template submission, approval tracking, and `{{n}}` variable mapping
 - Billing and plans (if sold as a product)
 
