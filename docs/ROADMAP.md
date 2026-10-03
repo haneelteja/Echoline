@@ -297,7 +297,10 @@
     `apps/api` (Fastify error handler, for 5xx only — not validation 400s — plus
     `unhandledRejection`) and `apps/worker` (every BullMQ worker's `failed` handler, but only once a
     job has exhausted all retries, so a transient failure that succeeds on retry 2 doesn't page
-    anyone for retry 1's failure).
+    anyone for retry 1's failure). **Verified live** on `echoline-api`: a deliberate thrown error was
+    correctly captured with full stack trace, production environment, and the exact deploying commit
+    SHA as the release tag. `echoline-worker` runs the identical code path but wasn't separately
+    live-triggered (would mean forcing a real job through all 5 retries rather than one HTTP call).
   - **Corrected my own earlier scoping error**: Phase 5 was scoped as "no CRM named" when deciding
     what to build — the original spec actually names **Zoho CRM and HubSpot** specifically. Not
     built yet; moved below as a named gap instead of an unscoped one.
