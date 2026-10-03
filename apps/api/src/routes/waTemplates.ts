@@ -61,7 +61,7 @@ export const waTemplatesRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ error: "missing_waba_id", message: "Connect a WhatsApp Business Account ID on this Meta connection first" });
     }
 
-    const { metaBody, variableMap } = deriveMetaTemplateComponents(t.body ?? "");
+    const { metaBody, variableMap, examples } = deriveMetaTemplateComponents(t.body ?? "");
 
     let submission;
     try {
@@ -70,6 +70,7 @@ export const waTemplatesRoutes: FastifyPluginAsync = async (app) => {
         language: body.language,
         category: body.category,
         bodyText: metaBody,
+        bodyExamples: examples,
       });
     } catch (err) {
       return reply.code(502).send({ error: "meta_submission_failed", message: err instanceof Error ? err.message : String(err) });

@@ -76,6 +76,17 @@ describe("submitMetaTemplate", () => {
     });
   });
 
+  it("includes example.body_text when bodyExamples is given, required by Meta for templates with variables", async () => {
+    const fetchSpy = mockFetchOnce(200, { id: "123456", status: "PENDING" });
+    await submitMetaTemplate(
+      { accessToken: "EAAG...", wabaId: "waba-1" },
+      { name: "initial_outreach", language: "en", category: "MARKETING", bodyText: "Hi {{1}}, {{2}}", bodyExamples: ["Acme Corp", "a great fit"] }
+    );
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.components).toEqual([{ type: "BODY", text: "Hi {{1}}, {{2}}", example: { body_text: [["Acme Corp", "a great fit"]] } }]);
+  });
+
   it("throws on a rejected submission", async () => {
     mockFetchOnce(400, { error: { message: "Template text is invalid" } });
     await expect(

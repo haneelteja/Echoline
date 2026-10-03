@@ -266,15 +266,70 @@
   (`wa_templates.variable_map` + its unique constraint) had never actually been applied to production,
   despite `0007` and `0009` being applied correctly — Phase 6/7's WhatsApp template submission and
   send-time variable substitution were silently broken until this was caught and fixed.
+- Rebuilt the Dashboard to actually use the rich design system (`.hero`, concentric-ring SVG,
+  channel funnel bars, insights, 14-day send trend, 7-day schedule, segment heat table, data health,
+  areas) that already existed in `globals.css`, ported from the prototype, but was never wired up —
+  the Next.js rebuild's Dashboard had been a bare stat-box grid since Phase 1. No backend changes
+  needed (`dueList`/`upcomingList`/`validEmail`/`normPhone` were already exported from
+  `packages/core`); the 14-day trend reuses the Phase-4 activity endpoint.
+- A line-by-line audit against the original spec (not just prior review passes) found and fixed five
+  real gaps:
+  - **OAuth token refresh was dead code.** `refreshGoogleToken`/`refreshMicrosoftToken` existed in
+    `packages/providers` but were never called anywhere — any Gmail/Outlook connection would have
+    silently started failing once its first access token expired (~1 hour). `emailWorker.ts` now
+    refreshes unconditionally before every OAuth send (simpler and safer than tracking expiry
+    ourselves) and persists the result, marking the connection `needs_reconnect` with a reason if the
+    refresh itself fails. `echoline-worker` needs the same `GOOGLE_OAUTH_CLIENT_ID`/
+    `MICROSOFT_OAUTH_CLIENT_ID` env vars `echoline-api` already has — added to `render.yaml`.
+  - **Meta template submissions were missing `example.body_text`.** Meta's template API generally
+    requires an example value per variable for review, which we never sent — likely causing silent
+    rejection/indefinite hold for any template with placeholders. `deriveMetaTemplateComponents` now
+    also returns a matching `examples` array (a static example-value map keyed by placeholder, e.g.
+    `company` → `"Acme Corp"`), threaded through `submitMetaTemplate` → `waTemplates.ts`.
+  - **Hard bounces weren't distinguishing `invalid` from `bounced`.** The spec calls for hard
+    bounce → contact email `invalid` specifically (both are valid terminal statuses, already in the
+    schema since Phase 1) so the sequence stops retrying a genuinely dead address. Resend: checks
+    `data.bounce.type === "Permanent"`. SendGrid: their `bounce` event is specifically their
+    hard-bounce signal (soft/temporary issues arrive as a separate `blocked`/`deferred` event), so it
+    now maps directly to `invalid`.
+  - **No error monitoring anywhere.** `SENTRY_DSN` was an unused placeholder — zero Sentry
+    integration existed in either service. Added a no-op-until-configured `sentry.ts` to both
+    `apps/api` (Fastify error handler, for 5xx only — not validation 400s — plus
+    `unhandledRejection`) and `apps/worker` (every BullMQ worker's `failed` handler, but only once a
+    job has exhausted all retries, so a transient failure that succeeds on retry 2 doesn't page
+    anyone for retry 1's failure).
+  - **Corrected my own earlier scoping error**: Phase 5 was scoped as "no CRM named" when deciding
+    what to build — the original spec actually names **Zoho CRM and HubSpot** specifically. Not
+    built yet; moved below as a named gap instead of an unscoped one.
 
 ## To be implemented (backend)
 
 - Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
-  would need SendGrid Inbound Parse or a dedicated mailbox) — WhatsApp replies are covered, email
-  replies are not yet.
+  would need SendGrid Inbound Parse or a dedicated mailbox; spec also called for Gmail history
+  API/watch, Microsoft Graph delta/subscriptions, and IMAP polling for SMTP) — WhatsApp replies are
+  covered, email replies are not yet. This also means "stop on reply" only works for WhatsApp today.
 - OneDrive Excel / Google Sheets scheduled sync: needs Microsoft/Google OAuth app credentials
   (`GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID`), still unset.
-- CRM sync: no specific CRM has been named yet.
+- Zoho CRM and HubSpot sync — named in the original spec, not built.
+- SES SNS bounce/complaint webhook signature verification — not built (SendGrid/Resend/Meta/Twilio
+  are; SES's own webhook mechanism, SNS, was never implemented).
+- Gupshup/360dialog/Interakt/AiSensy webhook payload parsing — all four currently stubbed to `200 OK`
+  no-ops rather than their actual schemes; only Meta and Twilio WhatsApp webhooks are real.
+- Per-provider rate limiting (beyond the existing daily cap) — not implemented.
+- `sendText()` (session-window free-form WhatsApp replies) — the function exists in
+  `packages/providers` but no feature in the app actually calls it.
+- Website-form lead intake: honeypot / Cloudflare Turnstile / rate-limiting — not built; the
+  `/intake/:sourceId` endpoint has token auth and dedup but no bot/abuse protection.
+- `lead_sources.rows_failed` — column exists, never written to (only `rows_added`/`rows_skipped`).
+- Meta template header-image attachment from KB, daily status poll (webhook-only currently), and
+  phone number quality-rating/messaging-tier tracking (a different webhook event,
+  `phone_number_quality_update`, never handled) + display on the Channels screen — not built.
+- "Ask AI" dashboard insights — the Dashboard's insights panel is rule-based only; no LLM call.
+- Real pgvector KB retrieval — `kb_items.embedding` column exists, nothing populates or queries it;
+  current AI context-building is plain string concatenation, not vector similarity search.
+- Per-org monthly AI usage limit — not enforced.
+- Dead-letter queue — not implemented as a named mechanism; failed BullMQ jobs just stay in BullMQ's
+  own default failed-job state.
 - Billing and plans (if sold as a product)
 
 ## Compliance notes

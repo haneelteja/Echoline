@@ -26,18 +26,23 @@ export function fill(text: string | null | undefined, ctx: FillContext): string 
   return String(text ?? "").replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (k in map ? map[k] : m));
 }
 
-const KNOWN_PLACEHOLDER_KEYS = new Set([
-  "company",
-  "contact_name",
-  "area",
-  "area_phrase",
-  "category",
-  "category_line",
-  "sender_name",
-  "brand",
-  "website",
-  "whatsapp_number",
-]);
+// Also doubles as the example value Meta requires per variable at submission
+// time — without one, Meta's review can reject the template outright or hold
+// it indefinitely, since reviewers need to see realistic rendered text.
+const PLACEHOLDER_EXAMPLES: Record<string, string> = {
+  company: "Acme Corp",
+  contact_name: "Priya",
+  area: "Gachibowli",
+  area_phrase: " in Gachibowli",
+  category: "Restaurant",
+  category_line: "noticed you serve great food",
+  sender_name: "Haneel",
+  brand: "Elma Industries",
+  website: "https://example.com",
+  whatsapp_number: "911234567890",
+};
+
+const KNOWN_PLACEHOLDER_KEYS = new Set(Object.keys(PLACEHOLDER_EXAMPLES));
 
 /**
  * Meta requires WhatsApp template bodies to use positional {{1}}, {{2}}, ...
@@ -46,17 +51,21 @@ const KNOWN_PLACEHOLDER_KEYS = new Set([
  * list of our placeholder keys as they appear (duplicates kept, since a
  * repeated {{company}} still needs its own {{n}} slot per Meta's rules), and
  * `metaBody` is the same text with each occurrence replaced by its position.
- * An unknown `{{something}}` is left as literal text (same fallback `fill()`
- * uses), since Meta would otherwise reject a template built from a typo.
+ * `examples` is the matching list of example values for Meta's required
+ * `example.body_text` on submission. An unknown `{{something}}` is left as
+ * literal text (same fallback `fill()` uses), since Meta would otherwise
+ * reject a template built from a typo.
  */
-export function deriveMetaTemplateComponents(body: string): { metaBody: string; variableMap: string[] } {
+export function deriveMetaTemplateComponents(body: string): { metaBody: string; variableMap: string[]; examples: string[] } {
   const variableMap: string[] = [];
+  const examples: string[] = [];
   const metaBody = String(body ?? "").replace(/\{\{\s*(\w+)\s*\}\}/g, (m, key: string) => {
     if (!KNOWN_PLACEHOLDER_KEYS.has(key)) return m;
     variableMap.push(key);
+    examples.push(PLACEHOLDER_EXAMPLES[key]);
     return `{{${variableMap.length}}}`;
   });
-  return { metaBody, variableMap };
+  return { metaBody, variableMap, examples };
 }
 
 /**

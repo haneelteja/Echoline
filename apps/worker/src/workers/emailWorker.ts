@@ -3,14 +3,17 @@ import pino from "pino";
 import {
   createAdminClient,
   decryptCredentials,
+  encryptCredentials,
   loadMasterKey,
   rowToEnvelope,
+  envelopeToRow,
   type ProjectRow,
   type ContactRow,
   type TemplateRow,
 } from "@echoline/db";
-import { getEmailSender, makeRewriteLink, buildOpenPixelUrl, buildUnsubscribeUrl } from "@echoline/providers";
+import { getEmailSender, makeRewriteLink, buildOpenPixelUrl, buildUnsubscribeUrl, refreshGoogleToken, refreshMicrosoftToken } from "@echoline/providers";
 import { fill, fillPlainText, emailHTML, buildUnsubscribeHeaders, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
+import { reportIfExhausted } from "../sentry.js";
 import { getRedisConnection } from "../redis.js";
 import { SEND_EMAIL_QUEUE, type SendJobData } from "../queues.js";
 
@@ -24,12 +27,52 @@ function trackingConfig() {
   return { secret: process.env.TRACKING_SIGNING_SECRET ?? "", baseUrl: process.env.API_PUBLIC_URL ?? "" };
 }
 
+/**
+ * Gmail/Outlook access tokens expire in ~1 hour; refreshGoogleToken/
+ * refreshMicrosoftToken existed but were never actually called anywhere,
+ * so any OAuth connection would silently start failing once its first
+ * access token expired. Refreshes unconditionally before every OAuth send
+ * (simpler and safer than tracking expiry ourselves — refreshing early
+ * doesn't invalidate the still-valid token) and persists the result,
+ * since Microsoft rotates the refresh token on every use.
+ */
+async function ensureFreshOAuthToken(
+  db: ReturnType<typeof createAdminClient>,
+  conn: { id: string; provider: string },
+  credentials: Record<string, string>
+): Promise<void> {
+  if (conn.provider !== "gmail" && conn.provider !== "outlook") return;
+  const envPrefix = conn.provider === "gmail" ? "GOOGLE" : "MICROSOFT";
+  const clientId = process.env[`${envPrefix}_OAUTH_CLIENT_ID`];
+  const clientSecret = process.env[`${envPrefix}_OAUTH_CLIENT_SECRET`];
+  if (!clientId || !clientSecret || !credentials.refreshToken) return;
+
+  try {
+    const tokens =
+      conn.provider === "gmail"
+        ? await refreshGoogleToken({ clientId, clientSecret }, credentials.refreshToken)
+        : await refreshMicrosoftToken({ clientId, clientSecret }, credentials.refreshToken);
+    credentials.accessToken = tokens.accessToken;
+    if (tokens.refreshToken) credentials.refreshToken = tokens.refreshToken;
+
+    const envelope = encryptCredentials(JSON.stringify(credentials), masterKey());
+    await db.from("provider_connections").update(envelopeToRow(envelope)).eq("id", conn.id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await db.from("provider_connections").update({ status: "needs_reconnect", needs_reconnect_reason: `Token refresh failed: ${message}` }).eq("id", conn.id);
+    throw new Error(`OAuth token refresh failed for ${conn.provider}: ${message}`);
+  }
+}
+
 export function startEmailWorker(): Worker<SendJobData> {
   const worker = new Worker<SendJobData>(SEND_EMAIL_QUEUE, processEmailJob, {
     connection: getRedisConnection(),
     concurrency: 5,
   });
-  worker.on("failed", (job, err) => log.error({ jobId: job?.id, err }, "email job failed"));
+  worker.on("failed", (job, err) => {
+    log.error({ jobId: job?.id, err }, "email job failed");
+    reportIfExhausted(job, err);
+  });
   return worker;
 }
 
@@ -102,6 +145,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     const headers = buildUnsubscribeHeaders(unsubscribeUrl);
 
     const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
+    await ensureFreshOAuthToken(db, conn as any, credentials);
     const emailSettings = ((channelSettings as any)?.email ?? {}) as Record<string, string>;
     // OAuth connections (Gmail/Outlook) send as the authenticated account
     // itself; API-key providers need an explicit sender address — either set

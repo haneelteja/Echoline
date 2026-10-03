@@ -16,6 +16,8 @@ services:
         value: production
       - key: LOG_LEVEL
         value: info
+      - key: SENTRY_DSN
+        sync: false # optional — error reporting is a no-op until this is set
       - key: CORS_ORIGINS
         sync: false # comma-separated list of allowed web origins, e.g. your Vercel domain(s)
       - key: SUPABASE_URL
@@ -66,6 +68,8 @@ services:
         value: production
       - key: LOG_LEVEL
         value: info
+      - key: SENTRY_DSN
+        sync: false # optional — error reporting is a no-op until this is set
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
@@ -80,3 +84,13 @@ services:
         sync: false # same Upstash Redis connection string as echoline-api's
       - key: API_PUBLIC_URL
         value: https://echoline-api.onrender.com
+      # OAuth token refresh (Gmail/Outlook) happens here, before each send —
+      # must match echoline-api's values exactly.
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_OAUTH_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_OAUTH_CLIENT_SECRET
+        sync: false

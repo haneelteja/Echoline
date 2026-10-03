@@ -31,9 +31,16 @@ describe("deriveMetaTemplateComponents", () => {
   });
 
   it("returns an empty map for a body with no placeholders", () => {
-    const { metaBody, variableMap } = deriveMetaTemplateComponents("Plain text, no variables.");
+    const { metaBody, variableMap, examples } = deriveMetaTemplateComponents("Plain text, no variables.");
     expect(metaBody).toBe("Plain text, no variables.");
     expect(variableMap).toEqual([]);
+    expect(examples).toEqual([]);
+  });
+
+  it("returns a matching example value for each variable, for Meta's required example.body_text", () => {
+    const { variableMap, examples } = deriveMetaTemplateComponents("Hi {{company}}, {{category_line}}");
+    expect(examples).toHaveLength(variableMap.length);
+    expect(examples.every((e) => typeof e === "string" && e.length > 0)).toBe(true);
   });
 });
 

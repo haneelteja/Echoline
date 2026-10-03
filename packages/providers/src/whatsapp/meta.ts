@@ -51,6 +51,10 @@ export interface MetaTemplateSubmission {
   language: string;
   category: "MARKETING" | "UTILITY" | "AUTHENTICATION";
   bodyText: string;
+  /** One example value per {{n}} variable, in order — Meta requires this
+   * (example.body_text) for any template with variables, or review can
+   * reject or indefinitely hold the submission. */
+  bodyExamples?: string[];
 }
 
 export interface MetaTemplateSubmissionResult {
@@ -66,6 +70,8 @@ export async function submitMetaTemplate(
 ): Promise<MetaTemplateSubmissionResult> {
   const { accessToken, wabaId } = credentials;
   if (!accessToken || !wabaId) throw new Error("accessToken and wabaId are required to submit a template");
+  const bodyComponent: Record<string, unknown> = { type: "BODY", text: submission.bodyText };
+  if (submission.bodyExamples?.length) bodyComponent.example = { body_text: [submission.bodyExamples] };
   const res = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -73,7 +79,7 @@ export async function submitMetaTemplate(
       name: submission.name,
       language: submission.language,
       category: submission.category,
-      components: [{ type: "BODY", text: submission.bodyText }],
+      components: [bodyComponent],
     }),
   });
   if (!res.ok) {

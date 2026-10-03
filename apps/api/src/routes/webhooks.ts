@@ -114,7 +114,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
   app.post("/webhooks/email/resend", async (req, reply) => {
     const db = createAdminClient();
     const rawBody = rawBodyOf(req);
-    const body = req.body as { type?: string; data?: { email_id?: string } };
+    const body = req.body as { type?: string; data?: { email_id?: string; bounce?: { type?: string } } };
     const emailId = body?.data?.email_id;
     if (!emailId) return reply.code(200).send({ ok: true });
 
@@ -140,9 +140,20 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
       case "email.delivered":
         await recordEvent(db, { ...base, eventType: "delivered", messageStatus: "delivered" });
         break;
-      case "email.bounced":
-        await recordEvent(db, { ...base, eventType: "bounced", messageStatus: "bounced", contactUpdate: { em_status: "bounced" } });
+      case "email.bounced": {
+        // Permanent (hard) bounces mean the address itself is bad — mark it
+        // invalid so the sequence stops retrying it forever. Transient/soft
+        // bounces stay "bounced" (recorded, but not necessarily a dead address).
+        const isHardBounce = body.data?.bounce?.type === "Permanent";
+        await recordEvent(db, {
+          ...base,
+          eventType: "bounced",
+          messageStatus: "bounced",
+          payload: { bounceType: body.data?.bounce?.type },
+          contactUpdate: { em_status: isHardBounce ? "invalid" : "bounced" },
+        });
         break;
+      }
       case "email.complained":
         await recordEvent(db, { ...base, eventType: "complained", contactUpdate: { em_status: "opted_out", wa_status: "opted_out" } });
         break;
@@ -182,7 +193,11 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
           await recordEvent(db, { ...base, eventType: "delivered", messageStatus: "delivered" });
           break;
         case "bounce":
-          await recordEvent(db, { ...base, eventType: "bounced", messageStatus: "bounced", contactUpdate: { em_status: "bounced" } });
+          // SendGrid's own classification: "bounce" is their permanent/hard
+          // bounce signal (temporary delivery issues arrive as a separate
+          // "blocked"/"deferred" event, not a sub-type of "bounce") — the
+          // address itself is bad, so mark it invalid rather than just bounced.
+          await recordEvent(db, { ...base, eventType: "bounced", messageStatus: "bounced", contactUpdate: { em_status: "invalid" } });
           break;
         case "dropped":
           await recordEvent(db, { ...base, eventType: "dropped", messageStatus: "failed", contactUpdate: { em_status: "failed" } });

@@ -3,6 +3,7 @@ import pino from "pino";
 import { createAdminClient, decryptCredentials, loadMasterKey, rowToEnvelope, type ContactRow, type ProjectRow, type TemplateRow } from "@echoline/db";
 import { getWhatsAppTemplateSender } from "@echoline/providers";
 import { STAGE_STATUS_KEYS, normPhone, fill } from "@echoline/core";
+import { reportIfExhausted } from "../sentry.js";
 import { getRedisConnection } from "../redis.js";
 import { SEND_WHATSAPP_QUEUE, type SendJobData } from "../queues.js";
 
@@ -17,7 +18,10 @@ export function startWhatsAppWorker(): Worker<SendJobData> {
     connection: getRedisConnection(),
     concurrency: 5,
   });
-  worker.on("failed", (job, err) => log.error({ jobId: job?.id, err }, "whatsapp job failed"));
+  worker.on("failed", (job, err) => {
+    log.error({ jobId: job?.id, err }, "whatsapp job failed");
+    reportIfExhausted(job, err);
+  });
   return worker;
 }
 

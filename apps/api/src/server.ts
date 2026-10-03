@@ -1,5 +1,6 @@
 import Fastify, { type FastifyError } from "fastify";
 import cors from "@fastify/cors";
+import { initSentry, captureException } from "./sentry.js";
 import { requireAuth } from "./auth.js";
 import { projectRoutes } from "./routes/projects.js";
 import { settingsRoutes } from "./routes/settings.js";
@@ -13,6 +14,8 @@ import { trackingRoutes } from "./routes/tracking.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { intakeRoutes } from "./routes/intake.js";
 import { sourcesRoutes } from "./routes/sources.js";
+
+initSentry();
 
 const app = Fastify({
   logger: {
@@ -75,7 +78,14 @@ app.setErrorHandler((err: FastifyError, req, reply) => {
   if (err.validation) {
     return reply.code(400).send({ error: "validation_error", message: err.message });
   }
+  // Only unexpected (5xx) errors go to Sentry — a bad request isn't a bug to page anyone about.
+  if (!err.statusCode || err.statusCode >= 500) captureException(err);
   return reply.code(err.statusCode ?? 500).send({ error: "internal_error", message: err.message });
+});
+
+process.on("unhandledRejection", (err) => {
+  captureException(err);
+  app.log.error(err, "unhandled rejection");
 });
 
 const port = Number(process.env.PORT ?? 4000);

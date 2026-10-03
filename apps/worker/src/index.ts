@@ -1,5 +1,6 @@
 import pino from "pino";
 import { Worker, type Job } from "bullmq";
+import { initSentry, reportIfExhausted } from "./sentry.js";
 import { getRedisConnection } from "./redis.js";
 import { getSchedulerQueue, SCHEDULER_QUEUE } from "./queues.js";
 import { runSchedulerForProject, runSchedulerTick } from "./scheduler.js";
@@ -16,6 +17,7 @@ const log = pino({
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
 async function main() {
+  initSentry();
   const healthServer = startHealthServer();
   const schedulerQueue = getSchedulerQueue();
   // Re-adding an identical repeatable job on every restart is a no-op in
@@ -35,7 +37,10 @@ async function main() {
     },
     { connection: getRedisConnection() }
   );
-  schedulerWorker.on("failed", (job, err) => log.error({ jobId: job?.id, err }, "scheduler tick failed"));
+  schedulerWorker.on("failed", (job, err) => {
+    log.error({ jobId: job?.id, err }, "scheduler tick failed");
+    reportIfExhausted(job, err);
+  });
 
   const emailWorker = startEmailWorker();
   const whatsappWorker = startWhatsAppWorker();
