@@ -149,10 +149,12 @@
 - No data model or status-name changes — `message_events.event_type` was already free text and both
   `messages.status` and `contact_channel_status` already had every value this phase needed, defined
   back in Phase 1.
-- **Not yet verified live**: unit-tested only (signature verification, 16 cases). Still needs a real
-  Resend webhook endpoint configured (pointing at `https://echoline-api.onrender.com/webhooks/email/resend`)
-  and its signing secret set as the `webhookSecret` credential on the Elma project's Resend connection
-  before an actual `email.delivered`/`email.bounced` event can be exercised end-to-end.
+- **Verified live**: a real Resend webhook endpoint pointed at `echoline-api`, with its signing secret
+  set as the `webhookSecret` credential on the Elma project's Resend connection — a fresh send's
+  `messages.status` correctly advanced `sent → delivered` driven entirely by the real,
+  Svix-signature-verified `email.delivered` webhook, with `message_events` recording the full real
+  chain (`sent` → Resend's `email.sent` → `delivered`). Meta/Twilio/SendGrid remain unit-tested only,
+  since no WhatsApp provider or SendGrid account is connected yet.
 
 ## To be implemented (backend)
 
