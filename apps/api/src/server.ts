@@ -8,6 +8,8 @@ import { connectionRoutes } from "./routes/connections.js";
 import { oauthCallbackRoutes } from "./routes/oauthCallback.js";
 import { trackingRoutes } from "./routes/tracking.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { intakeRoutes } from "./routes/intake.js";
+import { sourcesRoutes } from "./routes/sources.js";
 
 const app = Fastify({
   logger: {
@@ -48,6 +50,7 @@ app.get("/health", async () => ({ ok: true }));
 await app.register(oauthCallbackRoutes);
 await app.register(trackingRoutes);
 await app.register(webhookRoutes);
+await app.register(intakeRoutes);
 
 await app.register(
   async (api) => {
@@ -56,6 +59,7 @@ await app.register(
     await api.register(settingsRoutes);
     await api.register(collectionRoutes);
     await api.register(connectionRoutes);
+    await api.register(sourcesRoutes);
   },
   { prefix: "/v1" }
 );

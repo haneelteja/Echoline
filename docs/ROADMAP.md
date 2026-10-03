@@ -156,12 +156,35 @@
   chain (`sent` → Resend's `email.sent` → `delivered`). Meta/Twilio/SendGrid remain unit-tested only,
   since no WhatsApp provider or SendGrid account is connected yet.
 
+## Implemented (Phase 5 — webhook & website-form lead intake)
+
+- `apps/api/src/routes/sources.ts`: `POST /v1/projects/:id/sources/:sourceId/token` issues (or
+  rotates) a bearer token for a `webhook`/`form`-type lead source — only its SHA-256 hash is stored
+  (`lead_sources.config.tokenHash`), the plaintext is returned once, same pattern as any API-key
+  issuance flow. Runs through the caller's own RLS (`can_write_project`), no bespoke role check needed.
+- `apps/api/src/routes/intake.ts`: public `POST /intake/:sourceId` (outside `/v1` auth — no Supabase
+  session from an external form/webhook caller), token-authenticated via the hash above. Accepts both
+  JSON and `application/x-www-form-urlencoded` (a plain HTML `<form>` can't set a custom
+  `Authorization` header, so the token may ride in `?token=` instead for that case). De-dup matches
+  the original prototype's Excel/CSV import rule exactly: same email or phone as an existing contact
+  in the project is skipped, and an existing contact's status is never overwritten by a re-synced
+  source.
+- `apps/web`'s Sources page: create a webhook/form source, generate/rotate its token, and see the
+  exact `POST` URL + auth instructions to hand to whoever owns the website form or webhook sender.
+- Scope decision (asked and confirmed): OneDrive Excel and Google Sheets sync need OAuth app
+  credentials that don't exist yet (same gap as Gmail/Outlook email since Phase 2) — not built this
+  phase. No specific CRM was named, so generic "CRM sync" wasn't buildable either. Both remain in
+  the "to be implemented" list below.
+- No data model changes — reuses `lead_sources.config` (already schemaless jsonb) for the token hash.
+
 ## To be implemented (backend)
 
 - Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
   would need SendGrid Inbound Parse or a dedicated mailbox) — WhatsApp replies are covered, email
   replies are not yet.
-- Live lead sync: OneDrive Excel, Google Sheets, CRMs; webhook and website-form intake
+- OneDrive Excel / Google Sheets scheduled sync: needs Microsoft/Google OAuth app credentials
+  (`GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID`), still unset.
+- CRM sync: no specific CRM has been named yet.
 - Meta template submission, approval tracking, and `{{n}}` variable mapping
 - Billing and plans (if sold as a product)
 
