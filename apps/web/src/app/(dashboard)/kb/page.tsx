@@ -29,7 +29,9 @@ export default function KbPage() {
         ))}
       </section>
       <p className="hint" style={{ marginTop: 16 }}>
-        Editing, SKU management, and image uploads land alongside pgvector retrieval in Phase 7.
+        Editing, SKU management, and image uploads are on the backlog, planned alongside real pgvector
+        retrieval for AI context (see docs/ROADMAP.md). AI template generation already reads these
+        brand facts as plain text.
       </p>
     </>
   );

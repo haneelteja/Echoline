@@ -1,17 +1,31 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 
 export default function ProjectSettingsPage() {
   const { pid, project, refreshProjects } = useWorkspace();
-  const [name, setName] = useState(project?.name ?? "");
-  const [brand, setBrand] = useState(project?.brand ?? "");
-  const [senderName, setSenderName] = useState(project?.sender_name ?? "");
-  const [website, setWebsite] = useState(project?.website ?? "");
-  const [waNumber, setWaNumber] = useState(project?.wa_number ?? "");
+  const [name, setName] = useState("");
+  const [brand, setBrand] = useState("");
+  const [senderName, setSenderName] = useState("");
+  const [website, setWebsite] = useState("");
+  const [waNumber, setWaNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // project loads async (null on first render if this page loads directly,
+  // e.g. a refresh) — useState's initial value only applies on the very
+  // first render, so seeding it from project?.x there would silently leave
+  // these fields blank forever once project actually arrives. This re-syncs
+  // whenever project changes instead.
+  useEffect(() => {
+    if (!project) return;
+    setName(project.name ?? "");
+    setBrand(project.brand ?? "");
+    setSenderName(project.sender_name ?? "");
+    setWebsite(project.website ?? "");
+    setWaNumber(project.wa_number ?? "");
+  }, [project]);
 
   if (!project) return <div className="empty">Loading…</div>;
 

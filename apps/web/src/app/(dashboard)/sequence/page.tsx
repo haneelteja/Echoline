@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import type { SequenceSettingsRow } from "@/lib/types";
@@ -10,7 +10,14 @@ export default function SequencePage() {
   const [saved, setSaved] = useState(false);
   const [draft, setDraft] = useState<SequenceSettingsRow | null>(seq);
 
-  if (!draft && seq) setDraft(seq);
+  // Syncs the local draft once seq finishes loading (it's null on first
+  // render — WorkspaceProvider fetches it async). Calling setState directly
+  // during render worked but is a React anti-pattern and wouldn't re-sync
+  // if seq changed again later; this effect does, correctly.
+  useEffect(() => {
+    if (seq) setDraft(seq);
+  }, [seq]);
+
   if (!draft) return <div className="empty">Loading…</div>;
 
   async function save() {

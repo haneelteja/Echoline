@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { LogoMark } from "@/components/LogoMark";
 
 type Step = "email" | "sent" | "otp" | "completing";
 
@@ -86,7 +87,12 @@ export default function LoginPage() {
   return (
     <div className="auth-screen">
       <div className="auth-card">
-        <h1>Echoline</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
+          <span style={{ display: "inline-flex", background: "var(--side, #16112B)", borderRadius: 10, padding: 6 }}>
+            <LogoMark size={22} />
+          </span>
+          <h1 style={{ margin: 0 }}>Echoline</h1>
+        </div>
         <p className="sub">Email + WhatsApp outreach, one workspace per brand.</p>
 
         <button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={signInWithGoogle} disabled={busy}>

@@ -305,7 +305,7 @@
     what to build — the original spec actually names **Zoho CRM and HubSpot** specifically. Not
     built yet; moved below as a named gap instead of an unscoped one.
 
-## To be implemented (backend)
+## Backlog
 
 - Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
   would need SendGrid Inbound Parse or a dedicated mailbox; spec also called for Gmail history

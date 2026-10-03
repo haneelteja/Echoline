@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { WorkspaceProvider, useWorkspace } from "@/components/WorkspaceProvider";
+import { LogoMark } from "@/components/LogoMark";
 import { createClient } from "@/lib/supabase/client";
 
 const NAV: [string, string, string][] = [
@@ -35,12 +36,16 @@ function Shell({ children }: { children: React.ReactNode }) {
         <button className="btn small" aria-label="Open menu" onClick={() => setOpen((v) => !v)}>
           ☰
         </button>
-        <span style={{ fontFamily: "'Bricolage Grotesque'", fontWeight: 700, color: "#fff" }}>Echoline</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Bricolage Grotesque'", fontWeight: 700, color: "#fff" }}>
+          <LogoMark size={22} />
+          Echoline
+        </span>
         <span />
       </div>
       <div className="app">
         <aside className={open ? "open" : ""}>
           <div className="logo">
+            <LogoMark />
             <div>
               Echoline
               <small>Email + WhatsApp outreach</small>

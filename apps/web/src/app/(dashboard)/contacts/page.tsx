@@ -111,7 +111,9 @@ export default function ContactsPage() {
       ) : (
         <div className="empty panel">
           <h2>No leads in this project</h2>
-          <p>Add a lead by hand, or import a source (Phase 5).</p>
+          <p>
+            Add a lead by hand, or connect a <a href="/sources">webhook or website form</a> to import automatically.
+          </p>
         </div>
       )}
     </>
