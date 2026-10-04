@@ -2,16 +2,19 @@ import type { OAuthConfig, OAuthTokens } from "./types";
 
 // Scopes per the Phase 2 spec: send + readonly (readonly needed for reply
 // detection in Phase 4's Gmail history API / watch).
-const SCOPES = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"];
+export const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"];
+// Read-only is deliberate — this is a lead *source*, we only ever read rows
+// from a sheet the user already owns, never write back to it.
+export const GOOGLE_SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 
-export function buildGoogleAuthUrl(config: OAuthConfig, state: string): string {
+export function buildGoogleAuthUrl(config: OAuthConfig, state: string, scopes: string[] = GMAIL_SCOPES): string {
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
     response_type: "code",
     access_type: "offline", // required to get a refresh_token
     prompt: "consent", // forces refresh_token on repeat consent too
-    scope: SCOPES.join(" "),
+    scope: scopes.join(" "),
     state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

@@ -12,7 +12,7 @@ export interface CredentialField {
 export interface ProviderInfo {
   id: string;
   label: string;
-  kind: "email" | "whatsapp" | "ai";
+  kind: "email" | "whatsapp" | "ai" | "onedrive" | "google_sheets";
   auth: "oauth" | "apikey";
   fields: CredentialField[];
 }
@@ -171,6 +171,8 @@ export const PROVIDERS: ProviderInfo[] = [
       { key: "model", label: "Model (optional)", placeholder: "gemini-2.0-flash" },
     ],
   },
+  { id: "onedrive", label: "OneDrive / Excel", kind: "onedrive", auth: "oauth", fields: [] },
+  { id: "google_sheets", label: "Google Sheets", kind: "google_sheets", auth: "oauth", fields: [] },
 ];
 
 export function providerInfo(id: string): ProviderInfo | undefined {

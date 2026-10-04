@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { createAnonClient, encryptCredentials, envelopeToRow, loadMasterKey } from "@echoline/db";
 import { exchangeGoogleCode, exchangeMicrosoftCode, getConnectionTester } from "@echoline/providers";
 import { decodeOAuthState } from "../oauthState.js";
-import { getOAuthConfig, isEmailOAuthProvider, webPublicUrl } from "../oauthProviders.js";
+import { getOAuthConfig, isOAuthableProvider, oauthProviderMeta, webPublicUrl } from "../oauthProviders.js";
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -21,7 +21,7 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
     const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
     const webUrl = webPublicUrl();
 
-    if (!isEmailOAuthProvider(provider)) {
+    if (!isOAuthableProvider(provider)) {
       return reply.redirect(`${webUrl}/channels?oauth_error=unknown_provider`);
     }
     if (error) {
@@ -40,17 +40,27 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const config = getOAuthConfig(provider);
+    const { kind, service } = oauthProviderMeta(provider);
+    // Email connections land back on Channels (where they're managed);
+    // OneDrive/Sheets land on Sources, since that's where lead sources live.
+    const returnPath = kind === "email" ? "/channels" : "/sources";
     if (!config) {
-      return reply.redirect(`${webUrl}/channels?oauth_error=oauth_not_configured`);
+      return reply.redirect(`${webUrl}${returnPath}?oauth_error=oauth_not_configured`);
     }
 
     try {
-      const tokens = provider === "gmail" ? await exchangeGoogleCode(config, code) : await exchangeMicrosoftCode(config, code);
+      const tokens =
+        service === "google" ? await exchangeGoogleCode(config, code) : await exchangeMicrosoftCode(config, code, oauthProviderMeta(provider).scopes);
       const credentials: Record<string, string> = {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken ?? "",
       };
 
+      // getConnectionTester only covers email/whatsapp/AI send providers —
+      // onedrive/google_sheets aren't sends, they're lead sources, so there's
+      // no equivalent tester registered. A successful token exchange already
+      // means Google/Microsoft validated the consent; trust that instead of
+      // adding a parallel tester just for this.
       const tester = getConnectionTester(provider);
       const testResult = tester ? await tester(credentials) : { ok: true as const };
 
@@ -62,7 +72,7 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
       const supabase = createAnonClient(statePayload.accessToken);
       const { data: project } = await supabase.from("projects").select("org_id").eq("id", statePayload.projectId).maybeSingle();
       if (!project) {
-        return reply.redirect(`${webUrl}/channels?oauth_error=project_not_found`);
+        return reply.redirect(`${webUrl}${returnPath}?oauth_error=project_not_found`);
       }
 
       // Only one *connected* provider per (project, kind) — replace, don't
@@ -73,14 +83,14 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
           .from("provider_connections")
           .update({ status: "disconnected" })
           .eq("project_id", statePayload.projectId)
-          .eq("kind", "email")
+          .eq("kind", kind)
           .eq("status", "connected");
       }
 
       const { error: insertErr } = await supabase.from("provider_connections").insert({
         org_id: (project as any).org_id,
         project_id: statePayload.projectId,
-        kind: "email",
+        kind,
         provider,
         account_label: testResult.accountLabel ?? null,
         scopes: tokens.scope ? tokens.scope.split(" ") : [],
@@ -90,13 +100,13 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
       });
       if (insertErr) {
         req.log.error({ insertErr }, "Failed to store OAuth connection");
-        return reply.redirect(`${webUrl}/channels?oauth_error=storage_failed`);
+        return reply.redirect(`${webUrl}${returnPath}?oauth_error=storage_failed`);
       }
 
-      return reply.redirect(`${webUrl}/channels?oauth_connected=${provider}`);
+      return reply.redirect(`${webUrl}${returnPath}?oauth_connected=${provider}`);
     } catch (err) {
       req.log.error({ err }, "OAuth token exchange failed");
-      return reply.redirect(`${webUrl}/channels?oauth_error=token_exchange_failed`);
+      return reply.redirect(`${webUrl}${returnPath}?oauth_error=token_exchange_failed`);
     }
   });
 };

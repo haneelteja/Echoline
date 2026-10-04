@@ -2,15 +2,18 @@ import type { OAuthConfig, OAuthTokens } from "./types";
 
 // Scopes per the Phase 2 spec: Mail.Send + Mail.Read. offline_access is
 // required to get a refresh_token.
-const SCOPES = ["offline_access", "Mail.Send", "Mail.Read"];
+export const OUTLOOK_SCOPES = ["offline_access", "Mail.Send", "Mail.Read"];
+// Read-only — OneDrive lead sync only ever reads a workbook the user
+// already owns, never writes back to it.
+export const ONEDRIVE_SCOPES = ["offline_access", "Files.Read"];
 
-export function buildMicrosoftAuthUrl(config: OAuthConfig, state: string): string {
+export function buildMicrosoftAuthUrl(config: OAuthConfig, state: string, scopes: string[] = OUTLOOK_SCOPES): string {
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
     response_type: "code",
     response_mode: "query",
-    scope: SCOPES.join(" "),
+    scope: scopes.join(" "),
     state,
   });
   return `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params.toString()}`;
@@ -38,7 +41,7 @@ async function tokenRequest(body: URLSearchParams): Promise<MicrosoftTokenRespon
   return data;
 }
 
-export async function exchangeMicrosoftCode(config: OAuthConfig, code: string): Promise<OAuthTokens> {
+export async function exchangeMicrosoftCode(config: OAuthConfig, code: string, scopes: string[] = OUTLOOK_SCOPES): Promise<OAuthTokens> {
   const data = await tokenRequest(
     new URLSearchParams({
       client_id: config.clientId,
@@ -46,7 +49,7 @@ export async function exchangeMicrosoftCode(config: OAuthConfig, code: string): 
       code,
       grant_type: "authorization_code",
       redirect_uri: config.redirectUri,
-      scope: SCOPES.join(" "),
+      scope: scopes.join(" "),
     })
   );
   return { accessToken: data.access_token, refreshToken: data.refresh_token, expiresIn: data.expires_in, scope: data.scope };
@@ -55,7 +58,8 @@ export async function exchangeMicrosoftCode(config: OAuthConfig, code: string): 
 /** Microsoft rotates the refresh token on every refresh — callers must persist the new one. */
 export async function refreshMicrosoftToken(
   config: Pick<OAuthConfig, "clientId" | "clientSecret">,
-  refreshToken: string
+  refreshToken: string,
+  scopes: string[] = OUTLOOK_SCOPES
 ): Promise<OAuthTokens> {
   const data = await tokenRequest(
     new URLSearchParams({
@@ -63,7 +67,7 @@ export async function refreshMicrosoftToken(
       client_secret: config.clientSecret,
       refresh_token: refreshToken,
       grant_type: "refresh_token",
-      scope: SCOPES.join(" "),
+      scope: scopes.join(" "),
     })
   );
   return {

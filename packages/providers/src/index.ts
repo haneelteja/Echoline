@@ -6,3 +6,5 @@ export * from "./oauth/microsoft";
 export * from "./tracking";
 export * from "./webhooks/verify";
 export { submitMetaTemplate, type MetaTemplateSubmission, type MetaTemplateSubmissionResult } from "./whatsapp/meta";
+export { readOneDriveTable, type SheetData } from "./sources/onedrive";
+export { readGoogleSheet } from "./sources/googleSheets";

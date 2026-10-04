@@ -108,7 +108,7 @@ export type ConnectionStatus = "connected" | "needs_reconnect" | "disconnected";
 export interface ConnectionRow {
   id: string;
   project_id: string;
-  kind: "email" | "whatsapp" | "ai";
+  kind: "email" | "whatsapp" | "ai" | "onedrive" | "google_sheets";
   provider: string;
   account_label: string | null;
   scopes: string[];

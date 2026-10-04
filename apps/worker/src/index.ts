@@ -4,6 +4,7 @@ import { initSentry, reportIfExhausted } from "./sentry.js";
 import { getRedisConnection } from "./redis.js";
 import { getSchedulerQueue, SCHEDULER_QUEUE } from "./queues.js";
 import { runSchedulerForProject, runSchedulerTick } from "./scheduler.js";
+import { runSourceSyncTick, syncSourceNow } from "./sourceSync.js";
 import { startEmailWorker } from "./workers/emailWorker.js";
 import { startWhatsAppWorker } from "./workers/whatsappWorker.js";
 import { startHealthServer } from "./healthServer.js";
@@ -26,13 +27,21 @@ async function main() {
 
   const schedulerWorker = new Worker(
     SCHEDULER_QUEUE,
-    async (job: Job<{ projectId?: string }>) => {
-      if (job.data?.projectId) {
+    async (job: Job<{ projectId?: string; sourceId?: string }>) => {
+      if (job.data?.sourceId) {
+        // Manual "Sync now" trigger from apps/api, scoped to one lead source.
+        await syncSourceNow(job.data.sourceId, log);
+        log.info({ sourceId: job.data.sourceId }, "manual source sync trigger processed");
+      } else if (job.data?.projectId) {
         // Manual "Run due steps now" trigger from apps/api, scoped to one project.
         const result = await runSchedulerForProject(job.data.projectId, log);
         log.info({ projectId: job.data.projectId, ...result }, "manual run-due trigger processed");
       } else {
         await runSchedulerTick(log);
+        // Lead-source sync rides the same 5-minute tick; isDue() inside
+        // governs actual per-source cadence (15 min/Hourly/Daily), and a
+        // sync failure shouldn't fail the whole scheduler job.
+        await runSourceSyncTick(log).catch((err) => log.error({ err }, "source sync tick failed"));
       }
     },
     { connection: getRedisConnection() }
@@ -45,7 +54,7 @@ async function main() {
   const emailWorker = startEmailWorker();
   const whatsappWorker = startWhatsAppWorker();
 
-  log.info("Echoline worker started: scheduler (every 5 min) + send-email + send-whatsapp");
+  log.info("Echoline worker started: scheduler (every 5 min) + source sync + send-email + send-whatsapp");
 
   const shutdown = async () => {
     log.info("Shutting down...");

@@ -4,7 +4,7 @@ import { decryptCredentials, encryptCredentials, envelopeToRow, loadMasterKey, r
 import { EMAIL_PROVIDER_IDS, WHATSAPP_PROVIDER_IDS, AI_PROVIDER_IDS, getConnectionTester, buildGoogleAuthUrl, buildMicrosoftAuthUrl } from "@echoline/providers";
 import { sendDbError } from "../errors.js";
 import { encodeOAuthState } from "../oauthState.js";
-import { getOAuthConfig, isEmailOAuthProvider } from "../oauthProviders.js";
+import { getOAuthConfig, isOAuthableProvider, oauthProviderMeta } from "../oauthProviders.js";
 
 const ALL_PROVIDER_IDS = [...EMAIL_PROVIDER_IDS, ...WHATSAPP_PROVIDER_IDS, ...AI_PROVIDER_IDS] as const;
 
@@ -139,19 +139,18 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
   // along in `state` for the callback (which has no header of its own) to use.
   app.post("/projects/:id/connections/oauth/:provider/start", async (req, reply) => {
     const { id, provider } = req.params as { id: string; provider: string };
-    if (!isEmailOAuthProvider(provider)) {
+    if (!isOAuthableProvider(provider)) {
       return reply.code(404).send({ error: "unknown_provider" });
     }
     const config = getOAuthConfig(provider);
     if (!config) {
-      return reply.code(503).send({
-        error: "oauth_not_configured",
-        message: `${provider === "gmail" ? "Google" : "Microsoft"} OAuth credentials are not configured on the server.`,
-      });
+      const service = oauthProviderMeta(provider).service === "google" ? "Google" : "Microsoft";
+      return reply.code(503).send({ error: "oauth_not_configured", message: `${service} OAuth credentials are not configured on the server.` });
     }
     const accessToken = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
     const state = encodeOAuthState({ projectId: id, accessToken });
-    const url = provider === "gmail" ? buildGoogleAuthUrl(config, state) : buildMicrosoftAuthUrl(config, state);
+    const { service, scopes } = oauthProviderMeta(provider);
+    const url = service === "google" ? buildGoogleAuthUrl(config, state, scopes) : buildMicrosoftAuthUrl(config, state, scopes);
     return { url };
   });
 

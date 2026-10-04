@@ -373,12 +373,39 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **Real pgvector KB retrieval — done.** `packages/providers/src/ai/openai.ts`: `embedOpenAi` calls
+  OpenAI's `text-embedding-3-small` (1536-dim, exact match for the `kb_items.embedding vector(1536)`
+  column that's existed since Phase 1). Scoped to OpenAI only — Gemini's embeddings are 768-dim, and
+  mixing dimensions in one pgvector column isn't viable, so Gemini/Anthropic connections keep the
+  original plain-text-concatenation KB context exactly as before (not a regression, an honest
+  constraint). Migration `0010_kb_vector_search.sql` (not yet applied to the live DB — run via Supabase
+  SQL Editor) adds an `ivfflat` cosine-distance index and `match_kb_items(query_embedding, project_id,
+  match_count)` RPC. `apps/api/src/routes/aiTemplates.ts`'s `buildKbContext` now best-effort backfills
+  missing embeddings on KB items before querying top-5 similarity matches, when the project's connected
+  AI provider is OpenAI.
+- **OneDrive Excel / Google Sheets scheduled sync — done, not yet live-verified (no OAuth credentials
+  exist yet, per your "build it, I'll get credentials later" call).** Generalized the OAuth plumbing
+  that was previously hardcoded to email-only (`gmail`/`outlook`) into a shared `OAuthableProvider`
+  type (`apps/api/src/oauthProviders.ts`) covering `onedrive`/`google_sheets` too — same registered
+  Google Cloud/Azure OAuth app as Gmail/Outlook, just different scopes
+  (`GOOGLE_SHEETS_SCOPES`/`ONEDRIVE_SCOPES` in `packages/providers/src/oauth/*.ts`), reusing the
+  existing `provider_connections` vault rather than new storage. Migration
+  `0011_onedrive_sheets_connection_kind.sql` (not yet applied) adds both kinds to the
+  `connection_kind` enum. `packages/providers/src/sources/{onedrive,googleSheets}.ts`: read a workbook
+  table via Microsoft Graph or a sheet range via the Sheets API, same shape (`{headers, rows}`) either
+  way. `apps/worker/src/sourceSync.ts`: a new `runSourceSyncTick` rides the existing 5-minute scheduler
+  tick (cadence governed per-source by `lead_sources.mode` — 15 min/Hourly/Daily — compared against
+  `last_sync`), refreshes the OAuth token if needed, reads the sheet/table, best-effort maps columns to
+  contact fields (explicit `config.columnMap` wins, otherwise a case-insensitive guess against common
+  header spellings like "Name"/"Business Name"/"Company"), and de-dupes against existing contacts using
+  the exact same rule as `intake.ts` (same email or phone skips, status never overwritten). A manual
+  "Sync now" button on the Sources page enqueues `syncSourceNow` onto the same scheduler queue the
+  existing "Run due steps now" button uses. **Not live-verified** — impossible without real
+  `GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID` credentials, which don't exist yet.
 - Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
   would need SendGrid Inbound Parse or a dedicated mailbox; spec also called for Gmail history
   API/watch, Microsoft Graph delta/subscriptions, and IMAP polling for SMTP) — WhatsApp replies are
   covered, email replies are not yet. This also means "stop on reply" only works for WhatsApp today.
-- OneDrive Excel / Google Sheets scheduled sync: needs Microsoft/Google OAuth app credentials
-  (`GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID`), still unset.
 - Zoho CRM and HubSpot sync — named in the original spec, not built.
 - Per-provider rate limiting (beyond the existing daily cap) — not implemented.
 - Meta/Twilio's `sendText()` for session-window free-form replies (distinct from 360Messenger's
@@ -387,8 +414,6 @@
 - Meta template header-image attachment from KB, daily status poll (webhook-only currently), and
   phone number quality-rating/messaging-tier tracking (a different webhook event,
   `phone_number_quality_update`, never handled) + display on the Channels screen — not built.
-- Real pgvector KB retrieval — `kb_items.embedding` column exists, nothing populates or queries it;
-  current AI context-building is plain string concatenation, not vector similarity search.
 - Per-org monthly AI usage limit — not enforced.
 - Billing and plans (if sold as a product)
 
