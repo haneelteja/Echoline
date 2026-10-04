@@ -85,3 +85,12 @@ export interface AiCompletionRequest {
 /** Returns the raw text completion — JSON parsing/validation is the caller's
  * job, same as the original prototype's S.sample.json() callers did. */
 export type AiCompleter = (credentials: Record<string, string>, request: AiCompletionRequest) => Promise<string>;
+
+/**
+ * Only OpenAI implements this (see getEmbedder) — kb_items.embedding is a
+ * fixed vector(1536) column matching text-embedding-3-small's native output
+ * size exactly. Gemini's embeddings are 768-dimensional; mixing dimensions
+ * in one pgvector column isn't viable, so Gemini/Anthropic connections fall
+ * back to plain-text KB context instead of real similarity search.
+ */
+export type Embedder = (credentials: Record<string, string>, text: string) => Promise<number[]>;

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
-import { getAiCompleter } from "@echoline/providers";
+import { getAiCompleter, getEmbedder } from "@echoline/providers";
 import { sendDbError } from "../errors.js";
 
 function masterKey() {
@@ -16,11 +16,38 @@ function parseJsonLoose(text: string): unknown {
   return JSON.parse((fenced ? fenced[1] : text).trim());
 }
 
-async function buildKbContext(supabase: any, projectId: string): Promise<string> {
-  const [{ data: project }, { data: brand }, { data: kbItems }, { data: contacts }] = await Promise.all([
+/**
+ * Backfills any kb_items missing an embedding (best-effort — a failure here
+ * shouldn't block context building, it just means that item stays
+ * text-only this time and gets retried next call). Only runs when the
+ * connected provider can actually produce one; see Embedder's doc comment
+ * in packages/providers for why that's OpenAI only.
+ */
+async function backfillKbEmbeddings(supabase: any, projectId: string, ai: { provider: string; credentials: Record<string, string> }): Promise<void> {
+  const embedder = getEmbedder(ai.provider);
+  if (!embedder) return;
+  const { data: missing } = await supabase.from("kb_items").select("id, text").eq("project_id", projectId).is("embedding", null).not("text", "is", null);
+  for (const item of (missing as { id: string; text: string }[]) ?? []) {
+    try {
+      const vector = await embedder(ai.credentials, item.text);
+      await supabase.from("kb_items").update({ embedding: vector }).eq("id", item.id);
+    } catch {
+      // best-effort — leave it for the next call to retry
+    }
+  }
+}
+
+/**
+ * Real pgvector similarity search when the connected provider supports
+ * embeddings (OpenAI); otherwise falls back to concatenating every
+ * kb_items row as plain text, same as before this existed. brand_kb
+ * (about/offer/pricing/tone/cta/skus) is small and structured — always
+ * included in full regardless, it's not a retrieval candidate.
+ */
+async function buildKbContext(supabase: any, projectId: string, query: string, ai: { provider: string; credentials: Record<string, string> }): Promise<string> {
+  const [{ data: project }, { data: brand }, { data: contacts }] = await Promise.all([
     supabase.from("projects").select("name, brand, sender_name, website, wa_number").eq("id", projectId).single(),
     supabase.from("brand_kb").select("*").eq("project_id", projectId).maybeSingle(),
-    supabase.from("kb_items").select("title, text").eq("project_id", projectId).not("text", "is", null),
     supabase.from("contacts").select("category").eq("project_id", projectId).not("category", "is", null),
   ]);
   const p = (project as any) ?? {};
@@ -31,11 +58,25 @@ async function buildKbContext(supabase: any, projectId: string): Promise<string>
     skus
       .map((s) => [s.code, s.name, s.size, s.price ? `₹${s.price}` : null, s.moq ? `MOQ ${s.moq}` : null].filter(Boolean).join(" / "))
       .join("; ") || "none listed";
-  const notes =
-    ((kbItems as any[]) ?? [])
+
+  let notes = "";
+  const embedder = getEmbedder(ai.provider);
+  if (embedder) {
+    await backfillKbEmbeddings(supabase, projectId, ai);
+    try {
+      const queryVector = await embedder(ai.credentials, query);
+      const { data: matches } = await supabase.rpc("match_kb_items", { query_embedding: queryVector, p_project_id: projectId, match_count: 5 });
+      notes = ((matches as { title: string; text: string }[]) ?? []).map((m) => `${m.title}: ${m.text}`).join(" | ");
+    } catch {
+      notes = ""; // embedding/search failed mid-request — proceed without notes rather than fail the whole generation
+    }
+  } else {
+    const { data: kbItems } = await supabase.from("kb_items").select("title, text").eq("project_id", projectId).not("text", "is", null);
+    notes = ((kbItems as any[]) ?? [])
       .map((k) => `${k.title}: ${k.text}`)
       .join(" | ")
-      .slice(0, 3000) || "";
+      .slice(0, 3000);
+  }
 
   return `BRAND: ${p.brand || p.name}. Sender: ${p.sender_name || ""}. Website: ${p.website || ""}. WhatsApp: ${p.wa_number || ""}.
 ABOUT: ${b.about || ""}
@@ -98,7 +139,7 @@ export const aiTemplatesRoutes: FastifyPluginAsync = async (app) => {
     if (!project) return reply.code(404).send({ error: "not_found" });
 
     const isEmail = body.channel === "email";
-    const kbContext = await buildKbContext(req.supabase, id);
+    const kbContext = await buildKbContext(req.supabase, id, `${body.goal} ${body.extra ?? ""}`.trim(), ai);
     const prompt = `You write B2B outreach ${isEmail ? "emails" : "WhatsApp messages"} for an Indian business. Use only facts from the knowledge base below; never invent prices or claims.
 ${kbContext}
 CAMPAIGN GOAL: ${body.goal}
@@ -155,7 +196,7 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
     if (!current) return reply.code(404).send({ error: "not_found" });
     const cur = current as { channel: string; name: string | null; step: number; subject: string | null; body: string | null; category_lines: Record<string, string> };
 
-    const kbContext = await buildKbContext(req.supabase, projectId);
+    const kbContext = await buildKbContext(req.supabase, projectId, body.instruction, ai);
     const prompt = `Rewrite this ${cur.channel} outreach template. Keep placeholders like {{company}} intact. Use only facts from the knowledge base.
 ${kbContext}
 CURRENT: ${JSON.stringify({ subject: cur.subject, body: cur.body, categoryLines: cur.category_lines })}

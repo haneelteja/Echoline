@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { testAnthropic, completeAnthropic } from "./ai/anthropic";
-import { testOpenAi, completeOpenAi } from "./ai/openai";
+import { testOpenAi, completeOpenAi, embedOpenAi } from "./ai/openai";
 import { testGemini, completeGemini } from "./ai/gemini";
 
 function mockFetchOnce(status: number, body: unknown) {
@@ -104,6 +104,36 @@ describe("completeOpenAi", () => {
   it("throws on a failed completion", async () => {
     mockFetchOnce(500, { error: "server error" });
     await expect(completeOpenAi({ apiKey: "sk-xxx" }, { user: "x" })).rejects.toThrow(/500/);
+  });
+});
+
+describe("embedOpenAi", () => {
+  it("requires an apiKey without calling the network", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    await expect(embedOpenAi({}, "text")).rejects.toThrow(/apiKey/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns the embedding vector and requests the 1536-dim model", async () => {
+    const vector = Array(1536).fill(0.1);
+    const fetchSpy = mockFetchOnce(200, { data: [{ embedding: vector }] });
+    const result = await embedOpenAi({ apiKey: "sk-xxx" }, "brand facts about Elma Industries");
+    expect(result).toEqual(vector);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.openai.com/v1/embeddings");
+    const body = JSON.parse(init.body as string);
+    expect(body).toEqual({ model: "text-embedding-3-small", input: "brand facts about Elma Industries" });
+  });
+
+  it("throws on a failed embedding request", async () => {
+    mockFetchOnce(401, { error: "invalid key" });
+    await expect(embedOpenAi({ apiKey: "bad" }, "text")).rejects.toThrow(/401/);
+  });
+
+  it("throws if the response has no embedding", async () => {
+    mockFetchOnce(200, { data: [] });
+    await expect(embedOpenAi({ apiKey: "sk-xxx" }, "text")).rejects.toThrow(/no embedding/);
   });
 });
 

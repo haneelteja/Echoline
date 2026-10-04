@@ -1,4 +1,4 @@
-import type { AiCompleter, AiProviderId, ConnectionTester, EmailProviderId, EmailSender, ProviderId, WhatsAppProviderId, WhatsAppTemplateSender, WhatsAppTextSender } from "./types";
+import type { AiCompleter, AiProviderId, ConnectionTester, Embedder, EmailProviderId, EmailSender, ProviderId, WhatsAppProviderId, WhatsAppTemplateSender, WhatsAppTextSender } from "./types";
 import { testGmail, sendGmail } from "./email/gmail";
 import { testOutlook, sendOutlook } from "./email/outlook";
 import { testSes, sendSes } from "./email/ses";
@@ -14,7 +14,7 @@ import { testAiSensy, sendAiSensyTemplate } from "./whatsapp/aisensy";
 import { testTwilio, sendTwilioTemplate, sendTwilioText } from "./whatsapp/twilio";
 import { test360Messenger, send360MessengerText } from "./whatsapp/360messenger";
 import { testAnthropic, completeAnthropic } from "./ai/anthropic";
-import { testOpenAi, completeOpenAi } from "./ai/openai";
+import { testOpenAi, completeOpenAi, embedOpenAi } from "./ai/openai";
 import { testGemini, completeGemini } from "./ai/gemini";
 
 export const connectionTesters: Record<ProviderId, ConnectionTester> = {
@@ -97,4 +97,14 @@ export const aiCompleters: Record<AiProviderId, AiCompleter> = {
 
 export function getAiCompleter(providerId: string): AiCompleter | undefined {
   return aiCompleters[providerId as AiProviderId];
+}
+
+// Only OpenAI — see Embedder's own doc comment in types.ts for why Gemini
+// isn't here despite having an embeddings API of its own.
+export const embedders: Partial<Record<AiProviderId, Embedder>> = {
+  openai: embedOpenAi,
+};
+
+export function getEmbedder(providerId: string): Embedder | undefined {
+  return embedders[providerId as AiProviderId];
 }
