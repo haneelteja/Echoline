@@ -14,6 +14,7 @@ import {
 import { getEmailSender, makeRewriteLink, buildOpenPixelUrl, buildUnsubscribeUrl, refreshGoogleToken, refreshMicrosoftToken } from "@echoline/providers";
 import { fill, fillPlainText, emailHTML, buildUnsubscribeHeaders, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
 import { reportIfExhausted } from "../sentry.js";
+import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
 import { SEND_EMAIL_QUEUE, type SendJobData } from "../queues.js";
 
@@ -202,6 +203,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
         event_type: "failed",
         payload: { step, error: message, attempts: job.attemptsMade + 1 },
       });
+      await deadLetterIfExhausted(db, { orgId, projectId, contactId, step, channel: "em", messageId, error: message });
     }
     throw err; // let BullMQ record the failure / retry
   }

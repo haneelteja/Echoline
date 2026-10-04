@@ -19,6 +19,9 @@ export default function DashboardPage() {
   const [running, setRunning] = useState(false);
   const [runMessage, setRunMessage] = useState<string | null>(null);
   const [events, setEvents] = useState<MessageEventRow[]>([]);
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!pid) return;
@@ -41,6 +44,43 @@ export default function DashboardPage() {
       );
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function askAi() {
+    if (!pid || !stats) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const sentE = contacts.filter((c) => c.em_stage > 0).length;
+      const sentW = contacts.filter((c) => c.wa_stage > 0).length;
+      const oE = pct(contacts.filter((c) => ["opened", "clicked"].includes(c.em_track ?? "")).length, sentE);
+      const rW = pct(contacts.filter((c) => c.wa_track === "read").length, sentW);
+      const statsPayload = {
+        leads: stats.n,
+        reached: stats.reached,
+        engaged: stats.engaged,
+        replied: stats.replied,
+        due: stats.due,
+        email: { sent: sentE, openRate: oE },
+        whatsapp: { sent: sentW, readRate: rW },
+        categories: Object.fromEntries(categories),
+        areas: Object.fromEntries(areas),
+        unreachable: health.none,
+      };
+      const { text } = await apiFetch<{ text: string }>(`/v1/projects/${pid}/insights/ai`, {
+        method: "POST",
+        body: JSON.stringify({ stats: statsPayload }),
+      });
+      setAiInsight(text);
+    } catch (e) {
+      setAiError(
+        e instanceof ApiError && e.body && typeof e.body === "object" && "error" in e.body && (e.body as any).error === "no_connection"
+          ? "Connect an AI provider under Email & WhatsApp → AI first."
+          : "AI analysis isn't available right now."
+      );
+    } finally {
+      setAiLoading(false);
     }
   }
 
@@ -270,6 +310,9 @@ export default function DashboardPage() {
               <h2>Insights</h2>
               <p>What the numbers are telling you</p>
             </div>
+            <button className="btn small" onClick={askAi} disabled={aiLoading}>
+              {aiLoading ? "Thinking…" : "✦ Ask AI"}
+            </button>
           </div>
           <ul className="insights">
             {insights.map(([t, ic, tx], i) => (
@@ -279,6 +322,12 @@ export default function DashboardPage() {
               </li>
             ))}
           </ul>
+          {aiInsight && <div className="ai-box">{aiInsight}</div>}
+          {aiError && (
+            <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+              {aiError}
+            </p>
+          )}
         </section>
 
         <section className="panel c8">

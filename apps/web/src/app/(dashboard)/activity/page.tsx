@@ -19,6 +19,7 @@ const EVENT_TONE: Record<string, string> = {
   opted_out: "warn",
   complained: "bad",
   dropped: "bad",
+  dead_letter: "bad",
 };
 
 const EVENT_LABEL: Record<string, string> = {
@@ -35,6 +36,7 @@ const EVENT_LABEL: Record<string, string> = {
   opted_out: "Opted out",
   complained: "Marked as spam",
   dropped: "Dropped",
+  dead_letter: "Gave up — needs review",
 };
 
 function eventSummary(ev: MessageEventRow): string | null {

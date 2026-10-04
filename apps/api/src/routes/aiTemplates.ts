@@ -70,6 +70,13 @@ const generateInput = z.object({
 
 const rewriteInput = z.object({ instruction: z.string().min(1) });
 
+// Open-ended — the dashboard sends whatever stats shape it has already
+// computed (leads/reached/engaged/replied, per-channel sent/open/read
+// rates, category and area breakdowns, 14-day trend). Validating only that
+// it's a JSON object avoids this route needing to know the dashboard's
+// exact stats shape, which would make the two drift out of sync.
+const insightsInput = z.object({ stats: z.record(z.unknown()) });
+
 /**
  * AI template generation/rewrite — gated to org-admins, same reasoning as
  * waTemplates.ts and connections.ts: reads the project's connected AI
@@ -176,5 +183,34 @@ Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`;
       .single();
     if (error) return sendDbError(reply, error);
     return data;
+  });
+
+  // Same prompt/shape as the original prototype's "Ask AI" button — a short
+  // analyst read on whatever campaign stats the dashboard already computed,
+  // not a new round-trip to recompute them server-side.
+  app.post("/projects/:id/insights/ai", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = insightsInput.parse(req.body);
+
+    const ai = await getAiCredentials(req.supabase, id);
+    if (!ai) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
+    const completer = getAiCompleter(ai.provider);
+    if (!completer) return reply.code(400).send({ error: "no_completer", message: `No completer implemented for provider ${ai.provider}` });
+
+    const { data: project, error: projErr } = await req.supabase.from("projects").select("name, brand").eq("id", id).maybeSingle();
+    if (projErr) return sendDbError(reply, projErr);
+    if (!project) return reply.code(404).send({ error: "not_found" });
+    const p = project as { name: string; brand: string | null };
+
+    const prompt = `You are a B2B outreach analyst for ${p.brand || p.name}. Here are campaign stats as JSON:
+${JSON.stringify(body.stats)}
+Write 4 short, specific, actionable observations (max 2 sentences each) as plain text lines starting with "• ". Base everything on the numbers; say when data is too thin. No preamble.`;
+
+    try {
+      const text = await completer(ai.credentials, { user: prompt, maxTokens: 500 });
+      return { text };
+    } catch (err) {
+      return reply.code(502).send({ error: "ai_insights_failed", message: err instanceof Error ? err.message : String(err) });
+    }
   });
 };

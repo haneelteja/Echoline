@@ -307,6 +307,23 @@
 
 ## Backlog progress
 
+- **Dead-letter mechanism — done, different shape than literally "a BullMQ DLQ."** A single send job
+  already retries 5x with exponential backoff, and the next 5-minute scheduler tick already retries a
+  `failed` message automatically (via `claim_message_send`'s reclaim logic, live-verified in Phase 3)
+  — so a *separate* BullMQ dead-letter queue would mostly duplicate what `message_events` already
+  records durably. The actual gap: nothing stopped that tick-level retry from repeating forever for a
+  contact whose failure is permanent (bad credentials nobody's fixed), which meant an effective
+  infinite retry loop — a fresh Sentry alert every 5 minutes, indefinitely, with no way to say "stop,
+  a human needs this." `apps/worker/src/deadLetter.ts`: after 3 separate scheduler-tick-level
+  exhaustions for the same contact+channel+step, the contact's status moves to the existing terminal
+  `failed` status (`nextDue()`/`dueList()` already treat terminal statuses as "stop offering this," so
+  no sequence-engine changes needed), with a distinct `dead_letter` event for visibility in the
+  Activity log (now has its own label/color there: "Gave up — needs review").
+- **"Ask AI" dashboard insights — done.** `POST /v1/projects/:id/insights/ai` — same prompt/shape as
+  the original prototype's "Ask AI" button, but the dashboard sends whatever stats it's already
+  computed client-side rather than the server recomputing them from scratch (avoids two places that
+  could drift out of sync on what "engaged" or "reached" means). Gated to org-admins, same
+  `provider_connections`-read reasoning as template generation/rewrite.
 - **SES bounce/complaint/delivery webhook — done.** `verifySnsSignature`/`isValidSnsCertUrl` in
   `packages/providers/src/webhooks/verify.ts`: validates the `SigningCertURL` is genuinely AWS's
   (`sns.<region>.amazonaws.com`, https only — guards against a forged cert URL) before fetching and
@@ -351,12 +368,9 @@
 - Meta template header-image attachment from KB, daily status poll (webhook-only currently), and
   phone number quality-rating/messaging-tier tracking (a different webhook event,
   `phone_number_quality_update`, never handled) + display on the Channels screen — not built.
-- "Ask AI" dashboard insights — the Dashboard's insights panel is rule-based only; no LLM call.
 - Real pgvector KB retrieval — `kb_items.embedding` column exists, nothing populates or queries it;
   current AI context-building is plain string concatenation, not vector similarity search.
 - Per-org monthly AI usage limit — not enforced.
-- Dead-letter queue — not implemented as a named mechanism; failed BullMQ jobs just stay in BullMQ's
-  own default failed-job state.
 - Billing and plans (if sold as a product)
 
 ## Compliance notes

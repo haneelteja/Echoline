@@ -4,6 +4,7 @@ import { createAdminClient, decryptCredentials, loadMasterKey, rowToEnvelope, ty
 import { getWhatsAppTemplateSender } from "@echoline/providers";
 import { STAGE_STATUS_KEYS, normPhone, fill } from "@echoline/core";
 import { reportIfExhausted } from "../sentry.js";
+import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
 import { SEND_WHATSAPP_QUEUE, type SendJobData } from "../queues.js";
 
@@ -159,6 +160,7 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
         event_type: "failed",
         payload: { step, error: message, attempts: job.attemptsMade + 1 },
       });
+      await deadLetterIfExhausted(db, { orgId, projectId, contactId, step, channel: "wa", messageId, error: message });
     }
     throw err;
   }
