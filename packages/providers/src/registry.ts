@@ -12,6 +12,7 @@ import { testGupshup, sendGupshupTemplate } from "./whatsapp/gupshup";
 import { testInterakt, sendInteraktTemplate } from "./whatsapp/interakt";
 import { testAiSensy, sendAiSensyTemplate } from "./whatsapp/aisensy";
 import { testTwilio, sendTwilioTemplate, sendTwilioText } from "./whatsapp/twilio";
+import { test360Messenger, send360MessengerText } from "./whatsapp/360messenger";
 import { testAnthropic, completeAnthropic } from "./ai/anthropic";
 import { testOpenAi, completeOpenAi } from "./ai/openai";
 import { testGemini, completeGemini } from "./ai/gemini";
@@ -30,6 +31,7 @@ export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   interakt: testInterakt,
   aisensy: testAiSensy,
   twilio: testTwilio,
+  "360messenger": test360Messenger,
   anthropic: testAnthropic,
   openai: testOpenAi,
   gemini: testGemini,
@@ -60,17 +62,27 @@ export const whatsAppTemplateSenders: Record<WhatsAppProviderId, WhatsAppTemplat
   interakt: sendInteraktTemplate,
   aisensy: sendAiSensyTemplate,
   twilio: sendTwilioTemplate,
+  // No template system exists for this provider at all (see
+  // TEXT_ONLY_WHATSAPP_PROVIDERS) — the worker never calls this for
+  // 360messenger connections, but the Record type requires every
+  // WhatsAppProviderId to have an entry.
+  "360messenger": () => {
+    throw new Error("360Messenger has no template system — use the text sender instead");
+  },
 };
 
 export function getWhatsAppTemplateSender(providerId: string): WhatsAppTemplateSender | undefined {
   return whatsAppTemplateSenders[providerId as WhatsAppProviderId];
 }
 
-// Only meta and twilio have a well-documented session-text send path; the
-// others can be added once confirmed against their current docs.
+// meta/twilio: session-text, only valid within the 24h customer-service
+// window (enforced by the caller). 360messenger: unofficial/personal-number
+// provider with no template system at all, so this is its *primary* send
+// path, not just a reply-window fallback — see TEXT_ONLY_WHATSAPP_PROVIDERS.
 export const whatsAppTextSenders: Partial<Record<WhatsAppProviderId, WhatsAppTextSender>> = {
   meta: sendMetaText,
   twilio: sendTwilioText,
+  "360messenger": send360MessengerText,
 };
 
 export function getWhatsAppTextSender(providerId: string): WhatsAppTextSender | undefined {

@@ -1,8 +1,18 @@
 export const EMAIL_PROVIDER_IDS = ["gmail", "outlook", "ses", "sendgrid", "brevo", "smtp", "resend"] as const;
 export type EmailProviderId = (typeof EMAIL_PROVIDER_IDS)[number];
 
-export const WHATSAPP_PROVIDER_IDS = ["meta", "360dialog", "gupshup", "interakt", "aisensy", "twilio"] as const;
+export const WHATSAPP_PROVIDER_IDS = ["meta", "360dialog", "gupshup", "interakt", "aisensy", "twilio", "360messenger"] as const;
 export type WhatsAppProviderId = (typeof WHATSAPP_PROVIDER_IDS)[number];
+
+/**
+ * Meta, 360dialog, Gupshup, Interakt, AiSensy, and Twilio all operate on
+ * official WhatsApp Business numbers, where Meta policy requires an
+ * Approved template for any business-initiated ("cold") message. 360Messenger
+ * is an unofficial WhatsApp-Web-automation service running on a personal
+ * number — there's no template approval system at all, just free-form text,
+ * so the worker skips the approval gate entirely for providers in this set.
+ */
+export const TEXT_ONLY_WHATSAPP_PROVIDERS = new Set<WhatsAppProviderId>(["360messenger"]);
 
 export const AI_PROVIDER_IDS = ["anthropic", "openai", "gemini"] as const;
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number];

@@ -135,6 +135,13 @@ export const PROVIDERS: ProviderInfo[] = [
     ],
   },
   {
+    id: "360messenger",
+    label: "360Messenger (personal WhatsApp number)",
+    kind: "whatsapp",
+    auth: "apikey",
+    fields: [{ key: "apiKey", label: "API key", type: "password" }],
+  },
+  {
     id: "anthropic",
     label: "Anthropic (Claude)",
     kind: "ai",

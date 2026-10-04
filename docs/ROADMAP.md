@@ -307,6 +307,24 @@
 
 ## Backlog progress
 
+- **360Messenger — new WhatsApp provider, user-requested.** Not from the original spec's provider
+  list — the user has a live account and asked for it directly. Distinct from "360dialog" (already
+  built) despite the similar name: 360Messenger (`360messenger.com`) is an **unofficial
+  WhatsApp-Web-automation service** sending from a personal number, not an official WhatsApp Business
+  number — confirmed with the user before building, since this changes how it has to be wired in.
+  No Meta template-approval system exists for it at all, so `packages/providers/src/types.ts` gained
+  `TEXT_ONLY_WHATSAPP_PROVIDERS`, a set the worker checks to skip the "cold sends need an Approved
+  template" gate entirely for this provider and send the template body as free-form text instead —
+  this also means `sendText()`/`WhatsAppTextSender` (previously dead code, flagged as unused in the
+  spec audit) is now actually wired up, as 360Messenger's *primary* send path rather than just a
+  24h-reply-window fallback the way Meta/Twilio use it. 7 new vitest cases, including one that caught
+  a real bug before it shipped: an initial `/connected|authenticated|open/i` regex check on the
+  WhatsApp Web session state would have wrongly treated `"DISCONNECTED"` as healthy, since it contains
+  `"CONNECTED"` as a substring — fixed to an exact (case-insensitive) match instead.
+  **Not live-verified**: no API docs/sample payloads were available beyond endpoint names and auth
+  headers, so the exact request/response field names for `/v2/sendMessage/` and `/v2/client/getState/`
+  are a best-effort guess, clearly flagged in code comments — needs testing against the user's live
+  account (they're connecting it directly via the Channels page, not sharing the key in chat).
 - **Dead-letter mechanism — done, different shape than literally "a BullMQ DLQ."** A single send job
   already retries 5x with exponential backoff, and the next 5-minute scheduler tick already retries a
   `failed` message automatically (via `claim_message_send`'s reclaim logic, live-verified in Phase 3)

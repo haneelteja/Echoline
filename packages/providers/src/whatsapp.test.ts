@@ -5,7 +5,8 @@ import { testGupshup, sendGupshupTemplate } from "./whatsapp/gupshup";
 import { testInterakt, sendInteraktTemplate } from "./whatsapp/interakt";
 import { testAiSensy, sendAiSensyTemplate } from "./whatsapp/aisensy";
 import { testTwilio, sendTwilioTemplate, sendTwilioText } from "./whatsapp/twilio";
-import type { WhatsAppTemplateMessage } from "./types";
+import { test360Messenger, send360MessengerText } from "./whatsapp/360messenger";
+import type { WhatsAppTemplateMessage, WhatsAppTextMessage } from "./types";
 
 const templateMessage: WhatsAppTemplateMessage = {
   to: "919876543210",
@@ -291,5 +292,58 @@ describe("sendTwilioText", () => {
     await expect(sendTwilioText({ accountSid: "AC123", authToken: "secret" }, { to: "919876543210", text: "Hi" })).rejects.toThrow(
       /fromNumber/
     );
+  });
+});
+
+const textMessage: WhatsAppTextMessage = { to: "919876543210", text: "Hi there" };
+
+describe("test360Messenger", () => {
+  it("requires an apiKey without calling the network", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const result = await test360Messenger({});
+    expect(result.ok).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("succeeds when the WhatsApp Web session is connected", async () => {
+    const fetchSpy = mockFetchOnce(200, { state: "CONNECTED", phone: "+91 98765 43210" });
+    const result = await test360Messenger({ apiKey: "key-abc" });
+    expect(result).toEqual({ ok: true, accountLabel: "+91 98765 43210" });
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.360messenger.com/v2/client/getState/");
+    expect(init.headers.Authorization).toBe("Bearer key-abc");
+  });
+
+  it("fails when the WhatsApp Web session is disconnected, even on a 200 response", async () => {
+    mockFetchOnce(200, { state: "DISCONNECTED" });
+    const result = await test360Messenger({ apiKey: "key-abc" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("fails on a bad key", async () => {
+    mockFetchOnce(401, {});
+    const result = await test360Messenger({ apiKey: "bad" });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("send360MessengerText", () => {
+  it("sends phone+message and returns the provider's message id", async () => {
+    const fetchSpy = mockFetchOnce(200, { id: "msg-123" });
+    const result = await send360MessengerText({ apiKey: "key-abc" }, textMessage);
+    expect(result).toEqual({ providerMessageId: "msg-123" });
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.360messenger.com/v2/sendMessage/");
+    expect(JSON.parse(init.body as string)).toEqual({ phone: "919876543210", message: "Hi there" });
+  });
+
+  it("requires an apiKey", async () => {
+    await expect(send360MessengerText({}, textMessage)).rejects.toThrow(/apiKey/);
+  });
+
+  it("throws on a failed send", async () => {
+    mockFetchOnce(422, { error: "invalid phone number" });
+    await expect(send360MessengerText({ apiKey: "key-abc" }, textMessage)).rejects.toThrow(/422/);
   });
 });

@@ -1,7 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import pino from "pino";
 import { createAdminClient, decryptCredentials, loadMasterKey, rowToEnvelope, type ContactRow, type ProjectRow, type TemplateRow } from "@echoline/db";
-import { getWhatsAppTemplateSender } from "@echoline/providers";
+import { getWhatsAppTemplateSender, getWhatsAppTextSender, TEXT_ONLY_WHATSAPP_PROVIDERS, type WhatsAppProviderId } from "@echoline/providers";
 import { STAGE_STATUS_KEYS, normPhone, fill } from "@echoline/core";
 import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
@@ -82,40 +82,53 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
       await fail("No WhatsApp template configured for this step", "blocked");
       return;
     }
-    // Cold, business-initiated WhatsApp sends must use an approved template —
-    // this is a hard Meta policy requirement, not just a best practice.
-    if (t.meta_status !== "Approved") {
-      await fail(`Template "${t.name ?? t.meta_name ?? "untitled"}" is not Approved (status: ${t.meta_status ?? "Draft"})`, "blocked");
-      return;
-    }
-    if (!t.meta_name) {
-      await fail("Template has no registered Meta template name", "blocked");
-      return;
-    }
 
-    const sender = getWhatsAppTemplateSender((conn as any).provider);
-    if (!sender) throw new Error(`No sender implemented for provider ${(conn as any).provider}`);
-
+    const providerId = (conn as any).provider as WhatsAppProviderId;
     const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
-
-    // variable_map (set by waTemplates.ts at submission time) is the ordered
-    // list of our own {{placeholder}} keys matching Meta's approved {{1}},
-    // {{2}}... positions. A template submitted with no placeholders has an
-    // empty map, which correctly means "send with no components" below.
-    const { data: waTemplate } = await db.from("wa_templates").select("variable_map").eq("template_id", t.id).maybeSingle();
-    const variableMap = ((waTemplate as { variable_map?: string[] } | null)?.variable_map ?? []) as string[];
     const pr = project as ProjectRow;
     const fillCtx = {
       project: { name: pr.name, brand: pr.brand, senderName: pr.sender_name, website: pr.website, waNumber: pr.wa_number, accent: pr.accent },
       contact: { name: c.name, contactPerson: c.contact_person, area: c.area, category: c.category },
       template: { categoryLines: t.category_lines ?? {} },
     };
-    const components =
-      variableMap.length > 0
-        ? [{ type: "body" as const, parameters: variableMap.map((key) => ({ type: "text" as const, text: fill(`{{${key}}}`, fillCtx) })) }]
-        : undefined;
 
-    const result = await sender(credentials, { to: phone, templateName: t.meta_name, language: "en", components });
+    let result: { providerMessageId: string };
+    if (TEXT_ONLY_WHATSAPP_PROVIDERS.has(providerId)) {
+      // Unofficial/personal-number providers (e.g. 360Messenger) have no
+      // template-approval system at all — Meta's "cold sends need an
+      // Approved template" rule is a policy on the official Business API,
+      // not something these providers enforce. Send the template body as
+      // free-form text instead.
+      const sender = getWhatsAppTextSender(providerId);
+      if (!sender) throw new Error(`No text sender implemented for provider ${providerId}`);
+      const text = fill(t.body, fillCtx);
+      result = await sender(credentials, { to: phone, text });
+    } else {
+      // Cold, business-initiated WhatsApp sends must use an approved
+      // template — a hard Meta policy requirement, not just a best practice.
+      if (t.meta_status !== "Approved") {
+        await fail(`Template "${t.name ?? t.meta_name ?? "untitled"}" is not Approved (status: ${t.meta_status ?? "Draft"})`, "blocked");
+        return;
+      }
+      if (!t.meta_name) {
+        await fail("Template has no registered Meta template name", "blocked");
+        return;
+      }
+      const sender = getWhatsAppTemplateSender(providerId);
+      if (!sender) throw new Error(`No sender implemented for provider ${providerId}`);
+
+      // variable_map (set by waTemplates.ts at submission time) is the
+      // ordered list of our own {{placeholder}} keys matching Meta's
+      // approved {{1}}, {{2}}... positions. A template submitted with no
+      // placeholders has an empty map, correctly meaning "no components".
+      const { data: waTemplate } = await db.from("wa_templates").select("variable_map").eq("template_id", t.id).maybeSingle();
+      const variableMap = ((waTemplate as { variable_map?: string[] } | null)?.variable_map ?? []) as string[];
+      const components =
+        variableMap.length > 0
+          ? [{ type: "body" as const, parameters: variableMap.map((key) => ({ type: "text" as const, text: fill(`{{${key}}}`, fillCtx) })) }]
+          : undefined;
+      result = await sender(credentials, { to: phone, templateName: t.meta_name, language: "en", components });
+    }
 
     const totalSteps = ((seq as any)?.wa?.steps?.length as number) ?? step + 1;
     const newStage = step + 1;
