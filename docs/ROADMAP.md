@@ -305,8 +305,39 @@
     what to build — the original spec actually names **Zoho CRM and HubSpot** specifically. Not
     built yet; moved below as a named gap instead of an unscoped one.
 
-## Backlog
+## Backlog progress
 
+- **SES bounce/complaint/delivery webhook — done.** `verifySnsSignature`/`isValidSnsCertUrl` in
+  `packages/providers/src/webhooks/verify.ts`: validates the `SigningCertURL` is genuinely AWS's
+  (`sns.<region>.amazonaws.com`, https only — guards against a forged cert URL) before fetching and
+  checking the X.509-signed canonical string (SignatureVersion 1 = SHA1, 2 = SHA256). Auto-confirms
+  the SNS subscription handshake. Hard bounce → `invalid`, soft → `bounced`, complaint → `opted_out`
+  both channels — same convention as Resend/SendGrid. 11 new vitest cases against a locally-generated
+  self-signed test cert (verifies our canonical-string construction and crypto are internally
+  consistent; not a real AWS cert, so still unverified against a live SES/SNS account). Also fixed:
+  SNS POSTs `Content-Type: text/plain` instead of `application/json` (a known AWS quirk), which our
+  content-type parsers didn't handle before this.
+- **360dialog webhook — done, confidence caveat.** Parses the flat (On-Premise-API-style, not Meta's
+  nested entry/changes) `{messages, statuses}` shape, consistent with the existing `send360DialogTemplate`
+  adapter's `v1/messages` endpoint. 360dialog doesn't publish a standard HMAC webhook signature; checks
+  an optional shared-secret header (`D360-Webhook-Secret`) against the connection's own `webhookSecret`
+  credential instead, same per-connection-secret pattern as Resend. **Needs confirmation against a live
+  360dialog account** before relying on it for a real campaign — flagged honestly rather than guessed
+  with false confidence.
+- **Gupshup/Interakt/AiSensy webhooks — intentionally still stubbed.** Unlike 360dialog (a documented
+  Meta-API-compatible wrapper, and this codebase's own `send*Template` adapters already establish
+  their request shapes with reasonable confidence), I don't have high-confidence knowledge of these
+  three providers' exact webhook payload schemas. Implementing them from uncertain memory risked
+  shipping webhook handlers that silently never match real payloads — worse than an honest stub, since
+  it would look done without being correct. Left stubbed; happy to build these out either against
+  their live docs or sample payloads if you want to prioritize one.
+- **Website-form bot protection — done.** `/intake/:sourceId` now rate-limits to 20 submissions/minute
+  per source+IP (`@fastify/rate-limit`, in-memory — fine for Render's single-instance free/starter
+  plans, would need a shared store if ever scaled to multiple instances) and accepts an optional
+  honeypot field (`website_url`, left empty by real visitors) that silently no-ops instead of creating
+  a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
+- **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
+  or a DB insert error, not just defined-but-unused.
 - Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
   would need SendGrid Inbound Parse or a dedicated mailbox; spec also called for Gmail history
   API/watch, Microsoft Graph delta/subscriptions, and IMAP polling for SMTP) — WhatsApp replies are
@@ -314,16 +345,9 @@
 - OneDrive Excel / Google Sheets scheduled sync: needs Microsoft/Google OAuth app credentials
   (`GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID`), still unset.
 - Zoho CRM and HubSpot sync — named in the original spec, not built.
-- SES SNS bounce/complaint webhook signature verification — not built (SendGrid/Resend/Meta/Twilio
-  are; SES's own webhook mechanism, SNS, was never implemented).
-- Gupshup/360dialog/Interakt/AiSensy webhook payload parsing — all four currently stubbed to `200 OK`
-  no-ops rather than their actual schemes; only Meta and Twilio WhatsApp webhooks are real.
 - Per-provider rate limiting (beyond the existing daily cap) — not implemented.
 - `sendText()` (session-window free-form WhatsApp replies) — the function exists in
   `packages/providers` but no feature in the app actually calls it.
-- Website-form lead intake: honeypot / Cloudflare Turnstile / rate-limiting — not built; the
-  `/intake/:sourceId` endpoint has token auth and dedup but no bot/abuse protection.
-- `lead_sources.rows_failed` — column exists, never written to (only `rows_added`/`rows_skipped`).
 - Meta template header-image attachment from KB, daily status poll (webhook-only currently), and
   phone number quality-rating/messaging-tier tracking (a different webhook event,
   `phone_number_quality_update`, never handled) + display on the Channels screen — not built.

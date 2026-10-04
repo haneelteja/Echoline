@@ -1,4 +1,4 @@
-import { createHmac, createPublicKey, timingSafeEqual, verify as cryptoVerify } from "node:crypto";
+import { createHmac, createPublicKey, timingSafeEqual, verify as cryptoVerify, X509Certificate } from "node:crypto";
 
 function timingSafeBufEqual(a: Buffer, b: Buffer): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
@@ -72,6 +72,70 @@ export function verifyTwilioSignature(authToken: string, fullUrl: string, params
   const expected = createHmac("sha1", authToken).update(data, "utf8").digest("base64");
   try {
     return timingSafeBufEqual(Buffer.from(signatureHeader), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
+export interface SnsMessage {
+  Type: string;
+  MessageId: string;
+  TopicArn: string;
+  Subject?: string;
+  Message: string;
+  Timestamp: string;
+  SignatureVersion: string;
+  Signature: string;
+  SigningCertURL: string;
+  Token?: string;
+  SubscribeURL?: string;
+}
+
+/**
+ * AWS SES delivers bounce/complaint/delivery notifications via SNS, not a
+ * shared-secret HMAC like every other provider here — each message carries
+ * its own signature plus a URL to the X.509 cert that signed it. The cert
+ * URL must be validated as genuinely AWS's (not just "fetch whatever URL the
+ * request claims"), or a forged webhook could point us at an attacker's own
+ * cert/key pair and sign whatever payload they want.
+ */
+export function isValidSnsCertUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && /^sns\.[a-z0-9-]+\.amazonaws\.com$/.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function snsCanonicalString(msg: SnsMessage): string {
+  const isSubscription = msg.Type === "SubscriptionConfirmation" || msg.Type === "UnsubscribeConfirmation";
+  const fields = isSubscription
+    ? (["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"] as const)
+    : (["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"] as const);
+  let out = "";
+  for (const field of fields) {
+    const value = msg[field];
+    if (value === undefined) continue; // Subject is only present on some Notification messages
+    out += `${field}\n${value}\n`;
+  }
+  return out;
+}
+
+/**
+ * fetchCert is injectable so this is unit-testable without a real network
+ * call or a genuine AWS certificate — production callers can omit it to use
+ * the real fetch.
+ */
+export async function verifySnsSignature(msg: SnsMessage, fetchCert: (url: string) => Promise<string> = (url) => fetch(url).then((r) => r.text())): Promise<boolean> {
+  if (!isValidSnsCertUrl(msg.SigningCertURL)) return false;
+  if (msg.SignatureVersion !== "1" && msg.SignatureVersion !== "2") return false;
+  try {
+    const certPem = await fetchCert(msg.SigningCertURL);
+    const publicKey = new X509Certificate(certPem).publicKey;
+    const canonical = Buffer.from(snsCanonicalString(msg), "utf8");
+    const signature = Buffer.from(msg.Signature, "base64");
+    return cryptoVerify(msg.SignatureVersion === "1" ? "sha1" : "sha256", canonical, publicKey, signature);
   } catch {
     return false;
   }

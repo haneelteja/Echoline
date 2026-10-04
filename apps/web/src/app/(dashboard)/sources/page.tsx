@@ -91,6 +91,13 @@ export default function SourcesPage() {
             HTML forms. Body fields: <code>name</code> (required), <code>email</code>, <code>phone</code>, <code>category</code>,{" "}
             <code>area</code>, <code>contactPerson</code>.
           </p>
+          <p className="small muted">
+            Bot protection: rate-limited to 20 submissions/minute per source. For website forms, add a hidden input named{" "}
+            <code>website_url</code> left empty (a honeypot — real visitors never fill it in; bots usually fill every field):
+          </p>
+          <code style={{ display: "block", wordBreak: "break-all", margin: "4px 0" }}>
+            {'<input type="text" name="website_url" style="display:none" tabindex="-1" autocomplete="off">'}
+          </code>
           <button className="btn" onClick={() => setIssued(null)}>
             Done
           </button>
@@ -107,6 +114,8 @@ export default function SourcesPage() {
                 <th>Sync</th>
                 <th>Last sync</th>
                 <th>Leads</th>
+                <th>Skipped</th>
+                <th>Failed</th>
                 <th></th>
               </tr>
             </thead>
@@ -121,6 +130,8 @@ export default function SourcesPage() {
                   <td>{s.mode || "Manual"}</td>
                   <td className="small muted">{s.last_sync ? new Date(s.last_sync).toLocaleString() : "—"}</td>
                   <td>{s.rows_added}</td>
+                  <td className="small muted">{s.rows_skipped}</td>
+                  <td className="small muted">{s.rows_failed}</td>
                   <td>
                     {(s.type === "webhook" || s.type === "form") && (
                       <button className="btn small" onClick={() => generateToken(s.id)}>

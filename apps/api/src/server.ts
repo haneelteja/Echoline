@@ -42,6 +42,18 @@ app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string
   (req as unknown as { rawBody: string }).rawBody = body as string;
   done(null, Object.fromEntries(new URLSearchParams(body as string)));
 });
+// AWS SNS (SES's bounce/complaint/delivery notifications) POSTs its JSON
+// body with Content-Type: text/plain, not application/json — a well-known
+// AWS quirk, not a bug on the sending side.
+app.addContentTypeParser("text/plain", { parseAs: "string" }, (req, body, done) => {
+  (req as unknown as { rawBody: string }).rawBody = body as string;
+  if (!body) return done(null, {});
+  try {
+    done(null, JSON.parse(body as string));
+  } catch (err) {
+    done(err as Error, undefined);
+  }
+});
 
 const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000")
   .split(",")

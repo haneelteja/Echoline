@@ -1,7 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
+import rateLimit from "@fastify/rate-limit";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@echoline/db";
 import { normPhone, validEmail } from "@echoline/core";
+
+// Any value in this field means a bot filled in something a real visitor
+// never sees (hidden via CSS by whoever embeds the form) — silently accept
+// without creating a contact, rather than telling the bot it was caught.
+const HONEYPOT_FIELD = "website_url";
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -25,13 +31,23 @@ function timingSafeTokenEqual(a: string, b: string): boolean {
  * existing contact's status is never overwritten by a re-synced source.
  */
 export const intakeRoutes: FastifyPluginAsync = async (app) => {
+  // Scoped to this route only (not the whole app) — a webhook/form sender is
+  // a different trust tier than our own authenticated API traffic. In-memory
+  // store is fine: Render's free/starter plans run a single instance, so
+  // there's no multi-instance consistency to worry about yet.
+  await app.register(rateLimit, {
+    max: 20,
+    timeWindow: "1 minute",
+    keyGenerator: (req) => `${(req.params as { sourceId?: string }).sourceId}:${req.ip}`,
+  });
+
   app.post("/intake/:sourceId", async (req, reply) => {
     const { sourceId } = req.params as { sourceId: string };
     const db = createAdminClient();
 
     const { data: source, error: sourceErr } = await db
       .from("lead_sources")
-      .select("id, org_id, project_id, type, name, config, rows_added, rows_skipped")
+      .select("id, org_id, project_id, type, name, config, rows_added, rows_skipped, rows_failed")
       .eq("id", sourceId)
       .maybeSingle();
     if (sourceErr) return reply.code(500).send({ error: "internal_error" });
@@ -45,6 +61,7 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
       config: Record<string, unknown>;
       rows_added: number;
       rows_skipped: number;
+      rows_failed: number;
     };
     if (s.type !== "webhook" && s.type !== "form") return reply.code(404).send({ error: "not_found" });
 
@@ -58,8 +75,13 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const body = req.body as Record<string, string>;
+    if (body?.[HONEYPOT_FIELD]) return reply.code(200).send({ ok: true });
+
     const name = body?.name?.trim();
-    if (!name) return reply.code(400).send({ error: "validation_error", message: "name is required" });
+    if (!name) {
+      await db.from("lead_sources").update({ rows_failed: s.rows_failed + 1, last_sync: new Date().toISOString() }).eq("id", sourceId);
+      return reply.code(400).send({ error: "validation_error", message: "name is required" });
+    }
 
     const email = validEmail(body.email) ? body.email!.trim() : null;
     const phone = normPhone(body.phone) || null;
@@ -96,7 +118,10 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
       })
       .select("id")
       .single();
-    if (insertErr) return reply.code(500).send({ error: "internal_error" });
+    if (insertErr) {
+      await db.from("lead_sources").update({ rows_failed: s.rows_failed + 1, last_sync: new Date().toISOString() }).eq("id", sourceId);
+      return reply.code(500).send({ error: "internal_error" });
+    }
 
     await db
       .from("lead_sources")

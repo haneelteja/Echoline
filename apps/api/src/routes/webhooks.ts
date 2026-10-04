@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { createAdminClient, decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
-import { verifyMetaSignature, verifySendGridSignature, verifySvixSignature, verifyTwilioSignature } from "@echoline/providers";
+import { verifyMetaSignature, verifySendGridSignature, verifySnsSignature, verifySvixSignature, verifyTwilioSignature, type SnsMessage } from "@echoline/providers";
 import { normPhone } from "@echoline/core";
 
 function masterKey() {
@@ -416,12 +416,153 @@ const body = req.body as {
     return reply.type("text/xml").code(200).send("<Response></Response>");
   });
 
+  // ---------- Amazon SES (via SNS) ----------
+  // SES delivers bounce/complaint/delivery events through SNS, not a
+  // provider-signed HMAC — see verifySnsSignature's own doc comment for why
+  // the cert URL itself has to be validated as genuinely AWS's.
+  app.post("/webhooks/email/ses", async (req, reply) => {
+    const db = createAdminClient();
+    const msg = req.body as Partial<SnsMessage>;
+    if (!msg.Type || !msg.Signature || !msg.SigningCertURL) return reply.code(200).send({ ok: true });
+    if (!(await verifySnsSignature(msg as SnsMessage))) return reply.code(200).send({ ok: true });
+
+    if (msg.Type === "SubscriptionConfirmation" && msg.SubscribeURL) {
+      // One-time handshake: SNS won't deliver real notifications to this
+      // endpoint until we fetch the URL it gives us back.
+      await fetch(msg.SubscribeURL).catch((err) => req.log.error({ err }, "failed to confirm SNS subscription"));
+      return reply.code(200).send({ ok: true });
+    }
+    if (msg.Type !== "Notification" || !msg.Message) return reply.code(200).send({ ok: true });
+
+    let event: {
+      eventType?: string;
+      mail?: { messageId?: string };
+      bounce?: { bounceType?: string; bouncedRecipients?: unknown[] };
+      complaint?: unknown;
+    };
+    try {
+      event = JSON.parse(msg.Message);
+    } catch {
+      return reply.code(200).send({ ok: true });
+    }
+    const sesMessageId = event.mail?.messageId;
+    if (!sesMessageId) return reply.code(200).send({ ok: true });
+    const message = await findMessageByProviderMessageId(db, sesMessageId);
+    if (!message) return reply.code(200).send({ ok: true });
+
+    const base = { orgId: message.org_id, projectId: message.project_id, messageId: message.id, contactId: message.contact_id, channel: message.channel as "em" };
+    switch (event.eventType) {
+      case "Delivery":
+        await recordEvent(db, { ...base, eventType: "delivered", messageStatus: "delivered" });
+        break;
+      case "Bounce": {
+        const isHardBounce = event.bounce?.bounceType === "Permanent";
+        await recordEvent(db, {
+          ...base,
+          eventType: "bounced",
+          messageStatus: "bounced",
+          payload: { bounceType: event.bounce?.bounceType },
+          contactUpdate: { em_status: isHardBounce ? "invalid" : "bounced" },
+        });
+        break;
+      }
+      case "Complaint":
+        await recordEvent(db, { ...base, eventType: "complained", contactUpdate: { em_status: "opted_out", wa_status: "opted_out" } });
+        break;
+    }
+    return reply.code(200).send({ ok: true });
+  });
+
   // ---------- Stubs: acknowledged so these providers don't retry-storm us,
   // built out when first actually used for a live campaign. ----------
-  for (const provider of ["brevo", "ses", "gmail", "outlook"]) {
+  for (const provider of ["brevo", "gmail", "outlook"]) {
     app.post(`/webhooks/email/${provider}`, async (_req, reply) => reply.code(200).send({ ok: true }));
   }
-  for (const provider of ["360dialog", "gupshup", "interakt", "aisensy"]) {
+
+  // ---------- 360dialog ----------
+  // 360dialog's v1 API (matching the WhatsApp On-Premise API shape, unlike
+  // Meta's newer Cloud API) delivers webhooks flat — messages/statuses at
+  // the top level, not nested under entry/changes like Meta's. 360dialog
+  // doesn't publish a standard HMAC webhook signature; the documented
+  // practice is a shared secret you configure yourself, checked here via a
+  // custom header against the connection's own webhookSecret credential —
+  // same per-connection-secret pattern as Resend. Needs confirmation against
+  // a live 360dialog account before relying on it for a real campaign.
+  app.post("/webhooks/whatsapp/360dialog", async (req, reply) => {
+    const db = createAdminClient();
+    const body = req.body as { statuses?: any[]; messages?: any[]; contacts?: { wa_id?: string }[] };
+    const secretHeader = req.headers["d360-webhook-secret"] as string | undefined;
+
+    // Resolve project the same way as Meta/Twilio: via phone number match on
+    // the sending account, found by checking every connected 360dialog
+    // connection's account_label (the number 360dialog itself reports back
+    // at connect time — see test360Dialog), since nothing in this payload
+    // shape identifies the receiving number directly.
+    const { data: connections } = await db.from("provider_connections").select("*").eq("kind", "whatsapp").eq("provider", "360dialog").eq("status", "connected");
+    let matchedProject: { id: string; org_id: string } | null = null;
+    let matchedCredentials: Record<string, string> | null = null;
+    for (const conn of (connections as any[]) ?? []) {
+      const { data: project } = await db.from("projects").select("id, org_id").eq("id", conn.project_id).maybeSingle();
+      if (!project) continue;
+      try {
+        const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey()));
+        if (!credentials.webhookSecret || secretHeader === credentials.webhookSecret) {
+          matchedProject = project as { id: string; org_id: string };
+          matchedCredentials = credentials;
+          break;
+        }
+      } catch {
+        // skip a connection we can't decrypt
+      }
+    }
+    if (!matchedProject) return reply.code(200).send({ ok: true });
+    if (matchedCredentials?.webhookSecret && secretHeader !== matchedCredentials.webhookSecret) return reply.code(200).send({ ok: true });
+
+    for (const status of body.statuses ?? []) {
+      const message = await findMessageByProviderMessageId(db, status.id);
+      if (!message) continue;
+      const base = { orgId: message.org_id, projectId: message.project_id, messageId: message.id, contactId: message.contact_id, channel: "wa" as const };
+      if (status.status === "delivered") await recordEvent(db, { ...base, eventType: "delivered", messageStatus: "delivered" });
+      else if (status.status === "read") await recordEvent(db, { ...base, eventType: "read", messageStatus: "read" });
+      else if (status.status === "failed")
+        await recordEvent(db, { ...base, eventType: "failed", messageStatus: "failed", payload: { errors: status.errors }, contactUpdate: { wa_status: "failed" } });
+    }
+
+    for (const inbound of body.messages ?? []) {
+      const fromPhone = normPhone(inbound.from);
+      if (!fromPhone) continue;
+      const { data: contact } = await db.from("contacts").select("id, org_id").eq("project_id", matchedProject.id).eq("phone", fromPhone).maybeSingle();
+      if (!contact) continue;
+      const text = inbound.text?.body ?? "";
+      const c = contact as { id: string; org_id: string };
+      if (isOptOutText(text)) {
+        await recordEvent(db, {
+          orgId: c.org_id,
+          projectId: matchedProject.id,
+          messageId: null,
+          contactId: c.id,
+          channel: "wa",
+          eventType: "opted_out",
+          payload: { body: text },
+          contactUpdate: { em_status: "opted_out", wa_status: "opted_out" },
+        });
+      } else {
+        await recordEvent(db, {
+          orgId: c.org_id,
+          projectId: matchedProject.id,
+          messageId: null,
+          contactId: c.id,
+          channel: "wa",
+          eventType: "replied",
+          payload: { body: text },
+          contactUpdate: { wa_status: "replied" },
+        });
+      }
+    }
+    return reply.code(200).send({ ok: true });
+  });
+
+  for (const provider of ["gupshup", "interakt", "aisensy"]) {
     app.post(`/webhooks/whatsapp/${provider}`, async (_req, reply) => reply.code(200).send({ ok: true }));
   }
 };
