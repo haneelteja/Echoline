@@ -381,8 +381,9 @@
   (`GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID`), still unset.
 - Zoho CRM and HubSpot sync — named in the original spec, not built.
 - Per-provider rate limiting (beyond the existing daily cap) — not implemented.
-- `sendText()` (session-window free-form WhatsApp replies) — the function exists in
-  `packages/providers` but no feature in the app actually calls it.
+- Meta/Twilio's `sendText()` for session-window free-form replies (distinct from 360Messenger's
+  primary-path use of the same function) — still no feature calls it for those two specifically;
+  would be for replying within the 24h window after an inbound message, not the main send flow.
 - Meta template header-image attachment from KB, daily status poll (webhook-only currently), and
   phone number quality-rating/messaging-tier tracking (a different webhook event,
   `phone_number_quality_update`, never handled) + display on the Channels screen — not built.
