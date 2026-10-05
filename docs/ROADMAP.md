@@ -373,6 +373,18 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **Fixed: silent empty state when a workspace fetch fails.** This was flagged earlier in the session as
+  a latent bug (`WorkspaceProvider.refreshProjectData`'s `Promise.all` — one failing endpoint rejects
+  the whole batch, leaving every slice at its stale/empty value with `loadingProject` still correctly
+  flipping to `false`, so the UI just silently showed empty/zero data with no error) and then actually
+  hit live: `GET /v1/projects` itself failed (most likely a Render free-tier cold-start timeout) and the
+  Leads page rendered "0 of 0 leads" with an empty project dropdown — indistinguishable from a real
+  empty project. Fixed properly this time: `refreshProjects` now catches and records the error;
+  `refreshProjectData` uses `Promise.allSettled` instead of `Promise.all` so one failing request no
+  longer blocks every other slice from updating, and reports which/how-many requests failed. The Shell
+  now renders a dedicated "Couldn't load your projects" screen (vs. the generic "No projects yet", which
+  was misleading for this case) and a dismissible-by-retry banner for partial project-data failures —
+  both with a Retry button — instead of ever looking like silent data loss again.
 - **Visual design pass, matched to a reference repo — done (partial), user-requested.** Cloned
   `github.com/haneelteja/Sales-Operations-Portal` (a separate shadcn/Tailwind project of the user's) to
   extract its actual design tokens/markup rather than guessing from a screenshot. It's the *default*
