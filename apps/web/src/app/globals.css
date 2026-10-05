@@ -51,6 +51,13 @@
   --warn:#E5AE4A; --warn-soft:#3A2D12; --bad:#EE7790; --bad-soft:#3D1A24; --ok:#45C489;
   --side:#0A0E18; --side-ink:#AEB7C9; --side-active:#1D2539;
 }
+/* Tailwind wraps its own CSS in @layer theme/base/components/utilities, and
+   unlayered rules always beat layered ones regardless of specificity. Putting
+   all of this legacy hand-written CSS into Tailwind's own "base" layer (lower
+   priority than "utilities") lets any new Tailwind-classed component correctly
+   override it, while pages not yet migrated keep looking exactly as before
+   wherever nothing new competes for the same element. */
+@layer base {
 *,*::before,*::after{box-sizing:inherit}
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.5 "Manrope",system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -226,5 +233,6 @@ nav .grp{color:#6C6688}
 .auth-card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-l);padding:32px}
 .auth-card h1{font-size:22px;margin-bottom:6px}
 .auth-card p.sub{color:var(--ink2);margin:0 0 22px}
+} /* end @layer base */
 .divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:16px 0}
 .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
