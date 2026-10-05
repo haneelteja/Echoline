@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileSpreadsheet, Mail, MessageCircle, MessagesSquare, Plus, Search, Upload, Users } from "lucide-react";
+import { FileSpreadsheet, Mail, MessageCircle, MessagesSquare, Plus, Search, Upload, Users, X } from "lucide-react";
 import { SENTIMENT_VALUES, statusLabel, type ContactChannelStatus } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { ColumnFilter, SortIndicator, type SortDirection } from "@/components/ui/column-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
@@ -35,29 +36,16 @@ function sentimentVariant(sentiment: string): "success" | "destructive" | "secon
   return "default";
 }
 
-type SortKey = "name" | "area" | "em_status" | "wa_status" | "sentiment";
+type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment";
 
-function SortHead({
-  sortKey,
-  sort,
-  onSort,
-  children,
-}: {
-  sortKey: SortKey;
-  sort: { key: SortKey; dir: "asc" | "desc" };
-  onSort: (key: SortKey) => void;
-  children: React.ReactNode;
-}) {
-  const active = sort.key === sortKey;
-  const Icon = active ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <TableHead>
-      <button className="flex items-center gap-1 hover:text-foreground" onClick={() => onSort(sortKey)}>
-        {children}
-        <Icon className={cn("h-3 w-3", active ? "text-foreground" : "text-muted-foreground/50")} />
-      </button>
-    </TableHead>
-  );
+const EMPTY_FILTERS: Record<ColumnKey, string> = { name: "", area: "", em_status: "", wa_status: "", sentiment: "" };
+
+function sortValue(c: ContactRow, key: ColumnKey): string {
+  if (key === "em_status") return statusLabel(c.em_status);
+  if (key === "wa_status") return statusLabel(c.wa_status);
+  if (key === "area") return c.area ?? "";
+  if (key === "sentiment") return c.sentiment;
+  return c.name;
 }
 
 export default function ContactsPage() {
@@ -70,8 +58,8 @@ export default function ContactsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [sentimentFilter, setSentimentFilter] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
+  const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, string>>(EMPTY_FILTERS);
+  const [sort, setSort] = useState<{ key: ColumnKey; dir: "asc" | "desc" } | null>(null);
 
   const [statusLogContact, setStatusLogContact] = useState<ContactRow | null>(null);
   const [sendNow, setSendNow] = useState<{ contact: ContactRow; channel: "email" | "whatsapp" } | null>(null);
@@ -84,6 +72,9 @@ export default function ContactsPage() {
     return { total, emailSent, waSent, replied };
   }, [contacts]);
 
+  const emStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.em_status)))).sort(), [contacts]);
+  const waStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.wa_status)))).sort(), [contacts]);
+
   const latestStatusByContact = useMemo(() => {
     const map = new Map<string, (typeof statusLog)[number]>();
     for (const entry of statusLog) {
@@ -92,25 +83,42 @@ export default function ContactsPage() {
     return map;
   }, [statusLog]);
 
-  function toggleSort(key: SortKey) {
-    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  function setColumnFilter(key: ColumnKey, value: string) {
+    setColumnFilters((f) => ({ ...f, [key]: value }));
+  }
+
+  function setColumnSort(key: ColumnKey, dir: SortDirection) {
+    setSort(dir ? { key, dir } : null);
+  }
+
+  const hasActiveFilters = Boolean(search) || Object.values(columnFilters).some(Boolean) || sort !== null;
+
+  function clearFilters() {
+    setSearch("");
+    setColumnFilters(EMPTY_FILTERS);
+    setSort(null);
   }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let rows = contacts.filter((c) => {
-      if (sentimentFilter && c.sentiment !== sentimentFilter) return false;
+      if (columnFilters.name && !c.name.toLowerCase().includes(columnFilters.name.toLowerCase())) return false;
+      if (columnFilters.area && !(c.area ?? "").toLowerCase().includes(columnFilters.area.toLowerCase())) return false;
+      if (columnFilters.em_status && statusLabel(c.em_status) !== columnFilters.em_status) return false;
+      if (columnFilters.wa_status && statusLabel(c.wa_status) !== columnFilters.wa_status) return false;
+      if (columnFilters.sentiment && c.sentiment !== columnFilters.sentiment) return false;
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q);
     });
-    rows = [...rows].sort((a, b) => {
-      const av = (sort.key === "area" ? a.area : a[sort.key]) ?? "";
-      const bv = (sort.key === "area" ? b.area : b[sort.key]) ?? "";
-      const cmp = String(av).localeCompare(String(bv));
-      return sort.dir === "asc" ? cmp : -cmp;
-    });
+    if (sort) {
+      const { key, dir } = sort;
+      rows = [...rows].sort((a, b) => {
+        const cmp = sortValue(a, key).localeCompare(sortValue(b, key));
+        return dir === "asc" ? cmp : -cmp;
+      });
+    }
     return rows;
-  }, [contacts, search, sentimentFilter, sort]);
+  }, [contacts, search, columnFilters, sort]);
 
   async function addLead() {
     if (!pid || !name.trim()) return;
@@ -143,6 +151,27 @@ export default function ContactsPage() {
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't change sentiment." : "Couldn't update sentiment.");
     }
+  }
+
+  function ColumnHead({ columnKey, label, dataType, options }: { columnKey: ColumnKey; label: string; dataType?: "text" | "select"; options?: string[] }) {
+    const dir = sort?.key === columnKey ? sort.dir : null;
+    return (
+      <TableHead>
+        <div className="flex items-center gap-1">
+          <span>{label}</span>
+          <SortIndicator direction={dir} />
+          <ColumnFilter
+            label={label}
+            dataType={dataType}
+            options={options}
+            filterValue={columnFilters[columnKey]}
+            onFilterChange={(v) => setColumnFilter(columnKey, v)}
+            sortDirection={dir}
+            onSortChange={(d) => setColumnSort(columnKey, d)}
+          />
+        </div>
+      </TableHead>
+    );
   }
 
   return (
@@ -178,14 +207,11 @@ export default function ContactsPage() {
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search name, email, phone…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
         </div>
-        <Select value={sentimentFilter} onChange={(e) => setSentimentFilter(e.target.value)} className="sm:max-w-[200px]">
-          <option value="">All sentiments</option>
-          {SENTIMENT_VALUES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </Select>
+        <Button variant="outline" size="sm" onClick={clearFilters} disabled={!hasActiveFilters}>
+          <X className="h-3.5 w-3.5" />
+          Clear filters
+        </Button>
+        <p className="text-xs text-muted-foreground">Use the ⋮ menu on any column header to sort or filter it.</p>
       </div>
 
       {error && !adding && <p className="text-sm text-destructive">{error}</p>}
@@ -243,21 +269,11 @@ export default function ContactsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <SortHead sortKey="name" sort={sort} onSort={toggleSort}>
-                Business
-              </SortHead>
-              <SortHead sortKey="area" sort={sort} onSort={toggleSort}>
-                Location
-              </SortHead>
-              <SortHead sortKey="em_status" sort={sort} onSort={toggleSort}>
-                Email status
-              </SortHead>
-              <SortHead sortKey="wa_status" sort={sort} onSort={toggleSort}>
-                WhatsApp status
-              </SortHead>
-              <SortHead sortKey="sentiment" sort={sort} onSort={toggleSort}>
-                Response / Sentiment
-              </SortHead>
+              <ColumnHead columnKey="name" label="Business" />
+              <ColumnHead columnKey="area" label="Location" />
+              <ColumnHead columnKey="em_status" label="Email status" dataType="select" options={emStatusOptions} />
+              <ColumnHead columnKey="wa_status" label="WhatsApp status" dataType="select" options={waStatusOptions} />
+              <ColumnHead columnKey="sentiment" label="Response / Sentiment" dataType="select" options={[...SENTIMENT_VALUES]} />
               <TableHead>Status log</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -332,7 +348,13 @@ export default function ContactsPage() {
             <h2 className="font-display text-lg font-semibold text-foreground">{contacts.length ? "No leads match your filters" : "No leads in this project"}</h2>
             <p className="text-sm text-muted-foreground">
               {contacts.length ? (
-                "Try a different search or sentiment filter."
+                <>
+                  Try a different search, or{" "}
+                  <button className="text-primary underline underline-offset-4" onClick={clearFilters}>
+                    clear filters
+                  </button>
+                  .
+                </>
               ) : (
                 <>
                   Add a lead by hand, import an Excel file, or connect a{" "}

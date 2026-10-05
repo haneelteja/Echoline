@@ -389,10 +389,17 @@
     group label above the sidebar nav (the reference uses shadcn's official `Sidebar` component with a
     `SidebarGroupLabel`; this app's sidebar is hand-built Tailwind, not that component, but the label
     treatment is replicated).
-  - **Not done — explicitly scoped out this pass, not forgotten:** the reference's per-column
-    filter+sort dropdown (a 3-dot menu in each table header with sort/filter/clear, via a
-    `ColumnFilter` component built on shadcn's `DropdownMenu`) is materially more work than the Leads
-    page's current click-header-to-sort + single global filter, and wasn't built this pass. The
+  - **Per-column filter+sort dropdown — done** (follow-up, same session). `components/ui/dropdown-menu.tsx`
+    (Radix-based) + `components/ui/column-filter.tsx`: a 3-dot menu in each sortable/filterable column
+    header (Business, Location, Email status, WhatsApp status, Response/Sentiment) opens Sort
+    Ascending/Descending buttons, a text-or-select filter input, and Clear filter/Clear sort buttons —
+    same interaction as the reference's `ColumnFilter`, adapted to a single text-or-select input
+    instead of its multiselect/date/number variants (not needed here yet). Status-column filter options
+    are computed from whichever statuses are actually present among the project's contacts, not a
+    hardcoded full list. The old single global "sentiment filter" dropdown was removed (redundant with
+    the new per-column one), and a toolbar **Clear filters** button resets search text + every column
+    filter + sort in one click.
+  - The
     Dashboard, Sequence, Templates, KB, Channels, Sources, Activity, and Project settings pages are
     still on the pre-redesign CSS entirely (Dashboard especially — its custom SVG charts (rings, funnel
     bars, 14-day trend) are real, working, non-trivial code; reskinning only their outer card chrome to
