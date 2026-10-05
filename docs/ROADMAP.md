@@ -373,6 +373,16 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **ESLint set up for the first time — done.** A full connectivity/schema/codebase audit found no
+  ESLint config existed anywhere in the repo, so `pnpm lint` silently did nothing useful. Running
+  `next lint`'s first-time setup auto-installed `eslint-config-next@16.3.8` (built for Next 15/16's
+  flat-config/ESLint 9 system) alongside `eslint@8`, which crashed every run with "Converting circular
+  structure to JSON" — pinned `eslint-config-next` to `14.2.15` (matching this app's actual Next
+  version) in `apps/web/package.json`, which is the documented convention anyway. Lint then surfaced 8
+  real issues (four `any` casts on error-body parsing across `dashboard/page.tsx`, `templates/page.tsx`
+  ×3, and `apiClient.ts`, tightened to `{ error?: string }`/`{ message?: unknown }`; two unescaped
+  apostrophes in JSX text; a pointless empty `interface X extends Y {}` in `select.tsx` simplified to a
+  type alias) — all fixed, `next lint` now passes clean.
 - **Fixed: browser "Page Unresponsive" warning on the Leads page, immediately on load.** Reviewed the
   prior fix (`ColumnHead` module-scope move, realtime debounce) for a regression and found none — the
   actual cause is more fundamental: rendering 800+ fully-interactive rows (each with a native

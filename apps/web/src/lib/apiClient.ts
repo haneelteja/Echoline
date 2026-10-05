@@ -6,7 +6,7 @@ export class ApiError extends Error {
   status: number;
   body: unknown;
   constructor(status: number, body: unknown) {
-    super(typeof body === "object" && body && "message" in body ? String((body as any).message) : `API error ${status}`);
+    super(typeof body === "object" && body && "message" in body ? String((body as { message?: unknown }).message) : `API error ${status}`);
     this.status = status;
     this.body = body;
   }

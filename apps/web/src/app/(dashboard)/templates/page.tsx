@@ -70,7 +70,7 @@ export default function TemplatesPage() {
         e instanceof ApiError
           ? e.status === 403
             ? "AI features need admin access on this project."
-            : e.body && typeof e.body === "object" && "error" in e.body && (e.body as any).error === "no_connection"
+            : e.body && typeof e.body === "object" && "error" in e.body && (e.body as { error?: string }).error === "no_connection"
               ? "Connect an AI provider under Email & WhatsApp → AI first."
               : e.message
           : "Generation failed"
@@ -94,7 +94,7 @@ export default function TemplatesPage() {
       await refreshProjectData();
     } catch (e) {
       setError(
-        e instanceof ApiError && e.body && typeof e.body === "object" && "error" in e.body && (e.body as any).error === "no_connection"
+        e instanceof ApiError && e.body && typeof e.body === "object" && "error" in e.body && (e.body as { error?: string }).error === "no_connection"
           ? "Connect an AI provider under Email & WhatsApp → AI first."
           : "Rewrite failed"
       );
@@ -118,7 +118,7 @@ export default function TemplatesPage() {
         e instanceof ApiError
           ? e.status === 403
             ? "Submitting to Meta needs admin access."
-            : e.body && typeof e.body === "object" && "error" in e.body && (e.body as any).error === "no_connection"
+            : e.body && typeof e.body === "object" && "error" in e.body && (e.body as { error?: string }).error === "no_connection"
               ? "Connect a Meta WhatsApp provider first."
               : e.message
           : "Submission failed"

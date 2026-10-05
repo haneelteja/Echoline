@@ -47,7 +47,7 @@ export function StatusLogDialog({ pid, contactId, contactName, entries, onClose,
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Status log — {contactName}</DialogTitle>
-          <DialogDescription>Track what's happened with this lead and when to follow up next.</DialogDescription>
+          <DialogDescription>Track what&apos;s happened with this lead and when to follow up next.</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-[1fr_160px_auto] items-end gap-2">

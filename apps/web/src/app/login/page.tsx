@@ -125,7 +125,7 @@ export default function LoginPage() {
         ) : (
           <>
             <p className="hint" style={{ marginBottom: 10 }}>
-              Enter the 6-digit code sent to {email}, if your project's email template includes one.
+              Enter the 6-digit code sent to {email}, if your project&apos;s email template includes one.
             </p>
             <div className="field">
               <label htmlFor="code">Code</label>
