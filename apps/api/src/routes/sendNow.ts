@@ -25,6 +25,7 @@ import {
 } from "@echoline/providers";
 import { buildUnsubscribeHeaders, emailHTML, fill, fillPlainText, normPhone, validEmail } from "@echoline/core";
 import { sendDbError } from "../errors.js";
+import { isTestSendMode, testSendEmail, testSendWhatsApp } from "../testSendMode.js";
 
 const sendNowInput = z.object({
   channel: z.enum(["email", "whatsapp"]),
@@ -127,7 +128,11 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         const sender = getEmailSender((conn as any).provider);
         if (!sender) return reply.code(400).send({ error: "no_sender", message: `No sender implemented for provider ${(conn as any).provider}` });
 
-        const ctx = { project: projectBrand, contact: c, template: { body: t.body ?? "", categoryLines: t.category_lines ?? {} } };
+        // fill()'s FillContext expects camelCase (contactPerson), not the raw
+        // ContactRow's snake_case contact_person — see the identical fix in
+        // apps/worker/src/workers/emailWorker.ts.
+        const contactCtx = { name: c.name, contactPerson: c.contact_person, area: c.area, category: c.category };
+        const ctx = { project: projectBrand, contact: contactCtx, template: { body: t.body ?? "", categoryLines: t.category_lines ?? {} } };
         // messageId isn't a real messages row here, but the tracking/unsub
         // links still need *some* stable id to key off of — contactId+templateId
         // is unique enough for this one-off send.
@@ -141,8 +146,17 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
           { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, trackingKey), rewriteLink: makeRewriteLink(tc, trackingKey) }
         );
         const text = fillPlainText(t.body ?? "", ctx, { unsubscribeUrl });
-        const subject = fill(t.subject, ctx);
+        let subject = fill(t.subject, ctx);
         const headers = buildUnsubscribeHeaders(unsubscribeUrl);
+
+        // Testing-phase safety valve: redirect to a fixed test inbox instead
+        // of the real lead — see testSendMode.ts.
+        const testMode = isTestSendMode();
+        let toEmail = c.email!;
+        if (testMode) {
+          subject = `[TEST → ${c.name} <${c.email}>] ${subject}`;
+          toEmail = testSendEmail();
+        }
 
         const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
         await ensureFreshOAuthToken(db, conn as any, credentials);
@@ -151,7 +165,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         const fromEmail = emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
         if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
-        const result = await sender(credentials, { from: fromEmail, to: c.email!, subject, html, text, headers });
+        const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers });
 
         await db.from("message_events").insert({
           org_id: p.org_id,
@@ -160,7 +174,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
           contact_id: contactId,
           channel: "em",
           event_type: "sent",
-          payload: { manual: true, templateId: body.templateId, step: t.step, providerMessageId: result.providerMessageId },
+          payload: { manual: true, templateId: body.templateId, step: t.step, providerMessageId: result.providerMessageId, test: testMode },
         });
         return { ok: true };
       }
@@ -176,11 +190,17 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         template: { categoryLines: t.category_lines ?? {} },
       };
 
+      // Testing-phase safety valve: redirect to a fixed test number instead
+      // of the real lead — see testSendMode.ts.
+      const testMode = isTestSendMode();
+      const toPhone = testMode ? testSendWhatsApp() : phone;
+
       let providerMessageId: string;
       if (TEXT_ONLY_WHATSAPP_PROVIDERS.has(providerId)) {
         const sender = getWhatsAppTextSender(providerId);
         if (!sender) return reply.code(400).send({ error: "no_sender", message: `No text sender implemented for provider ${providerId}` });
-        const result = await sender(credentials, { to: phone, text: fill(t.body, fillCtx) });
+        const text = testMode ? `[TEST → ${c.name} ${phone}]\n${fill(t.body, fillCtx)}` : fill(t.body, fillCtx);
+        const result = await sender(credentials, { to: toPhone, text });
         providerMessageId = result.providerMessageId;
       } else {
         if (t.meta_status !== "Approved") {
@@ -198,7 +218,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
           variableMap.length > 0
             ? [{ type: "body" as const, parameters: variableMap.map((key) => ({ type: "text" as const, text: fill(`{{${key}}}`, fillCtx) })) }]
             : undefined;
-        const result = await sender(credentials, { to: phone, templateName: t.meta_name, language: "en", components });
+        const result = await sender(credentials, { to: toPhone, templateName: t.meta_name, language: "en", components });
         providerMessageId = result.providerMessageId;
       }
 
@@ -209,7 +229,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         contact_id: contactId,
         channel: "wa",
         event_type: "sent",
-        payload: { manual: true, templateId: body.templateId, step: t.step, providerMessageId },
+        payload: { manual: true, templateId: body.templateId, step: t.step, providerMessageId, test: testMode },
       });
       return { ok: true };
     } catch (err) {

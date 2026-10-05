@@ -373,6 +373,23 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **Testing-phase send redirect — done, user-requested.** `apps/worker/src/testSendMode.ts` and
+  `apps/api/src/testSendMode.ts` (small identical duplicates, same reasoning as other cross-app
+  helpers this session): `TEST_SEND_MODE` env var, **defaults to ON** (safe by default — redirect
+  happens unless explicitly set to `"false"` on both `echoline-api` and `echoline-worker`). While on,
+  every email send (automated sequence + manual "send now") goes to `TEST_SEND_EMAIL` (default
+  `pega2023test@gmail.com`) with the subject prefixed `[TEST → real name <real email>]`; every WhatsApp
+  send goes to `TEST_SEND_WHATSAPP` (default `9642917777`) — free-text sends (360Messenger) get the
+  same kind of prefix in the body, Approved Meta template sends can't be altered so the real lead is
+  only visible via `message_events.payload`. **To go live for real: set `TEST_SEND_MODE=false` on both
+  Render services.** Contact progression (em_stage/wa_stage/status) still advances normally in test
+  mode — only the delivery destination is redirected — so the sequence/scheduler can be fully tested
+  end-to-end without risking a real send.
+- **Review fix (found while double-checking the above): email template `{{contact_name}}` always
+  rendered as "team".** `emailWorker.ts` passed the raw `ContactRow` (snake_case `contact_person`)
+  directly into `fill()`, which expects camelCase `contactPerson` — `whatsappWorker.ts` already mapped
+  this correctly, email's send path did not. Pre-existing bug, not introduced this session; fixed in
+  both `emailWorker.ts` and the new `sendNow.ts`.
 - **Leads table: search/sort/filter, per-lead manual send, status log, sentiment — done,
   user-requested.** Confirmed design: growing dated status history (not a single overwritten value), a
   proposed default sentiment/pipeline-stage list, Location as a rename of the existing Area field (not

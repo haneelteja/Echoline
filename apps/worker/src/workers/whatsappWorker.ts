@@ -7,6 +7,7 @@ import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
 import { SEND_WHATSAPP_QUEUE, type SendJobData } from "../queues.js";
+import { isTestSendMode, testSendWhatsApp } from "../testSendMode.js";
 
 const log = pino({ name: "send-whatsapp-worker", level: process.env.LOG_LEVEL ?? "info" });
 
@@ -86,6 +87,14 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
     const providerId = (conn as any).provider as WhatsAppProviderId;
     const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
     const pr = project as ProjectRow;
+
+    // Testing-phase safety valve: redirect to a fixed test number instead of
+    // the real lead. Free-text sends get a prefix naming the real lead (so a
+    // shared test number stays legible); an Approved Meta template's body is
+    // fixed by Meta and can't be altered, so the real lead is only visible
+    // via message_events.payload for those.
+    const testMode = isTestSendMode();
+    const toPhone = testMode ? testSendWhatsApp() : phone;
     const fillCtx = {
       project: { name: pr.name, brand: pr.brand, senderName: pr.sender_name, website: pr.website, waNumber: pr.wa_number, accent: pr.accent },
       contact: { name: c.name, contactPerson: c.contact_person, area: c.area, category: c.category },
@@ -101,8 +110,8 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
       // free-form text instead.
       const sender = getWhatsAppTextSender(providerId);
       if (!sender) throw new Error(`No text sender implemented for provider ${providerId}`);
-      const text = fill(t.body, fillCtx);
-      result = await sender(credentials, { to: phone, text });
+      const text = testMode ? `[TEST → ${c.name} ${phone}, step ${step}]\n${fill(t.body, fillCtx)}` : fill(t.body, fillCtx);
+      result = await sender(credentials, { to: toPhone, text });
     } else {
       // Cold, business-initiated WhatsApp sends must use an approved
       // template — a hard Meta policy requirement, not just a best practice.
@@ -127,7 +136,7 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
         variableMap.length > 0
           ? [{ type: "body" as const, parameters: variableMap.map((key) => ({ type: "text" as const, text: fill(`{{${key}}}`, fillCtx) })) }]
           : undefined;
-      result = await sender(credentials, { to: phone, templateName: t.meta_name, language: "en", components });
+      result = await sender(credentials, { to: toPhone, templateName: t.meta_name, language: "en", components });
     }
 
     const totalSteps = ((seq as any)?.wa?.steps?.length as number) ?? step + 1;
@@ -155,7 +164,7 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
         contact_id: contactId,
         channel: "wa",
         event_type: "sent",
-        payload: { step, providerMessageId: result.providerMessageId },
+        payload: { step, providerMessageId: result.providerMessageId, test: testMode },
       }),
     ]);
     log.info({ messageId, contactId, step }, "whatsapp sent");

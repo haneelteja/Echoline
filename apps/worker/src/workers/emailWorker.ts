@@ -17,6 +17,7 @@ import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
 import { SEND_EMAIL_QUEUE, type SendJobData } from "../queues.js";
+import { isTestSendMode, testSendEmail } from "../testSendMode.js";
 
 const log = pino({ name: "send-email-worker", level: process.env.LOG_LEVEL ?? "info" });
 
@@ -131,7 +132,13 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
       waNumber: p.wa_number,
       accent: p.accent,
     };
-    const ctx = { project: projectBrand, contact: c, template: t };
+    // fill()'s FillContext expects camelCase (contactPerson), not the raw
+    // ContactRow's snake_case contact_person — passing `c` directly silently
+    // always fell back to "team" for {{contact_name}} regardless of whether
+    // a contact person was actually on file. whatsappWorker.ts already maps
+    // this correctly; email's send path did not.
+    const contactCtx = { name: c.name, contactPerson: c.contact_person, area: c.area, category: c.category };
+    const ctx = { project: projectBrand, contact: contactCtx, template: t };
 
     const tc = trackingConfig();
     const unsubscribeUrl = buildUnsubscribeUrl(tc, messageId);
@@ -142,8 +149,17 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
       { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, messageId), rewriteLink: makeRewriteLink(tc, messageId) }
     );
     const text = fillPlainText(t.body, ctx, { unsubscribeUrl });
-    const subject = fill(tRow.subject, ctx);
+    let subject = fill(tRow.subject, ctx);
     const headers = buildUnsubscribeHeaders(unsubscribeUrl);
+
+    // Testing-phase safety valve: redirect to a fixed test inbox instead of
+    // the real lead, with the subject tagged so a shared test inbox stays
+    // legible across many different leads/steps.
+    let toEmail = c.email!;
+    if (isTestSendMode()) {
+      subject = `[TEST → ${c.name} <${c.email}>, step ${step}] ${subject}`;
+      toEmail = testSendEmail();
+    }
 
     const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
     await ensureFreshOAuthToken(db, conn as any, credentials);
@@ -155,7 +171,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     const fromEmail = emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
     if (!fromEmail) throw new Error("No from-email configured for this project's email connection");
 
-    const result = await sender(credentials, { from: fromEmail, to: c.email!, subject, html, text, headers });
+    const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers });
 
     const totalSteps = ((seq as any)?.em?.steps?.length as number) ?? step + 1;
     const newStage = step + 1;
@@ -182,7 +198,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
         contact_id: contactId,
         channel: "em",
         event_type: "sent",
-        payload: { step, providerMessageId: result.providerMessageId },
+        payload: { step, providerMessageId: result.providerMessageId, test: isTestSendMode() },
       }),
     ]);
     log.info({ messageId, contactId, step }, "email sent");

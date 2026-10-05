@@ -36,6 +36,29 @@ function sentimentVariant(sentiment: string): "success" | "destructive" | "secon
 
 type SortKey = "name" | "area" | "em_status" | "wa_status" | "sentiment";
 
+function SortHead({
+  sortKey,
+  sort,
+  onSort,
+  children,
+}: {
+  sortKey: SortKey;
+  sort: { key: SortKey; dir: "asc" | "desc" };
+  onSort: (key: SortKey) => void;
+  children: React.ReactNode;
+}) {
+  const active = sort.key === sortKey;
+  const Icon = active ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <TableHead>
+      <button className="flex items-center gap-1 hover:text-foreground" onClick={() => onSort(sortKey)}>
+        {children}
+        <Icon className={cn("h-3 w-3", active ? "text-foreground" : "text-muted-foreground/50")} />
+      </button>
+    </TableHead>
+  );
+}
+
 export default function ContactsPage() {
   const { pid, contacts, templates, statusLog, refreshProjectData } = useWorkspace();
   const [adding, setAdding] = useState(false);
@@ -104,21 +127,13 @@ export default function ContactsPage() {
 
   async function updateSentiment(contactId: string, sentiment: string) {
     if (!pid) return;
-    await apiFetch(`/v1/projects/${pid}/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify({ sentiment }) });
-    await refreshProjectData();
-  }
-
-  function SortHead({ sortKey, children }: { sortKey: SortKey; children: React.ReactNode }) {
-    const active = sort.key === sortKey;
-    const Icon = active ? (sort.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-    return (
-      <TableHead>
-        <button className="flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort(sortKey)}>
-          {children}
-          <Icon className={cn("h-3 w-3", active ? "text-foreground" : "text-muted-foreground/50")} />
-        </button>
-      </TableHead>
-    );
+    setError(null);
+    try {
+      await apiFetch(`/v1/projects/${pid}/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify({ sentiment }) });
+      await refreshProjectData();
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't change sentiment." : "Couldn't update sentiment.");
+    }
   }
 
   return (
@@ -156,6 +171,8 @@ export default function ContactsPage() {
           ))}
         </Select>
       </div>
+
+      {error && !adding && <p className="text-sm text-destructive">{error}</p>}
 
       {importing && pid && <ImportLeadsDialog pid={pid} onClose={() => setImporting(false)} onImported={refreshProjectData} />}
 
@@ -210,11 +227,21 @@ export default function ContactsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <SortHead sortKey="name">Business</SortHead>
-              <SortHead sortKey="area">Location</SortHead>
-              <SortHead sortKey="em_status">Email status</SortHead>
-              <SortHead sortKey="wa_status">WhatsApp status</SortHead>
-              <SortHead sortKey="sentiment">Response / Sentiment</SortHead>
+              <SortHead sortKey="name" sort={sort} onSort={toggleSort}>
+                Business
+              </SortHead>
+              <SortHead sortKey="area" sort={sort} onSort={toggleSort}>
+                Location
+              </SortHead>
+              <SortHead sortKey="em_status" sort={sort} onSort={toggleSort}>
+                Email status
+              </SortHead>
+              <SortHead sortKey="wa_status" sort={sort} onSort={toggleSort}>
+                WhatsApp status
+              </SortHead>
+              <SortHead sortKey="sentiment" sort={sort} onSort={toggleSort}>
+                Response / Sentiment
+              </SortHead>
               <TableHead>Status log</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
