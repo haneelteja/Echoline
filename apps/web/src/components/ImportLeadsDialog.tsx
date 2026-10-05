@@ -1,5 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { FileUp, Upload } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import {
   applyColumnMapping,
@@ -9,6 +10,9 @@ import {
   type ContactFieldKey,
   type ParsedSheet,
 } from "@/lib/excelImport";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Props {
   pid: string;
@@ -17,7 +21,6 @@ interface Props {
 }
 
 export function ImportLeadsDialog({ pid, onClose, onImported }: Props) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sheet, setSheet] = useState<ParsedSheet | null>(null);
   const [mapping, setMapping] = useState<Record<ContactFieldKey, string | null> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,105 +70,96 @@ export function ImportLeadsDialog({ pid, onClose, onImported }: Props) {
   const rowCount = sheet ? applyColumnMapping(sheet, mapping ?? guessColumnMapping(sheet.headers)).length : 0;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
         {!sheet && (
           <>
-            <h2>Import leads from Excel</h2>
-            <p className="small muted">Upload an .xlsx, .xls, or .csv file with a header row.</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
-              style={{ marginTop: 14 }}
-            />
-            {error && (
-              <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-                {error}
-              </p>
-            )}
-            <div className="row" style={{ marginTop: 18 }}>
-              <button className="btn" onClick={onClose}>
+            <DialogHeader>
+              <DialogTitle>Import leads from Excel</DialogTitle>
+              <DialogDescription>Upload an .xlsx, .xls, or .csv file with a header row.</DialogDescription>
+            </DialogHeader>
+            <label
+              htmlFor="excel-file"
+              className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-6 py-10 text-center transition-colors hover:bg-muted/50"
+            >
+              <FileUp className="h-7 w-7 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">Click to choose a file</span>
+              <span className="text-xs text-muted-foreground">.xlsx, .xls, or .csv</span>
+              <input
+                id="excel-file"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="sr-only"
+                onChange={(e) => e.target.files?.[0] && onFileSelected(e.target.files[0])}
+              />
+            </label>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>
                 Cancel
-              </button>
-            </div>
+              </Button>
+            </DialogFooter>
           </>
         )}
 
         {sheet && mapping && !result && (
           <>
-            <h2>Map your columns</h2>
-            <p className="small muted">
-              We matched what we could from &quot;{sheet.headers.join(", ")}&quot; — adjust any that look wrong. {rowCount} row(s) will be
-              imported.
-            </p>
-            <div style={{ marginTop: 16 }}>
+            <DialogHeader>
+              <DialogTitle>Map your columns</DialogTitle>
+              <DialogDescription>
+                We matched what we could — adjust any that look wrong. <b className="text-foreground">{rowCount}</b> row(s) will be imported.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3">
               {CONTACT_FIELDS.map((field) => (
-                <div className="map-row" key={field.key}>
-                  <label>
+                <div key={field.key} className="grid grid-cols-[150px_1fr] items-center gap-3">
+                  <span className="text-sm font-medium text-foreground">
                     {field.label}
-                    {field.required && " *"}
-                  </label>
-                  <select
-                    value={mapping[field.key] ?? ""}
-                    onChange={(e) => setMapping({ ...mapping, [field.key]: e.target.value || null })}
-                  >
+                    {field.required && <span className="text-destructive"> *</span>}
+                  </span>
+                  <Select value={mapping[field.key] ?? ""} onChange={(e) => setMapping({ ...mapping, [field.key]: e.target.value || null })}>
                     <option value="">— not mapped —</option>
                     {sheet.headers.map((h) => (
                       <option key={h} value={h}>
                         {h}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               ))}
             </div>
-            {!mapping.name && (
-              <p className="small" style={{ color: "var(--bad)" }}>
-                Business name must be mapped to import.
-              </p>
-            )}
-            {error && (
-              <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-                {error}
-              </p>
-            )}
-            <div className="row" style={{ marginTop: 18 }}>
-              <button className="btn primary" onClick={confirmImport} disabled={!mapping.name || importing}>
-                {importing ? "Importing…" : `Import ${rowCount} lead(s)`}
-              </button>
-              <button
-                className="btn"
-                onClick={() => {
-                  setSheet(null);
-                  setMapping(null);
-                }}
-                disabled={importing}
-              >
+            {!mapping.name && <p className="text-sm text-destructive">Business name must be mapped to import.</p>}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setSheet(null); setMapping(null); }} disabled={importing}>
                 Choose a different file
-              </button>
-              <button className="btn" onClick={onClose} disabled={importing}>
+              </Button>
+              <Button variant="outline" onClick={onClose} disabled={importing}>
                 Cancel
-              </button>
-            </div>
+              </Button>
+              <Button onClick={confirmImport} disabled={!mapping.name || importing}>
+                <Upload className="h-4 w-4" />
+                {importing ? "Importing…" : `Import ${rowCount} lead(s)`}
+              </Button>
+            </DialogFooter>
           </>
         )}
 
         {result && (
           <>
-            <h2>Import complete</h2>
-            <p>
-              <b>{result.added}</b> lead(s) added, <b>{result.skipped}</b> skipped as duplicates, <b>{result.failed}</b> failed.
-            </p>
-            <div className="row" style={{ marginTop: 18 }}>
-              <button className="btn primary" onClick={onClose}>
-                Done
-              </button>
-            </div>
+            <DialogHeader>
+              <DialogTitle>Import complete</DialogTitle>
+              <DialogDescription>
+                <b className="text-foreground">{result.added}</b> lead(s) added, <b className="text-foreground">{result.skipped}</b> skipped as
+                duplicates, <b className="text-foreground">{result.failed}</b> failed.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={onClose}>Done</Button>
+            </DialogFooter>
           </>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

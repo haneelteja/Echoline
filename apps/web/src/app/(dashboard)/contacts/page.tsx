@@ -1,9 +1,26 @@
 "use client";
 import { useState } from "react";
-import { statusLabel } from "@echoline/core";
+import { FileSpreadsheet, Plus, Upload } from "lucide-react";
+import { statusLabel, type ContactChannelStatus } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+const TERMINAL_GOOD: ContactChannelStatus[] = ["completed", "replied"];
+const TERMINAL_BAD: ContactChannelStatus[] = ["opted_out", "invalid", "bounced", "failed"];
+
+function statusVariant(status: ContactChannelStatus): "success" | "destructive" | "secondary" | "default" {
+  if (TERMINAL_GOOD.includes(status)) return "success";
+  if (TERMINAL_BAD.includes(status)) return "destructive";
+  if (status === "not_contacted") return "secondary";
+  return "default";
+}
 
 export default function ContactsPage() {
   const { pid, contacts, refreshProjectData } = useWorkspace();
@@ -37,95 +54,95 @@ export default function ContactsPage() {
   }
 
   return (
-    <>
-      <div className="top">
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1>Leads &amp; status</h1>
-          <p>{contacts.length} leads</p>
+          <h1 className="font-display text-2xl font-bold text-foreground">Leads &amp; status</h1>
+          <p className="text-sm text-muted-foreground">{contacts.length} leads</p>
         </div>
-        <div className="row">
-          <button className="btn" onClick={() => setImporting(true)}>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setImporting(true)}>
+            <Upload className="h-4 w-4" />
             Import Excel
-          </button>
-          <button className="btn primary" onClick={() => setAdding((v) => !v)}>
+          </Button>
+          <Button onClick={() => setAdding((v) => !v)}>
+            <Plus className="h-4 w-4" />
             Add lead
-          </button>
+          </Button>
         </div>
       </div>
 
-      {importing && pid && (
-        <ImportLeadsDialog pid={pid} onClose={() => setImporting(false)} onImported={refreshProjectData} />
-      )}
+      {importing && pid && <ImportLeadsDialog pid={pid} onClose={() => setImporting(false)} onImported={refreshProjectData} />}
 
       {adding && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <div className="grid g3">
-            <div className="field">
-              <label htmlFor="n">Business name</label>
-              <input id="n" value={name} onChange={(e) => setName(e.target.value)} />
+        <Card>
+          <CardContent className="pt-6">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="n">Business name</Label>
+                <Input id="n" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="e">Email</Label>
+                <Input id="e" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="p">Phone</Label>
+                <Input id="p" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              </div>
             </div>
-            <div className="field">
-              <label htmlFor="e">Email</label>
-              <input id="e" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div className="field">
-              <label htmlFor="p">Phone</label>
-              <input id="p" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-          </div>
-          <button className="btn primary" onClick={addLead} disabled={!name.trim()}>
-            Save lead
-          </button>
-          {error && (
-            <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-              {error}
-            </p>
-          )}
-        </div>
+            <Button className="mt-4" onClick={addLead} disabled={!name.trim()}>
+              Save lead
+            </Button>
+            {error && <p className="mt-2.5 text-sm text-destructive">{error}</p>}
+          </CardContent>
+        </Card>
       )}
 
       {contacts.length ? (
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Business</th>
-                <th>Category</th>
-                <th>Area</th>
-                <th>Email status</th>
-                <th>WhatsApp status</th>
-                <th>Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contacts.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <b>{c.name}</b>
-                  </td>
-                  <td>{c.category || "—"}</td>
-                  <td>{c.area || "—"}</td>
-                  <td>
-                    <span className="pill e">{statusLabel(c.em_status)}</span>
-                  </td>
-                  <td>
-                    <span className="pill w">{statusLabel(c.wa_status)}</span>
-                  </td>
-                  <td className="small muted">{c.source || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Business</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Area</TableHead>
+              <TableHead>Email status</TableHead>
+              <TableHead>WhatsApp status</TableHead>
+              <TableHead>Source</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {contacts.map((c) => (
+              <TableRow key={c.id}>
+                <TableCell className="font-semibold text-foreground">{c.name}</TableCell>
+                <TableCell className="text-muted-foreground">{c.category || "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{c.area || "—"}</TableCell>
+                <TableCell>
+                  <Badge variant={statusVariant(c.em_status)}>{statusLabel(c.em_status)}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={statusVariant(c.wa_status)}>{statusLabel(c.wa_status)}</Badge>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">{c.source || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       ) : (
-        <div className="empty panel">
-          <h2>No leads in this project</h2>
-          <p>
-            Add a lead by hand, import an Excel file, or connect a <a href="/sources">webhook or website form</a> to import
-            automatically.
-          </p>
-        </div>
+        <Card>
+          <CardHeader className="items-center gap-2 text-center">
+            <FileSpreadsheet className="h-8 w-8 text-muted-foreground" />
+            <h2 className="font-display text-lg font-semibold text-foreground">No leads in this project</h2>
+            <p className="text-sm text-muted-foreground">
+              Add a lead by hand, import an Excel file, or connect a{" "}
+              <a href="/sources" className="text-primary underline underline-offset-4">
+                webhook or website form
+              </a>{" "}
+              to import automatically.
+            </p>
+          </CardHeader>
+        </Card>
       )}
-    </>
+    </div>
   );
 }

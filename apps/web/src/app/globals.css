@@ -1,4 +1,35 @@
 @import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+/* ---------- shadcn/ui tokens (light only) — used by the new Tailwind-based
+   pages/components as they're redesigned. Legacy --bg/--panel/etc. below
+   remain untouched for pages not yet migrated. ---------- */
+@theme inline {
+  --font-sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Bricolage Grotesque", "Manrope", system-ui, sans-serif;
+  --color-background: #ffffff;
+  --color-foreground: #0f1115;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f1115;
+  --color-primary: #4c5bd4;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f4f5f7;
+  --color-secondary-foreground: #0f1115;
+  --color-muted: #f4f5f7;
+  --color-muted-foreground: #6b7280;
+  --color-accent: #f4f5f7;
+  --color-accent-foreground: #0f1115;
+  --color-destructive: #d9405f;
+  --color-destructive-foreground: #ffffff;
+  --color-success: #1e9e64;
+  --color-success-foreground: #ffffff;
+  --color-border: #e5e7eb;
+  --color-input: #e5e7eb;
+  --color-ring: #4c5bd4;
+  --radius-lg: 10px;
+  --radius-md: 8px;
+  --radius-sm: 6px;
+}
 
 :root{
   --bg:#F3F5F8; --panel:#FFFFFF; --ink:#172033; --ink2:#4A5468; --muted:#7A8396; --line:#DFE3EA;

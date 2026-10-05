@@ -373,6 +373,17 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **UI redesign (Tailwind v4 + shadcn-style components) — in progress, user-requested.** Started per
+  explicit confirmation: Linear/Notion-style look, Tailwind + shadcn/ui, light mode only, one page at a
+  time. Added Tailwind v4 (CSS-first config, no tailwind.config needed) alongside the existing
+  handwritten `globals.css` — old CSS is untouched so pages not yet migrated keep working exactly as
+  before. New `components/ui/*` primitives (Button, Input, Label, Card, Badge, Table, Dialog, Select)
+  follow the shadcn pattern (cva variants, Radix for Dialog/Label, a native-`<select>`-based Select to
+  avoid pulling in Radix's heavier positioning engine for simple pick-one-of-few cases). Migrated so
+  far: the dashboard Shell (`layout.tsx` — sidebar nav, project switcher, mobile menu) since it wraps
+  every page, and the Leads page + Excel import dialog in full. Remaining pages (Dashboard, Sequence,
+  Templates, KB, Channels, Sources, Activity, Project settings) still render on the old CSS and will be
+  migrated page-by-page on request.
 - **Excel import on the Leads page — done, user-requested.** Not from the original spec — the user
   asked directly for a way to import an Excel file with column mapping. `apps/web/src/lib/excelImport.ts`
   parses the file client-side with SheetJS (no upload/storage of the raw file), best-guess maps headers
