@@ -373,6 +373,32 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **Leads table: search/sort/filter, per-lead manual send, status log, sentiment — done,
+  user-requested.** Confirmed design: growing dated status history (not a single overwritten value), a
+  proposed default sentiment/pipeline-stage list, Location as a rename of the existing Area field (not
+  a new one), and "send now" picks from existing templates (not freeform text).
+  - Migration `0012_lead_status_log_and_sentiment.sql`: `contacts.sentiment` (plain text, defaults
+    `'Not Contacted'` so every insert path — manual add, Excel import, intake, OneDrive/Sheets sync —
+    gets it for free with no code changes) and a new append-only `lead_status_log` table
+    (contact_id, status, follow_up_date, created_at), RLS'd the same way as `message_events`.
+    `SENTIMENT_VALUES` (`packages/core/src/status.ts`) is a plain exported array, not a DB enum, so the
+    stage list can grow later without a migration.
+  - `apps/api/src/routes/statusLog.ts`: project-wide `GET /status-log` (one request powers the whole
+    table's "latest status" column) plus per-contact `GET`/`POST`.
+  - `apps/api/src/routes/sendNow.ts`: `POST /contacts/:id/send-now` — reuses the exact same
+    rendering/sending logic as `emailWorker.ts`/`whatsappWorker.ts` (template fill, OAuth refresh,
+    Meta-approved-template requirement for WhatsApp cold sends) but deliberately does **not** touch
+    `messages` (sequence-step-unique-constrained) or `contacts.em_stage`/`wa_stage`/`em_status`/
+    `wa_status` — only a `message_events` row (`message_id: null`, `payload.manual: true`) gets logged,
+    so a manual send never collides with or disrupts the automated scheduler's bookkeeping, and can be
+    repeated freely.
+  - Leads page: client-side search (name/email/phone) + sentiment filter + sortable columns (now that
+    the table can really be filtered/sorted/searched, done entirely client-side — the dataset is in the
+    low thousands, no pagination/server-side query needed yet). Removed Category/Area/Source columns,
+    added Location (renders the same `area` field, just relabeled — Category/Area still exist in the
+    data for template `category_lines` logic, just not shown here), Status Log (latest entry + a dialog
+    for full history/adding new entries), and an inline-editable Response/Sentiment dropdown. Per-row
+    Mail/MessageCircle icon buttons open a small dialog to pick a template and send immediately.
 - **UI redesign (Tailwind v4 + shadcn-style components) — in progress, user-requested.** Started per
   explicit confirmation: Linear/Notion-style look, Tailwind + shadcn/ui, light mode only, one page at a
   time. Added Tailwind v4 (CSS-first config, no tailwind.config needed) alongside the existing

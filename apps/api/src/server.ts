@@ -15,6 +15,8 @@ import { trackingRoutes } from "./routes/tracking.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { intakeRoutes } from "./routes/intake.js";
 import { sourcesRoutes } from "./routes/sources.js";
+import { statusLogRoutes } from "./routes/statusLog.js";
+import { sendNowRoutes } from "./routes/sendNow.js";
 
 initSentry();
 
@@ -83,6 +85,8 @@ await app.register(
     await api.register(waTemplatesRoutes);
     await api.register(aiTemplatesRoutes);
     await api.register(activityRoutes);
+    await api.register(statusLogRoutes);
+    await api.register(sendNowRoutes);
   },
   { prefix: "/v1" }
 );

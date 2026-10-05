@@ -41,6 +41,22 @@ export function statusLabel(status: ContactChannelStatus): string {
   return STAGE_LABEL[status as StageStatus] ?? status;
 }
 
+// "Response or Sentiment" — a manually-set sales-pipeline stage, distinct
+// from em_status/wa_status (which track automated sequence progress). Plain
+// text column (not a DB enum) so this list can grow without a migration —
+// validated against this list at the app layer instead.
+export const SENTIMENT_VALUES = [
+  "Not Contacted",
+  "Contacted",
+  "Cold Call Done",
+  "Interested",
+  "Offer Made",
+  "Converted",
+  "Not Interested",
+  "Lost",
+] as const;
+export type Sentiment = (typeof SENTIMENT_VALUES)[number];
+
 // Email delivery tracking: sent | opened | clicked | bounced
 export const EMAIL_TRACK_VALUES = ["sent", "opened", "clicked", "bounced"] as const;
 export type EmailTrack = (typeof EMAIL_TRACK_VALUES)[number];

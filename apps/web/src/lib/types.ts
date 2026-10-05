@@ -65,6 +65,15 @@ export interface ContactRow {
   wa_status: ContactChannelStatus;
   wa_last: string | null;
   wa_track: string | null;
+  sentiment: string;
+}
+
+export interface StatusLogEntry {
+  id: string;
+  contact_id: string;
+  status: string;
+  follow_up_date: string | null;
+  created_at: string;
 }
 
 export interface TemplateRow {

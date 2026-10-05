@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/apiClient";
 import type {
   BrandKbRow, ChannelSettingsRow, ContactRow, KbItemRow, LeadSourceRow,
-  ProjectRow, SequenceSettingsRow, TemplateRow,
+  ProjectRow, SequenceSettingsRow, StatusLogEntry, TemplateRow,
 } from "@/lib/types";
 
 interface WorkspaceState {
@@ -21,6 +21,7 @@ interface WorkspaceState {
   templates: TemplateRow[];
   kb: KbItemRow[];
   sources: LeadSourceRow[];
+  statusLog: StatusLogEntry[];
   refreshProjects: () => Promise<void>;
   refreshProjectData: () => Promise<void>;
 }
@@ -47,6 +48,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [kb, setKb] = useState<KbItemRow[]>([]);
   const [sources, setSources] = useState<LeadSourceRow[]>([]);
+  const [statusLog, setStatusLog] = useState<StatusLogEntry[]>([]);
 
   const refreshProjects = useCallback(async () => {
     setLoadingProjects(true);
@@ -63,7 +65,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     if (!pid) return;
     setLoadingProject(true);
     try {
-      const [seqData, chanData, brandData, contactsData, templatesData, kbData, sourcesData] = await Promise.all([
+      const [seqData, chanData, brandData, contactsData, templatesData, kbData, sourcesData, statusLogData] = await Promise.all([
         apiFetch<SequenceSettingsRow>(`/v1/projects/${pid}/sequence`),
         apiFetch<ChannelSettingsRow>(`/v1/projects/${pid}/channels`),
         apiFetch<BrandKbRow>(`/v1/projects/${pid}/brand`),
@@ -71,6 +73,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         apiFetch<TemplateRow[]>(`/v1/projects/${pid}/templates`),
         apiFetch<KbItemRow[]>(`/v1/projects/${pid}/kb`),
         apiFetch<LeadSourceRow[]>(`/v1/projects/${pid}/sources`),
+        apiFetch<StatusLogEntry[]>(`/v1/projects/${pid}/status-log`),
       ]);
       setSeq(seqData);
       setChannels(chanData);
@@ -79,6 +82,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setTemplates(templatesData);
       setKb(kbData);
       setSources(sourcesData);
+      setStatusLog(statusLogData);
     } finally {
       setLoadingProject(false);
     }
@@ -103,6 +107,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       ["templates", async () => setTemplates(await apiFetch(`/v1/projects/${pid}/templates`))],
       ["kb_items", async () => setKb(await apiFetch(`/v1/projects/${pid}/kb`))],
       ["lead_sources", async () => setSources(await apiFetch(`/v1/projects/${pid}/sources`))],
+      ["lead_status_log", async () => setStatusLog(await apiFetch(`/v1/projects/${pid}/status-log`))],
     ];
     const channel = supabase.channel(`project:${pid}`);
     for (const [table, reload] of tables) {
@@ -134,6 +139,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     templates,
     kb,
     sources,
+    statusLog,
     refreshProjects,
     refreshProjectData,
   };
