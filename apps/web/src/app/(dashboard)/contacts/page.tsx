@@ -48,6 +48,51 @@ function sortValue(c: ContactRow, key: ColumnKey): string {
   return c.name;
 }
 
+/** Defined at module scope deliberately — defining this inside ContactsPage's
+ * render body would make React treat it as a brand-new component type on
+ * every render (every keystroke, every realtime contacts update), forcing a
+ * full unmount+remount of every column's dropdown on each render. That's
+ * exactly the kind of thing that makes a Radix dropdown's click handler miss
+ * — the DOM node it was attached to gets torn down mid-interaction. */
+function ColumnHead({
+  columnKey,
+  label,
+  dataType,
+  options,
+  sort,
+  filterValue,
+  onFilterChange,
+  onSortChange,
+}: {
+  columnKey: ColumnKey;
+  label: string;
+  dataType?: "text" | "select";
+  options?: string[];
+  sort: { key: ColumnKey; dir: "asc" | "desc" } | null;
+  filterValue: string;
+  onFilterChange: (key: ColumnKey, value: string) => void;
+  onSortChange: (key: ColumnKey, dir: SortDirection) => void;
+}) {
+  const dir = sort?.key === columnKey ? sort.dir : null;
+  return (
+    <TableHead>
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        <SortIndicator direction={dir} />
+        <ColumnFilter
+          label={label}
+          dataType={dataType}
+          options={options}
+          filterValue={filterValue}
+          onFilterChange={(v) => onFilterChange(columnKey, v)}
+          sortDirection={dir}
+          onSortChange={(d) => onSortChange(columnKey, d)}
+        />
+      </div>
+    </TableHead>
+  );
+}
+
 export default function ContactsPage() {
   const { pid, contacts, templates, statusLog, refreshProjectData } = useWorkspace();
   const [adding, setAdding] = useState(false);
@@ -132,7 +177,7 @@ export default function ContactsPage() {
       setEmail("");
       setPhone("");
       setAdding(false);
-      await refreshProjectData();
+      // Realtime picks up the new contacts row — see updateSentiment's comment.
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
         setError("You have view-only access and can't add leads.");
@@ -146,32 +191,14 @@ export default function ContactsPage() {
     if (!pid) return;
     setError(null);
     try {
+      // No manual refetch needed — WorkspaceProvider's realtime subscription
+      // already refreshes `contacts` the moment this UPDATE lands, so a
+      // redundant full 8-endpoint refreshProjectData() would just be wasted
+      // work on every single sentiment edit.
       await apiFetch(`/v1/projects/${pid}/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify({ sentiment }) });
-      await refreshProjectData();
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't change sentiment." : "Couldn't update sentiment.");
     }
-  }
-
-  function ColumnHead({ columnKey, label, dataType, options }: { columnKey: ColumnKey; label: string; dataType?: "text" | "select"; options?: string[] }) {
-    const dir = sort?.key === columnKey ? sort.dir : null;
-    return (
-      <TableHead>
-        <div className="flex items-center gap-1">
-          <span>{label}</span>
-          <SortIndicator direction={dir} />
-          <ColumnFilter
-            label={label}
-            dataType={dataType}
-            options={options}
-            filterValue={columnFilters[columnKey]}
-            onFilterChange={(v) => setColumnFilter(columnKey, v)}
-            sortDirection={dir}
-            onSortChange={(d) => setColumnSort(columnKey, d)}
-          />
-        </div>
-      </TableHead>
-    );
   }
 
   return (
@@ -269,11 +296,38 @@ export default function ContactsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <ColumnHead columnKey="name" label="Business" />
-              <ColumnHead columnKey="area" label="Location" />
-              <ColumnHead columnKey="em_status" label="Email status" dataType="select" options={emStatusOptions} />
-              <ColumnHead columnKey="wa_status" label="WhatsApp status" dataType="select" options={waStatusOptions} />
-              <ColumnHead columnKey="sentiment" label="Response / Sentiment" dataType="select" options={[...SENTIMENT_VALUES]} />
+              <ColumnHead columnKey="name" label="Business" sort={sort} filterValue={columnFilters.name} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              <ColumnHead columnKey="area" label="Location" sort={sort} filterValue={columnFilters.area} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              <ColumnHead
+                columnKey="em_status"
+                label="Email status"
+                dataType="select"
+                options={emStatusOptions}
+                sort={sort}
+                filterValue={columnFilters.em_status}
+                onFilterChange={setColumnFilter}
+                onSortChange={setColumnSort}
+              />
+              <ColumnHead
+                columnKey="wa_status"
+                label="WhatsApp status"
+                dataType="select"
+                options={waStatusOptions}
+                sort={sort}
+                filterValue={columnFilters.wa_status}
+                onFilterChange={setColumnFilter}
+                onSortChange={setColumnSort}
+              />
+              <ColumnHead
+                columnKey="sentiment"
+                label="Response / Sentiment"
+                dataType="select"
+                options={[...SENTIMENT_VALUES]}
+                sort={sort}
+                filterValue={columnFilters.sentiment}
+                onFilterChange={setColumnFilter}
+                onSortChange={setColumnSort}
+              />
               <TableHead>Status log</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>

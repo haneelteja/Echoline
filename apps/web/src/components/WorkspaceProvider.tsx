@@ -121,6 +121,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // slice. Simpler and more robust than hand-merging postgres_changes payloads,
   // and RLS still applies to the refetch so a client_viewer only ever sees what
   // they're scoped to.
+  //
+  // Debounced per table: the scheduler can update many individual contacts
+  // rows within the same few seconds (processing a batch of due steps), and
+  // each row UPDATE fires its own postgres_changes event. Without debouncing,
+  // that's a full-contacts-list refetch (and a full re-render of a potentially
+  // 800+ row table) per row instead of once for the whole burst — which is
+  // exactly the kind of thing that makes a page feel unresponsive and can
+  // make an in-progress click/dropdown interaction land mid-re-render.
   useEffect(() => {
     if (!pid) return;
     const tables: [string, () => Promise<void>][] = [
@@ -130,16 +138,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       ["lead_sources", async () => setSources(await apiFetch(`/v1/projects/${pid}/sources`))],
       ["lead_status_log", async () => setStatusLog(await apiFetch(`/v1/projects/${pid}/status-log`))],
     ];
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const channel = supabase.channel(`project:${pid}`);
     for (const [table, reload] of tables) {
-      channel.on(
-        "postgres_changes",
-        { event: "*", schema: "public", table, filter: `project_id=eq.${pid}` },
-        () => reload().catch((e) => console.error(`Failed to refresh ${table} after a realtime change`, e))
-      );
+      channel.on("postgres_changes", { event: "*", schema: "public", table, filter: `project_id=eq.${pid}` }, () => {
+        clearTimeout(timers.get(table));
+        timers.set(
+          table,
+          setTimeout(() => {
+            reload().catch((e) => console.error(`Failed to refresh ${table} after a realtime change`, e));
+          }, 800)
+        );
+      });
     }
     channel.subscribe();
     return () => {
+      for (const t of timers.values()) clearTimeout(t);
       supabase.removeChannel(channel);
     };
   }, [pid, supabase]);

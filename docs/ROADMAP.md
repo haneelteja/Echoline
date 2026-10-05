@@ -373,6 +373,23 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **Fixed: Leads page unresponsive, column filter/sort dropdowns not opening at all.** Root cause was
+  `ColumnHead` (wrapping each column's Radix dropdown) being defined *inside* `ContactsPage`'s render
+  body — the same mistake already fixed once this session for a simpler sort-header component. React
+  treats a function redefined on every render as a brand-new component type, so every render (every
+  keystroke, every realtime contacts update) fully unmounted and remounted all 5 column dropdowns —
+  exactly the kind of thing that makes a click land mid-teardown and silently do nothing. Moved to
+  module scope, taking `sort`/`filterValue`/callbacks as props instead of closures.
+  - Also fixed, found during the same investigation: `WorkspaceProvider`'s realtime subscription
+    refetched a table's full slice on *every individual* `postgres_changes` event with no debouncing —
+    with 818 contacts, a scheduler tick processing several due sends in a row meant several full-table
+    refetches and re-renders firing back-to-back. Now debounced 800ms per table, so a burst of rapid
+    changes collapses into one refetch.
+  - Also cut: `updateSentiment` and `addLead` were calling the full 8-endpoint `refreshProjectData()`
+    after every single edit, even though the realtime subscription already refreshes `contacts`
+    automatically the moment the row changes — pure wasted work on every sentiment click. Removed; the
+    bulk-import dialog and status-log "add update" still call the full refresh explicitly since those
+    are less frequent, bulk-ish actions worth an immediate-certainty refresh.
 - **Fixed: silent empty state when a workspace fetch fails.** This was flagged earlier in the session as
   a latent bug (`WorkspaceProvider.refreshProjectData`'s `Promise.all` — one failing endpoint rejects
   the whole batch, leaving every slice at its stale/empty value with `loadingProject` still correctly
