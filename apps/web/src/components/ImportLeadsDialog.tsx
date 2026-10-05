@@ -34,7 +34,8 @@ export function ImportLeadsDialog({ pid, onClose, onImported }: Props) {
       }
       setSheet(parsed);
       setMapping(guessColumnMapping(parsed.headers));
-    } catch {
+    } catch (e) {
+      console.error("Excel import: failed to parse file", e);
       setError("Couldn't read this file — make sure it's a valid .xlsx/.xls/.csv file.");
     }
   }
@@ -134,7 +135,14 @@ export function ImportLeadsDialog({ pid, onClose, onImported }: Props) {
               <button className="btn primary" onClick={confirmImport} disabled={!mapping.name || importing}>
                 {importing ? "Importing…" : `Import ${rowCount} lead(s)`}
               </button>
-              <button className="btn" onClick={() => setSheet(null)} disabled={importing}>
+              <button
+                className="btn"
+                onClick={() => {
+                  setSheet(null);
+                  setMapping(null);
+                }}
+                disabled={importing}
+              >
                 Choose a different file
               </button>
               <button className="btn" onClick={onClose} disabled={importing}>

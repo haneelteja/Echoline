@@ -7,7 +7,11 @@ export interface ParsedSheet {
 
 export async function parseExcelFile(file: File): Promise<ParsedSheet> {
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
+  // XLSX.read's "array" type means a byte array (Uint8Array) — passing the
+  // raw ArrayBuffer from File.arrayBuffer() directly can silently misparse
+  // into an empty workbook instead of throwing.
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+  if (!workbook.SheetNames.length) throw new Error("No sheets found in this file");
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const values = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
   const [headerRow, ...dataRows] = values;
