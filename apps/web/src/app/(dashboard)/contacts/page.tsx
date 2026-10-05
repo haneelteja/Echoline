@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { FileSpreadsheet, Mail, MessageCircle, MessagesSquare, Plus, Search, Upload, Users, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSpreadsheet, Mail, MessageCircle, MessagesSquare, Plus, Search, Upload, Users, X } from "lucide-react";
 import { SENTIMENT_VALUES, statusLabel, type ContactChannelStatus } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
@@ -105,6 +105,8 @@ export default function ContactsPage() {
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, string>>(EMPTY_FILTERS);
   const [sort, setSort] = useState<{ key: ColumnKey; dir: "asc" | "desc" } | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const [statusLogContact, setStatusLogContact] = useState<ContactRow | null>(null);
   const [sendNow, setSendNow] = useState<{ contact: ContactRow; channel: "email" | "whatsapp" } | null>(null);
@@ -130,10 +132,17 @@ export default function ContactsPage() {
 
   function setColumnFilter(key: ColumnKey, value: string) {
     setColumnFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
   }
 
   function setColumnSort(key: ColumnKey, dir: SortDirection) {
     setSort(dir ? { key, dir } : null);
+    setPage(1);
+  }
+
+  function onSearchChange(value: string) {
+    setSearch(value);
+    setPage(1);
   }
 
   const hasActiveFilters = Boolean(search) || Object.values(columnFilters).some(Boolean) || sort !== null;
@@ -142,6 +151,7 @@ export default function ContactsPage() {
     setSearch("");
     setColumnFilters(EMPTY_FILTERS);
     setSort(null);
+    setPage(1);
   }
 
   const filtered = useMemo(() => {
@@ -164,6 +174,15 @@ export default function ContactsPage() {
     }
     return rows;
   }, [contacts, search, columnFilters, sort]);
+
+  // Pagination keeps the table from ever mounting hundreds of fully-interactive
+  // rows (each with a native <select>, two icon buttons, two badges) in one
+  // React commit — with 800+ leads that was enough synchronous DOM work on
+  // initial render to trip the browser's own "Page Unresponsive" freeze
+  // warning, independent of any app-level bug.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageItems = useMemo(() => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [filtered, currentPage]);
 
   async function addLead() {
     if (!pid || !name.trim()) return;
@@ -232,7 +251,7 @@ export default function ContactsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search name, email, phone…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
+          <Input placeholder="Search name, email, phone…" value={search} onChange={(e) => onSearchChange(e.target.value)} className="pl-8" />
         </div>
         <Button variant="outline" size="sm" onClick={clearFilters} disabled={!hasActiveFilters}>
           <X className="h-3.5 w-3.5" />
@@ -333,7 +352,7 @@ export default function ContactsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((c) => {
+            {pageItems.map((c) => {
               const latest = latestStatusByContact.get(c.id);
               return (
                 <TableRow key={c.id}>
@@ -395,7 +414,30 @@ export default function ContactsPage() {
             })}
           </TableBody>
         </Table>
-      ) : (
+      ) : null}
+
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {pageCount}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={currentPage >= pageCount}>
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!filtered.length && (
         <Card>
           <CardHeader className="items-center gap-2 text-center">
             <FileSpreadsheet className="h-8 w-8 text-muted-foreground" />

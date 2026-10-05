@@ -373,6 +373,14 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **Fixed: browser "Page Unresponsive" warning on the Leads page, immediately on load.** Reviewed the
+  prior fix (`ColumnHead` module-scope move, realtime debounce) for a regression and found none — the
+  actual cause is more fundamental: rendering 800+ fully-interactive rows (each with a native
+  `<select>`, two icon buttons, two badges) in one unvirtualized table is enough synchronous DOM work
+  in a single React commit to cross Chrome's own unresponsiveness threshold, independent of any app
+  bug. Added client-side pagination (50 rows/page, Previous/Next + "Page X of Y") — the table now never
+  mounts more than 50 interactive rows at once. Page resets to 1 whenever search/filter/sort changes so
+  you're never silently looking at an empty page after narrowing results.
 - **Fixed: Leads page unresponsive, column filter/sort dropdowns not opening at all.** Root cause was
   `ColumnHead` (wrapping each column's Radix dropdown) being defined *inside* `ContactsPage`'s render
   body — the same mistake already fixed once this session for a simpler sort-header component. React
