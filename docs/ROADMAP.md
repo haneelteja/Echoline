@@ -373,6 +373,31 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **Visual design pass, matched to a reference repo — done (partial), user-requested.** Cloned
+  `github.com/haneelteja/Sales-Operations-Portal` (a separate shadcn/Tailwind project of the user's) to
+  extract its actual design tokens/markup rather than guessing from a screenshot. It's the *default*
+  shadcn "neutral" palette (not a custom brand theme) — the distinctive "feel" comes from layout/
+  component conventions, not color tokens: white `rounded-xl` cards with a colored **left accent
+  border** (`border-l-4 border-l-{color}-500`) for KPI tiles, large pale icon + bold colored value +
+  tiny uppercase gray label, `shadow-sm` → `shadow-md` on hover, and a soft gradient page backdrop
+  (`from-slate-50 via-blue-50 to-indigo-50`) behind the white cards.
+  - New `components/ui/kpi-card.tsx` replicates that exact left-accent tile recipe.
+  - Applied: gradient backdrop on the dashboard Shell's `<main>` (every page, old and new CSS alike,
+    gets this for free — it only shows through the gaps around existing opaque card backgrounds, zero
+    regression risk), a KPI stat strip (Total/Email sent/WhatsApp sent/Replied) at the top of the Leads
+    page, punchier badge colors (`/10` → `/15` opacity, `font-bold`), and a small "Main navigation"
+    group label above the sidebar nav (the reference uses shadcn's official `Sidebar` component with a
+    `SidebarGroupLabel`; this app's sidebar is hand-built Tailwind, not that component, but the label
+    treatment is replicated).
+  - **Not done — explicitly scoped out this pass, not forgotten:** the reference's per-column
+    filter+sort dropdown (a 3-dot menu in each table header with sort/filter/clear, via a
+    `ColumnFilter` component built on shadcn's `DropdownMenu`) is materially more work than the Leads
+    page's current click-header-to-sort + single global filter, and wasn't built this pass. The
+    Dashboard, Sequence, Templates, KB, Channels, Sources, Activity, and Project settings pages are
+    still on the pre-redesign CSS entirely (Dashboard especially — its custom SVG charts (rings, funnel
+    bars, 14-day trend) are real, working, non-trivial code; reskinning only their outer card chrome to
+    match this look without touching the chart math is a well-scoped next step, not done yet since it
+    couldn't be visually verified without a live login).
 - **Testing-phase send redirect — done, user-requested.** `apps/worker/src/testSendMode.ts` and
   `apps/api/src/testSendMode.ts` (small identical duplicates, same reasoning as other cross-app
   helpers this session): `TEST_SEND_MODE` env var, **defaults to ON** (safe by default — redirect

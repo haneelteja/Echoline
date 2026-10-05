@@ -90,6 +90,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex flex-1 flex-col gap-0.5">
+          <span className="mb-1 px-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Main navigation</span>
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = pathname === href;
             return (
@@ -121,7 +122,9 @@ function Shell({ children }: { children: React.ReactNode }) {
 
       {open && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setOpen(false)} aria-hidden="true" />}
 
-      <main className="min-w-0 flex-1 bg-muted/30 p-5 lg:p-8">{!loadingProjects && projects.length === 0 ? <NoProjects /> : children}</main>
+      <main className="min-w-0 flex-1 bg-gradient-to-br from-slate-50 via-blue-50/60 to-indigo-50/60 p-5 lg:p-8">
+        {!loadingProjects && projects.length === 0 ? <NoProjects /> : children}
+      </main>
     </div>
   );
 }

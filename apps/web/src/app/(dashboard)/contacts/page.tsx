@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileSpreadsheet, Mail, MessageCircle, Plus, Search, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileSpreadsheet, Mail, MessageCircle, MessagesSquare, Plus, Search, Upload, Users } from "lucide-react";
 import { SENTIMENT_VALUES, statusLabel, type ContactChannelStatus } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { KpiCard } from "@/components/ui/kpi-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +75,14 @@ export default function ContactsPage() {
 
   const [statusLogContact, setStatusLogContact] = useState<ContactRow | null>(null);
   const [sendNow, setSendNow] = useState<{ contact: ContactRow; channel: "email" | "whatsapp" } | null>(null);
+
+  const kpis = useMemo(() => {
+    const total = contacts.length;
+    const emailSent = contacts.filter((c) => c.em_stage > 0).length;
+    const waSent = contacts.filter((c) => c.wa_stage > 0).length;
+    const replied = contacts.filter((c) => c.em_status === "replied" || c.wa_status === "replied").length;
+    return { total, emailSent, waSent, replied };
+  }, [contacts]);
 
   const latestStatusByContact = useMemo(() => {
     const map = new Map<string, (typeof statusLog)[number]>();
@@ -155,6 +164,13 @@ export default function ContactsPage() {
             Add lead
           </Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
+        <KpiCard label="Email sent" value={kpis.emailSent} sub={`of ${kpis.total}`} icon={Mail} accent="sky" />
+        <KpiCard label="WhatsApp sent" value={kpis.waSent} sub={`of ${kpis.total}`} icon={MessageCircle} accent="teal" />
+        <KpiCard label="Replied" value={kpis.replied} sub="across both channels" icon={MessagesSquare} accent="emerald" />
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
