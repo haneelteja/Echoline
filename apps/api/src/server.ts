@@ -5,6 +5,7 @@ import { requireAuth } from "./auth.js";
 import { projectRoutes } from "./routes/projects.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { collectionRoutes } from "./routes/collections.js";
+import { contactsImportRoutes } from "./routes/contactsImport.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { waTemplatesRoutes } from "./routes/waTemplates.js";
 import { aiTemplatesRoutes } from "./routes/aiTemplates.js";
@@ -76,6 +77,7 @@ await app.register(
     await api.register(projectRoutes);
     await api.register(settingsRoutes);
     await api.register(collectionRoutes);
+    await api.register(contactsImportRoutes);
     await api.register(connectionRoutes);
     await api.register(sourcesRoutes);
     await api.register(waTemplatesRoutes);

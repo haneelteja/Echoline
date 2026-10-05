@@ -3,10 +3,12 @@ import { useState } from "react";
 import { statusLabel } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
+import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 
 export default function ContactsPage() {
   const { pid, contacts, refreshProjectData } = useWorkspace();
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -42,11 +44,18 @@ export default function ContactsPage() {
           <p>{contacts.length} leads</p>
         </div>
         <div className="row">
+          <button className="btn" onClick={() => setImporting(true)}>
+            Import Excel
+          </button>
           <button className="btn primary" onClick={() => setAdding((v) => !v)}>
             Add lead
           </button>
         </div>
       </div>
+
+      {importing && pid && (
+        <ImportLeadsDialog pid={pid} onClose={() => setImporting(false)} onImported={refreshProjectData} />
+      )}
 
       {adding && (
         <div className="panel" style={{ marginBottom: 16 }}>
@@ -112,7 +121,8 @@ export default function ContactsPage() {
         <div className="empty panel">
           <h2>No leads in this project</h2>
           <p>
-            Add a lead by hand, or connect a <a href="/sources">webhook or website form</a> to import automatically.
+            Add a lead by hand, import an Excel file, or connect a <a href="/sources">webhook or website form</a> to import
+            automatically.
           </p>
         </div>
       )}

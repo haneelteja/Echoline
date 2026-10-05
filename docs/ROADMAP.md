@@ -373,6 +373,15 @@
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
+- **Excel import on the Leads page — done, user-requested.** Not from the original spec — the user
+  asked directly for a way to import an Excel file with column mapping. `apps/web/src/lib/excelImport.ts`
+  parses the file client-side with SheetJS (no upload/storage of the raw file), best-guess maps headers
+  to our fields by case-insensitive alias matching (same style as the OneDrive/Sheets sync's column
+  guesser), and `ImportLeadsDialog.tsx` shows a dropdown-per-field mapping UI pre-filled with those
+  guesses for the user to correct before importing. `POST /v1/projects/:id/contacts/import`
+  (`apps/api/src/routes/contactsImport.ts`) does the actual insert, de-duping against existing contacts
+  using the exact same email/phone rule as `intake.ts`. Deliberately a one-time import (not a saved,
+  re-syncable source) per explicit scope decision — the file itself is never stored.
 - **Real pgvector KB retrieval — done.** `packages/providers/src/ai/openai.ts`: `embedOpenAi` calls
   OpenAI's `text-embedding-3-small` (1536-dim, exact match for the `kb_items.embedding vector(1536)`
   column that's existed since Phase 1). Scoped to OpenAI only — Gemini's embeddings are 768-dim, and
