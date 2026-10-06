@@ -390,6 +390,15 @@
   - **Migration `0013_lead_status_log_project_idx.sql`**: `lead_status_log` only indexed
     `(contact_id, created_at desc)`; the project-wide status-log listing filters by `project_id` and
     orders by `created_at desc`, sequential-scanning without a matching index.
+- **Generic collection API routes bounded — done.** The 5th finding from the architecture review
+  (`apps/api/src/routes/collections.ts` — `contacts`/`templates`/`kb`/`sources` all did
+  `.select("*")` with no `.limit()` at all, truly unbounded). Rather than the breaking
+  `{data, totalCount}` response-shape change the original report sketched, this ships as a
+  **non-breaking** fix: optional `page`/`pageSize` query params (defaulting to 1000, capped at 2000),
+  response shape unchanged (still a bare array), real count surfaced via an `X-Total-Count` header for
+  any future caller that wants it. 1000 is comfortably above every real dataset today (contacts, the
+  largest, sits at ~800), so no frontend changes were needed and nothing's behavior changes — the fix
+  closes the actual risk (a query with no bound at all) without forcing pagination UI work today.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
 - **ESLint set up for the first time — done.** A full connectivity/schema/codebase audit found no

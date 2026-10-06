@@ -7,6 +7,15 @@ interface CollectionConfig {
   orgScoped: boolean; // insert requires org_id (all of ours do)
 }
 
+// Default cap is deliberately generous (comfortably above any real dataset
+// today — the largest, contacts, sits at ~800 rows) so existing callers that
+// don't pass page/pageSize see no behavior change at all. It closes the
+// actual risk (a truly unbounded .select("*") that only gets slower as rows
+// grow) without forcing every caller to adopt pagination today. Callers that
+// DO want real paging can pass page/pageSize and read X-Total-Count.
+const DEFAULT_PAGE_SIZE = 1000;
+const MAX_PAGE_SIZE = 2000;
+
 /**
  * Generic list/create/update/delete routes for project-scoped tables that don't
  * need bespoke validation yet (contacts, templates, kb_items, lead_sources).
@@ -15,8 +24,16 @@ interface CollectionConfig {
 function registerCollection(app: Parameters<FastifyPluginAsync>[0], cfg: CollectionConfig) {
   app.get(`/projects/:id/${cfg.path}`, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { data, error } = await req.supabase.from(cfg.table).select("*").eq("project_id", id);
+    const { page, pageSize } = req.query as { page?: string; pageSize?: string };
+    const p = Math.max(1, parseInt(page ?? "1", 10) || 1);
+    const size = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(pageSize ?? String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE));
+    const { data, error, count } = await req.supabase
+      .from(cfg.table)
+      .select("*", { count: "exact" })
+      .eq("project_id", id)
+      .range((p - 1) * size, p * size - 1);
     if (error) return sendDbError(reply, error);
+    reply.header("X-Total-Count", String(count ?? data?.length ?? 0));
     return data;
   });
 
