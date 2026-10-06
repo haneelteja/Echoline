@@ -371,6 +371,25 @@
   plans, would need a shared store if ever scaled to multiple instances) and accepts an optional
   honeypot field (`website_url`, left empty by real visitors) that silently no-ops instead of creating
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
+- **Performance fixes from the full-stack architecture review — done.** Four of the five findings from a
+  grounded performance audit (every finding cited a real file:line, published as an artifact) — the
+  fifth, pagination on the generic collection API routes (`contacts`/`templates`/`kb`/`sources` all
+  ship every row with no `.limit()`), is a breaking API-shape change deliberately left for its own pass
+  rather than folded in here.
+  - **`WorkspaceProvider`'s context value memoized** (`apps/web/src/components/WorkspaceProvider.tsx`) —
+    it was rebuilt as a fresh object every render, so any single state change (even a debounced realtime
+    update to one slice) re-rendered every consumer across every dashboard page.
+  - **`createAdminClient()` memoized** (`packages/db/src/client.ts`) — was constructing a brand-new
+    `SupabaseClient` on every call; now cached, since its credentials never vary per call (unlike
+    `createAnonClient`, which correctly stays per-call since it carries the caller's own token for RLS).
+    Benefits `apps/api`'s `requireAuth` (runs on every request) and every `apps/worker` job automatically.
+  - **BullMQ repeatable "tick" job retention capped** (`apps/worker/src/index.ts`) —
+    `removeOnComplete: 50, removeOnFail: 50`. Send jobs and manual triggers already had retention caps;
+    this repeatable job didn't, so its run history could accumulate unbounded against the 30MB Redis
+    Cloud free tier migrated to after this session's Redis quota outage.
+  - **Migration `0013_lead_status_log_project_idx.sql`**: `lead_status_log` only indexed
+    `(contact_id, created_at desc)`; the project-wide status-log listing filters by `project_id` and
+    orders by `created_at desc`, sequential-scanning without a matching index.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
 - **ESLint set up for the first time — done.** A full connectivity/schema/codebase audit found no

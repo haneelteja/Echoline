@@ -160,26 +160,51 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const project = projects.find((p) => p.id === pid) ?? null;
 
-  const value: WorkspaceState = {
-    loadingProjects,
-    loadingProject,
-    projectsError,
-    projectDataError,
-    projects,
-    pid,
-    setPid: setPidState,
-    project,
-    seq,
-    channels,
-    brand,
-    contacts,
-    templates,
-    kb,
-    sources,
-    statusLog,
-    refreshProjects,
-    refreshProjectData,
-  };
+  // Memoized so a single slice updating (e.g. a debounced realtime status-log
+  // refresh) doesn't rebuild this object and re-render every consumer of
+  // useWorkspace() across every page — only components reading the slice
+  // that actually changed should re-render.
+  const value = useMemo<WorkspaceState>(
+    () => ({
+      loadingProjects,
+      loadingProject,
+      projectsError,
+      projectDataError,
+      projects,
+      pid,
+      setPid: setPidState,
+      project,
+      seq,
+      channels,
+      brand,
+      contacts,
+      templates,
+      kb,
+      sources,
+      statusLog,
+      refreshProjects,
+      refreshProjectData,
+    }),
+    [
+      loadingProjects,
+      loadingProject,
+      projectsError,
+      projectDataError,
+      projects,
+      pid,
+      project,
+      seq,
+      channels,
+      brand,
+      contacts,
+      templates,
+      kb,
+      sources,
+      statusLog,
+      refreshProjects,
+      refreshProjectData,
+    ]
+  );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

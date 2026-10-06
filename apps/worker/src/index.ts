@@ -23,7 +23,15 @@ async function main() {
   const schedulerQueue = getSchedulerQueue();
   // Re-adding an identical repeatable job on every restart is a no-op in
   // BullMQ (deduped by jobId + repeat pattern), so this is safe to call here.
-  await schedulerQueue.add("tick", {}, { repeat: { every: FIVE_MINUTES_MS }, jobId: "scheduler-tick" });
+  // removeOnComplete/removeOnFail bound its history — unlike the send jobs
+  // and manual triggers (which already cap retention), this repeatable job
+  // had no cap at all, so its completed/failed run history would otherwise
+  // accumulate unbounded against the 30MB Redis Cloud free tier.
+  await schedulerQueue.add(
+    "tick",
+    {},
+    { repeat: { every: FIVE_MINUTES_MS }, jobId: "scheduler-tick", removeOnComplete: 50, removeOnFail: 50 }
+  );
 
   const schedulerWorker = new Worker(
     SCHEDULER_QUEUE,

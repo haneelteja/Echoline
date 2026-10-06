@@ -24,17 +24,27 @@ export function createAnonClient(accessToken?: string): SupabaseClient {
   });
 }
 
+let cachedAdminClient: SupabaseClient | null = null;
+
 /**
  * Service-role client — bypasses RLS entirely. Only use server-side for the
  * credential vault, webhooks, the scheduler worker, and the seed script.
  * Never expose this client or its key to apps/web.
+ *
+ * Memoized — unlike createAnonClient (which must vary per call since it
+ * carries the caller's own access token for RLS), this client's credentials
+ * never change, so building a brand-new SupabaseClient on every single call
+ * (every API request through requireAuth, every worker job) is pure
+ * overhead. Safe to share: it's stateless beyond the fixed service-role key.
  */
 export function createAdminClient(): SupabaseClient {
+  if (cachedAdminClient) return cachedAdminClient;
   const env = readEnv();
   if (!env.serviceRoleKey) {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY must be set to create an admin client");
   }
-  return createClient(env.url, env.serviceRoleKey, {
+  cachedAdminClient = createClient(env.url, env.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  return cachedAdminClient;
 }
