@@ -267,7 +267,7 @@ export default function DashboardPage() {
               <a className="btn" href="/contacts">
                 Add leads
               </a>
-              <a className="btn" href="/templates">
+              <a className="btn" href="/sequence">
                 Templates
               </a>
             </div>

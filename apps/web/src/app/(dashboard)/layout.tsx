@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Users,
   SendHorizontal,
-  FileEdit,
   BookOpen,
   Share2,
   Download,
@@ -26,8 +25,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/contacts", label: "Leads & status", icon: Users },
-  { href: "/sequence", label: "Sequence", icon: SendHorizontal },
-  { href: "/templates", label: "Templates & AI", icon: FileEdit },
+  { href: "/sequence", label: "Sequence & Templates", icon: SendHorizontal },
   { href: "/kb", label: "Knowledge base", icon: BookOpen },
   { href: "/channels", label: "Email & WhatsApp", icon: Share2 },
   { href: "/sources", label: "Lead sources", icon: Download },
