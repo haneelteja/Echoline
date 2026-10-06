@@ -32,11 +32,6 @@ export function oauthProviderMeta(provider: OAuthableProvider): OAuthProviderMet
   return OAUTH_PROVIDERS[provider];
 }
 
-/** @deprecated kept for existing email-only call sites; prefer isOAuthableProvider. */
-export function isEmailOAuthProvider(provider: string): provider is "gmail" | "outlook" {
-  return provider === "gmail" || provider === "outlook";
-}
-
 function apiPublicUrl(): string {
   return process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
 }

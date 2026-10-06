@@ -399,6 +399,22 @@
   any future caller that wants it. 1000 is comfortably above every real dataset today (contacts, the
   largest, sits at ~800), so no frontend changes were needed and nothing's behavior changes — the fix
   closes the actual risk (a query with no bound at all) without forcing pagination UI work today.
+- **Dead-code cleanup — done.** Ran `knip` (static unused-code/dependency analysis) across the whole
+  monorepo and verified every finding by hand before touching anything — several were false positives
+  worth not acting on (see below). Confirmed-dead removed: `isEmailOAuthProvider`
+  (`apps/api/src/oauthProviders.ts`, superseded by `isOAuthableProvider`, zero remaining call sites) and
+  4 unused dependencies — `pino` from `apps/api` (Fastify bundles its own via `app.log`), `zod` from
+  `packages/core` (never imported there), `@radix-ui/react-select` and `autoprefixer` from `apps/web`
+  (the former deliberately unused — a native `<select>`-based `Select` component was built instead;
+  the latter superseded by Tailwind v4's own vendor-prefixing). Re-ran `knip` after to confirm all five
+  findings cleared with no new issues. **Deliberately not removed** (verified as false positives or
+  intentional, not dead): `pino-pretty` (loaded dynamically via a `target: "pino-pretty"` string, so
+  static analysis can't see the reference); `packages/db/src/{generate-link,verify-phase1}.ts`
+  (documented standalone dev/test scripts invoked directly via `tsx`, never meant to be imported); the
+  UI kit's "unused" exports (`CardTitle`, `DialogTrigger`, `badgeVariants`, etc.) — pre-built
+  component-library scaffolding for the page-by-page redesign still in progress (only the Shell + Leads
+  page use the kit so far); unused exported *types* — zero runtime/bundle cost, serve as the canonical
+  data-model documentation regardless of current import count.
 - **`lead_sources.rows_failed` — done.** Now actually incremented on a missing-name validation failure
   or a DB insert error, not just defined-but-unused.
 - **ESLint set up for the first time — done.** A full connectivity/schema/codebase audit found no
