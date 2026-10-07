@@ -17,6 +17,7 @@ import { intakeRoutes } from "./routes/intake.js";
 import { sourcesRoutes } from "./routes/sources.js";
 import { statusLogRoutes } from "./routes/statusLog.js";
 import { sendNowRoutes } from "./routes/sendNow.js";
+import { templateTestSendRoutes } from "./routes/templateTestSend.js";
 
 initSentry();
 
@@ -87,6 +88,7 @@ await app.register(
     await api.register(activityRoutes);
     await api.register(statusLogRoutes);
     await api.register(sendNowRoutes);
+    await api.register(templateTestSendRoutes);
   },
   { prefix: "/v1" }
 );

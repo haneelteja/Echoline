@@ -1,9 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Send } from "lucide-react";
 import { emailHTML, fill } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import type { SequenceSettingsRow, TemplateRow } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type ChannelKey = "em" | "wa";
 type GenChannel = "email" | "whatsapp";
@@ -37,6 +40,10 @@ export default function SequencePage() {
   const [rewriteInstruction, setRewriteInstruction] = useState("");
   const [busy, setBusy] = useState(false);
   const [tplError, setTplError] = useState<string | null>(null);
+
+  const [testEmailTo, setTestEmailTo] = useState("");
+  const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [testEmailError, setTestEmailError] = useState<string | null>(null);
 
   // Syncs the local draft once seq finishes loading (it's null on first
   // render — WorkspaceProvider fetches it async). Calling setState directly
@@ -85,6 +92,9 @@ export default function SequencePage() {
       metaCategory: "MARKETING",
     });
     setTplError(null);
+    setTestEmailTo("");
+    setTestEmailStatus("idle");
+    setTestEmailError(null);
   }
 
   async function createTemplate(ch: ChannelKey, step: number) {
@@ -204,6 +214,28 @@ export default function SequencePage() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendTestEmail() {
+    if (!pid || !editing || !draftTpl || editing.channel !== "email" || !testEmailTo.trim()) return;
+    setTestEmailStatus("sending");
+    setTestEmailError(null);
+    try {
+      await apiFetch(`/v1/projects/${pid}/templates/send-test-email`, {
+        method: "POST",
+        body: JSON.stringify({ to: testEmailTo.trim(), subject: draftTpl.subject, body: draftTpl.body, categoryLines: draftTpl.categoryLines }),
+      });
+      setTestEmailStatus("sent");
+    } catch (e) {
+      setTestEmailStatus("error");
+      setTestEmailError(
+        e instanceof ApiError
+          ? e.body && typeof e.body === "object" && "error" in e.body && (e.body as { error?: string }).error === "no_connection"
+            ? "Connect an email provider under Email & WhatsApp first."
+            : e.message
+          : "Couldn't send test email."
+      );
     }
   }
 
@@ -367,135 +399,175 @@ export default function SequencePage() {
         )}
       </section>
 
-      {generating && (
-        <div className="scrim open" onClick={() => setGenerating(null)}>
-          <div className="drawer open" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-            <header>
-              <h2>Generate {generating === "email" ? "email" : "WhatsApp"} sequence</h2>
-              <button className="btn small" onClick={() => setGenerating(null)} aria-label="Close">
-                ✕
-              </button>
-            </header>
-            <div className="body">
-              <div className="field">
-                <label htmlFor="gg">Goal of this campaign</label>
-                <textarea id="gg" value={genGoal} onChange={(e) => setGenGoal(e.target.value)} placeholder="Book a call or get a reply asking for a free sample" />
-              </div>
-              <div className="field">
-                <label htmlFor="gs">Steps</label>
-                <select id="gs" value={genSteps} onChange={(e) => setGenSteps(Number(e.target.value))}>
-                  <option value={3}>Initial + 2 follow-ups</option>
-                  <option value={2}>Initial + 1 follow-up</option>
-                  <option value={1}>Initial only</option>
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="ge">Anything else (optional)</label>
-                <input id="ge" value={genExtra} onChange={(e) => setGenExtra(e.target.value)} placeholder="e.g. mention Diwali gifting, keep under 90 words" />
-              </div>
-              <p className="hint">Uses this project&apos;s knowledge base and lead categories.</p>
-            </div>
-            <div className="foot">
-              <button className="btn" onClick={() => setGenerating(null)}>
-                Cancel
-              </button>
-              <button className="btn primary" onClick={generate} disabled={busy || !genGoal.trim()}>
-                {busy ? "Generating…" : "Generate"}
-              </button>
-            </div>
+      <Dialog open={!!generating} onOpenChange={(open) => !open && setGenerating(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Generate {generating === "email" ? "email" : "WhatsApp"} sequence</DialogTitle>
+          </DialogHeader>
+          <div className="field">
+            <label htmlFor="gg">Goal of this campaign</label>
+            <textarea id="gg" value={genGoal} onChange={(e) => setGenGoal(e.target.value)} placeholder="Book a call or get a reply asking for a free sample" />
           </div>
-        </div>
-      )}
+          <div className="field">
+            <label htmlFor="gs">Steps</label>
+            <select id="gs" value={genSteps} onChange={(e) => setGenSteps(Number(e.target.value))}>
+              <option value={3}>Initial + 2 follow-ups</option>
+              <option value={2}>Initial + 1 follow-up</option>
+              <option value={1}>Initial only</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="ge">Anything else (optional)</label>
+            <input id="ge" value={genExtra} onChange={(e) => setGenExtra(e.target.value)} placeholder="e.g. mention Diwali gifting, keep under 90 words" />
+          </div>
+          <p className="hint">Uses this project&apos;s knowledge base and lead categories.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGenerating(null)}>
+              Cancel
+            </Button>
+            <Button onClick={generate} disabled={busy || !genGoal.trim()}>
+              {busy ? "Generating…" : "Generate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {editing && draftTpl && (
-        <div className="scrim open" onClick={() => setEditing(null)}>
-          <div className="drawer open" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" style={{ maxWidth: 720 }}>
-            <header>
-              <h2>Edit {editing.channel === "email" ? "email" : "WhatsApp"} template</h2>
-              <button className="btn small" onClick={() => setEditing(null)} aria-label="Close">
-                ✕
-              </button>
-            </header>
-            <div className="body">
-              <div className="field">
-                <label htmlFor="tn">Name</label>
-                <input id="tn" value={draftTpl.name} onChange={(e) => setDraftTpl({ ...draftTpl, name: e.target.value })} />
-              </div>
-              {editing.channel === "email" && (
-                <div className="field">
-                  <label htmlFor="ts">Subject</label>
-                  <input id="ts" value={draftTpl.subject} onChange={(e) => setDraftTpl({ ...draftTpl, subject: e.target.value })} />
-                </div>
-              )}
-              <div className="field">
-                <label htmlFor="tb">Body</label>
-                <textarea id="tb" style={{ minHeight: 160 }} value={draftTpl.body} onChange={(e) => setDraftTpl({ ...draftTpl, body: e.target.value })} />
-              </div>
-              <div className="field">
-                <label htmlFor="tcl">Default category line</label>
-                <input
-                  id="tcl"
-                  value={draftTpl.categoryLines.default ?? ""}
-                  onChange={(e) => setDraftTpl({ ...draftTpl, categoryLines: { ...draftTpl.categoryLines, default: e.target.value } })}
-                  placeholder="used when a lead's category has no specific line"
-                />
-              </div>
-
-              <div className="field">
-                <label htmlFor="rw">Rewrite with AI</label>
-                <div className="row">
-                  <input id="rw" value={rewriteInstruction} onChange={(e) => setRewriteInstruction(e.target.value)} placeholder="Shorter, more direct, mention the 250 ml size…" style={{ flex: 1 }} />
-                  <button className="btn" onClick={rewrite} disabled={busy || !rewriteInstruction.trim()}>
-                    {busy ? "…" : "Rewrite"}
-                  </button>
-                </div>
-              </div>
-
-              {editing.channel === "whatsapp" && (
-                <>
+      <Dialog open={!!(editing && draftTpl)} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="max-w-4xl">
+          {editing && draftTpl && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Edit {editing.channel === "email" ? "email" : "WhatsApp"} template</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+                <div className="flex flex-col gap-3">
                   <div className="field">
-                    <label htmlFor="mn">Meta template name</label>
-                    <input id="mn" value={draftTpl.metaName} onChange={(e) => setDraftTpl({ ...draftTpl, metaName: e.target.value })} placeholder="initial_outreach_v1" />
+                    <label htmlFor="tn">Name</label>
+                    <input id="tn" value={draftTpl.name} onChange={(e) => setDraftTpl({ ...draftTpl, name: e.target.value })} />
+                  </div>
+                  {editing.channel === "email" && (
+                    <div className="field">
+                      <label htmlFor="ts">Subject</label>
+                      <input id="ts" value={draftTpl.subject} onChange={(e) => setDraftTpl({ ...draftTpl, subject: e.target.value })} />
+                    </div>
+                  )}
+                  <div className="field">
+                    <label htmlFor="tb">Body</label>
+                    <textarea id="tb" style={{ minHeight: 160 }} value={draftTpl.body} onChange={(e) => setDraftTpl({ ...draftTpl, body: e.target.value })} />
                   </div>
                   <div className="field">
-                    <label htmlFor="mc">Meta category</label>
-                    <select id="mc" value={draftTpl.metaCategory} onChange={(e) => setDraftTpl({ ...draftTpl, metaCategory: e.target.value as TemplateDraft["metaCategory"] })}>
-                      <option value="MARKETING">Marketing</option>
-                      <option value="UTILITY">Utility</option>
-                      <option value="AUTHENTICATION">Authentication</option>
-                    </select>
+                    <label htmlFor="tcl">Default category line</label>
+                    <input
+                      id="tcl"
+                      value={draftTpl.categoryLines.default ?? ""}
+                      onChange={(e) => setDraftTpl({ ...draftTpl, categoryLines: { ...draftTpl.categoryLines, default: e.target.value } })}
+                      placeholder="used when a lead's category has no specific line"
+                    />
                   </div>
-                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                    <span className="small muted">Status: {editing.meta_status ?? "Draft"}</span>
-                    <button className="btn" onClick={submitToMeta} disabled={busy || !draftTpl.metaName.trim()}>
-                      {busy ? "…" : "Submit to Meta"}
-                    </button>
-                  </div>
-                </>
-              )}
 
-              <div className="field">
-                <label>Preview</label>
-                {editing.channel === "email" && previewHtml ? (
-                  <iframe title="Email preview" srcDoc={previewHtml} style={{ width: "100%", height: 360, border: "1px solid var(--border, #e0e0e0)", borderRadius: 8 }} />
-                ) : (
-                  <div className="panel" style={{ background: "#dcf8c6", whiteSpace: "pre-wrap", fontSize: 14 }}>
-                    {waPreviewText}
+                  <div className="field">
+                    <label htmlFor="rw">Rewrite with AI</label>
+                    <div className="row">
+                      <input
+                        id="rw"
+                        value={rewriteInstruction}
+                        onChange={(e) => setRewriteInstruction(e.target.value)}
+                        placeholder="Shorter, more direct, mention the 250 ml size…"
+                        style={{ flex: 1 }}
+                      />
+                      <Button variant="outline" onClick={rewrite} disabled={busy || !rewriteInstruction.trim()}>
+                        {busy ? "…" : "Rewrite"}
+                      </Button>
+                    </div>
                   </div>
-                )}
+
+                  {editing.channel === "whatsapp" && (
+                    <>
+                      <div className="field">
+                        <label htmlFor="mn">Meta template name</label>
+                        <input id="mn" value={draftTpl.metaName} onChange={(e) => setDraftTpl({ ...draftTpl, metaName: e.target.value })} placeholder="initial_outreach_v1" />
+                      </div>
+                      <div className="field">
+                        <label htmlFor="mc">Meta category</label>
+                        <select id="mc" value={draftTpl.metaCategory} onChange={(e) => setDraftTpl({ ...draftTpl, metaCategory: e.target.value as TemplateDraft["metaCategory"] })}>
+                          <option value="MARKETING">Marketing</option>
+                          <option value="UTILITY">Utility</option>
+                          <option value="AUTHENTICATION">Authentication</option>
+                        </select>
+                      </div>
+                      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                        <span className="small muted">Status: {editing.meta_status ?? "Draft"}</span>
+                        <Button variant="outline" onClick={submitToMeta} disabled={busy || !draftTpl.metaName.trim()}>
+                          {busy ? "…" : "Submit to Meta"}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex min-w-0 flex-col gap-3">
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label>Preview</label>
+                    {editing.channel === "email" && previewHtml ? (
+                      <iframe title="Email preview" srcDoc={previewHtml} style={{ width: "100%", height: 360, border: "1px solid var(--border, #e0e0e0)", borderRadius: 8 }} />
+                    ) : (
+                      <div className="panel" style={{ background: "#dcf8c6", whiteSpace: "pre-wrap", fontSize: 14 }}>
+                        {waPreviewText}
+                      </div>
+                    )}
+                  </div>
+
+                  {editing.channel === "email" && (
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label htmlFor="testTo">Send a test email</label>
+                      <div className="row" style={{ flexWrap: "nowrap" }}>
+                        <input
+                          id="testTo"
+                          type="email"
+                          value={testEmailTo}
+                          onChange={(e) => {
+                            setTestEmailTo(e.target.value);
+                            setTestEmailStatus("idle");
+                          }}
+                          placeholder="you@example.com"
+                          style={{ flex: 1 }}
+                        />
+                        <Button
+                          variant="outline"
+                          onClick={sendTestEmail}
+                          disabled={testEmailStatus === "sending" || !testEmailTo.trim()}
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          {testEmailStatus === "sending" ? "Sending…" : "Send test"}
+                        </Button>
+                      </div>
+                      <p className="hint">Sends this draft as-is, with sample lead data, to the address above.</p>
+                      {testEmailStatus === "sent" && (
+                        <p className="small" style={{ color: "var(--ok)" }}>
+                          Test email sent to {testEmailTo}.
+                        </p>
+                      )}
+                      {testEmailStatus === "error" && (
+                        <p className="small" style={{ color: "var(--bad)" }}>
+                          {testEmailError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="foot">
-              <button className="btn" onClick={() => setEditing(null)}>
-                Cancel
-              </button>
-              <button className="btn primary" onClick={saveTemplate} disabled={busy}>
-                {busy ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditing(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={saveTemplate} disabled={busy}>
+                  {busy ? "Saving…" : "Save"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
