@@ -357,6 +357,8 @@ export default function ContactsPage() {
             <TableRow>
               <ColumnHead columnKey="name" label="Business" sort={sort} filterValue={columnFilters.name} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
               <ColumnHead columnKey="area" label="Location" sort={sort} filterValue={columnFilters.area} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              <TableHead>Email</TableHead>
+              <TableHead>WhatsApp</TableHead>
               <ColumnHead
                 columnKey="em_status"
                 label="Email status"
@@ -398,6 +400,10 @@ export default function ContactsPage() {
                 <TableRow key={c.id}>
                   <TableCell className="font-semibold text-foreground">{c.name}</TableCell>
                   <TableCell className="text-muted-foreground">{c.area || "—"}</TableCell>
+                  <TableCell className="max-w-[180px] truncate text-muted-foreground" title={c.email ?? undefined}>
+                    {c.email || "—"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">{c.phone || "—"}</TableCell>
                   <TableCell>
                     <StatusBadge status={c.em_status} />
                   </TableCell>
