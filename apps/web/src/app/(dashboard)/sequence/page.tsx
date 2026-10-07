@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Send } from "lucide-react";
+import { File, Send, X } from "lucide-react";
 import { emailHTML, fill } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
+import { useKbAssets } from "@/lib/useKbAssets";
+import { AssetPicker } from "@/components/AssetPicker";
 import type { SequenceSettingsRow, TemplateRow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +24,8 @@ interface TemplateDraft {
   categoryLines: Record<string, string>;
   metaName: string;
   metaCategory: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+  headerAssetId: string | null;
+  galleryAssetIds: string[];
 }
 
 export default function SequencePage() {
@@ -44,6 +48,9 @@ export default function SequencePage() {
   const [testEmailTo, setTestEmailTo] = useState("");
   const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [testEmailError, setTestEmailError] = useState<string | null>(null);
+
+  const { assets } = useKbAssets(pid);
+  const [picking, setPicking] = useState<"header" | "gallery" | null>(null);
 
   // Syncs the local draft once seq finishes loading (it's null on first
   // render — WorkspaceProvider fetches it async). Calling setState directly
@@ -90,6 +97,8 @@ export default function SequencePage() {
       categoryLines: t.category_lines ?? {},
       metaName: t.meta_name ?? "",
       metaCategory: "MARKETING",
+      headerAssetId: t.header_asset_id,
+      galleryAssetIds: t.gallery_asset_ids ?? [],
     });
     setTplError(null);
     setTestEmailTo("");
@@ -130,7 +139,14 @@ export default function SequencePage() {
     try {
       await apiFetch(`/v1/projects/${pid}/templates/${editing.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name: draftTpl.name, subject: draftTpl.subject, body: draftTpl.body, category_lines: draftTpl.categoryLines }),
+        body: JSON.stringify({
+          name: draftTpl.name,
+          subject: draftTpl.subject,
+          body: draftTpl.body,
+          category_lines: draftTpl.categoryLines,
+          header_asset_id: draftTpl.headerAssetId,
+          gallery_asset_ids: draftTpl.galleryAssetIds,
+        }),
       });
       setEditing(null);
       await refreshProjectData();
@@ -224,7 +240,13 @@ export default function SequencePage() {
     try {
       await apiFetch(`/v1/projects/${pid}/templates/send-test-email`, {
         method: "POST",
-        body: JSON.stringify({ to: testEmailTo.trim(), subject: draftTpl.subject, body: draftTpl.body, categoryLines: draftTpl.categoryLines }),
+        body: JSON.stringify({
+          to: testEmailTo.trim(),
+          subject: draftTpl.subject,
+          body: draftTpl.body,
+          categoryLines: draftTpl.categoryLines,
+          galleryAssetIds: draftTpl.galleryAssetIds,
+        }),
       });
       setTestEmailStatus("sent");
     } catch (e) {
@@ -248,7 +270,7 @@ export default function SequencePage() {
             contact: { name: "Acme Corp", area: "Gachibowli", category: "Restaurant" },
             template: { categoryLines: draftTpl.categoryLines },
           },
-          { galleryUrls: [] }
+          { galleryUrls: draftTpl.galleryAssetIds.map((aid) => assets.find((a) => a.id === aid)?.url).filter((u): u is string => Boolean(u)) }
         )
       : null;
 
@@ -465,6 +487,69 @@ export default function SequencePage() {
                     />
                   </div>
 
+                  {editing.channel === "email" && (
+                    <div className="field">
+                      <label>Gallery images</label>
+                      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                        {draftTpl.galleryAssetIds.map((aid) => {
+                          const a = assets.find((x) => x.id === aid);
+                          return (
+                            <div key={aid} style={{ position: "relative" }}>
+                              <img
+                                src={a?.url}
+                                alt={a?.name ?? ""}
+                                style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }}
+                              />
+                              <button
+                                className="btn small danger"
+                                style={{ position: "absolute", top: -6, right: -6, padding: 2, borderRadius: "50%" }}
+                                onClick={() => setDraftTpl({ ...draftTpl, galleryAssetIds: draftTpl.galleryAssetIds.filter((id) => id !== aid) })}
+                                aria-label="Remove image"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        <button className="btn small" onClick={() => setPicking("gallery")}>
+                          + Add images
+                        </button>
+                      </div>
+                      <p className="hint">Up to 3 shown in the email, selected from the knowledge base.</p>
+                    </div>
+                  )}
+
+                  {editing.channel === "whatsapp" && (
+                    <div className="field">
+                      <label>Header media</label>
+                      {draftTpl.headerAssetId ? (
+                        (() => {
+                          const a = assets.find((x) => x.id === draftTpl.headerAssetId);
+                          return (
+                            <div className="row" style={{ gap: 10 }}>
+                              {a?.kind === "image" ? (
+                                <img src={a.url} alt={a.name} style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
+                              ) : (
+                                <div className="row" style={{ width: 64, height: 64, alignItems: "center", justifyContent: "center", border: "1px solid var(--line)", borderRadius: 6 }}>
+                                  <File className="h-6 w-6" style={{ color: "var(--muted)" }} />
+                                </div>
+                              )}
+                              <span className="small">{a?.name ?? "Selected file"}</span>
+                              <button className="btn small" onClick={() => setDraftTpl({ ...draftTpl, headerAssetId: null })}>
+                                Remove
+                              </button>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <button className="btn small" onClick={() => setPicking("header")}>
+                          + Choose image or document
+                        </button>
+                      )}
+                      <p className="hint">Shown at the top of the message. Images submit for approval directly; documents too.</p>
+                    </div>
+                  )}
+
                   <div className="field">
                     <label htmlFor="rw">Rewrite with AI</label>
                     <div className="row">
@@ -511,8 +596,21 @@ export default function SequencePage() {
                     {editing.channel === "email" && previewHtml ? (
                       <iframe title="Email preview" srcDoc={previewHtml} style={{ width: "100%", height: 460, border: "1px solid var(--border, #e0e0e0)", borderRadius: 8 }} />
                     ) : (
-                      <div className="panel" style={{ background: "#dcf8c6", whiteSpace: "pre-wrap", fontSize: 14 }}>
-                        {waPreviewText}
+                      <div className="panel" style={{ background: "#dcf8c6", fontSize: 14 }}>
+                        {draftTpl.headerAssetId &&
+                          (() => {
+                            const a = assets.find((x) => x.id === draftTpl.headerAssetId);
+                            if (!a) return null;
+                            return a.kind === "image" ? (
+                              <img src={a.url} alt={a.name} style={{ width: "100%", borderRadius: 6, marginBottom: 8 }} />
+                            ) : (
+                              <div className="row small" style={{ gap: 6, marginBottom: 8 }}>
+                                <File className="h-4 w-4" />
+                                {a.name}
+                              </div>
+                            );
+                          })()}
+                        <div style={{ whiteSpace: "pre-wrap" }}>{waPreviewText}</div>
                       </div>
                     )}
                   </div>
@@ -568,6 +666,21 @@ export default function SequencePage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {draftTpl && (
+        <AssetPicker
+          pid={pid}
+          open={picking !== null}
+          onClose={() => setPicking(null)}
+          mode={picking === "header" ? "single" : "multi"}
+          kindFilter={picking === "header" ? "all" : "image"}
+          initialSelected={picking === "header" ? (draftTpl.headerAssetId ? [draftTpl.headerAssetId] : []) : draftTpl.galleryAssetIds}
+          onConfirm={(ids) => {
+            if (picking === "header") setDraftTpl({ ...draftTpl, headerAssetId: ids[0] ?? null });
+            else setDraftTpl({ ...draftTpl, galleryAssetIds: ids });
+          }}
+        />
+      )}
     </>
   );
 }

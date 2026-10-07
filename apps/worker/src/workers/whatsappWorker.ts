@@ -15,6 +15,15 @@ function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
 }
 
+async function fetchHeaderMedia(
+  db: ReturnType<typeof createAdminClient>,
+  assetId: string | null | undefined
+): Promise<{ url: string; kind: "image" | "document"; name: string } | null> {
+  if (!assetId) return null;
+  const { data } = await db.from("kb_assets").select("url, kind, name").eq("id", assetId).maybeSingle();
+  return (data as { url: string; kind: "image" | "document"; name: string } | null) ?? null;
+}
+
 export function startWhatsAppWorker(): Worker<SendJobData> {
   const worker = new Worker<SendJobData>(SEND_WHATSAPP_QUEUE, processWhatsAppJob, {
     connection: getRedisConnection(),
@@ -136,7 +145,16 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
         variableMap.length > 0
           ? [{ type: "body" as const, parameters: variableMap.map((key) => ({ type: "text" as const, text: fill(`{{${key}}}`, fillCtx) })) }]
           : undefined;
-      result = await sender(credentials, { to: toPhone, templateName: t.meta_name, language: "en", components });
+      const header = await fetchHeaderMedia(db, t.header_asset_id);
+      result = await sender(credentials, {
+        to: toPhone,
+        templateName: t.meta_name,
+        language: "en",
+        components,
+        mediaUrls: header ? [header.url] : undefined,
+        mediaKind: header?.kind,
+        mediaFilename: header?.kind === "document" ? header.name : undefined,
+      });
     }
 
     const totalSteps = ((seq as any)?.wa?.steps?.length as number) ?? step + 1;

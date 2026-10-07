@@ -91,6 +91,7 @@ export const PROVIDERS: ProviderInfo[] = [
       { key: "accessToken", label: "Access token", type: "password" },
       { key: "phoneNumberId", label: "Phone number ID" },
       { key: "wabaId", label: "WhatsApp Business Account ID (optional, for template submission)" },
+      { key: "appId", label: "Facebook App ID (optional, only needed to attach an image/document to a template)" },
     ],
   },
   {

@@ -96,8 +96,33 @@ export interface TemplateRow {
   meta_name: string | null;
   meta_status: string | null;
   ai: boolean;
+  header_asset_id: string | null;
+  gallery_asset_ids: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface KbFolderRow {
+  id: string;
+  org_id: string;
+  project_id: string;
+  parent_id: string | null;
+  name: string;
+  created_at: string;
+}
+
+export interface KbAssetRow {
+  id: string;
+  org_id: string;
+  project_id: string;
+  folder_id: string | null;
+  kind: "image" | "document";
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  storage_path: string;
+  url: string;
+  created_at: string;
 }
 
 export interface ContactRow {

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
-import { submitMetaTemplate } from "@echoline/providers";
+import { submitMetaTemplate, uploadMetaMedia } from "@echoline/providers";
 import { deriveMetaTemplateComponents } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 
@@ -31,13 +31,13 @@ export const waTemplatesRoutes: FastifyPluginAsync = async (app) => {
 
     const { data: template, error: tplErr } = await req.supabase
       .from("templates")
-      .select("id, org_id, channel, body")
+      .select("id, org_id, channel, body, header_asset_id")
       .eq("project_id", projectId)
       .eq("id", templateId)
       .maybeSingle();
     if (tplErr) return sendDbError(reply, tplErr);
     if (!template) return reply.code(404).send({ error: "not_found" });
-    const t = template as { id: string; org_id: string; channel: string; body: string | null };
+    const t = template as { id: string; org_id: string; channel: string; body: string | null; header_asset_id: string | null };
     if (t.channel !== "whatsapp") return reply.code(400).send({ error: "validation_error", message: "Not a WhatsApp template" });
 
     const { data: conn, error: connErr } = await req.supabase
@@ -63,6 +63,24 @@ export const waTemplatesRoutes: FastifyPluginAsync = async (app) => {
 
     const { metaBody, variableMap, examples } = deriveMetaTemplateComponents(t.body ?? "");
 
+    let header: { format: "IMAGE" | "DOCUMENT"; handle: string } | undefined;
+    if (t.header_asset_id) {
+      const { data: asset, error: assetErr } = await req.supabase
+        .from("kb_assets")
+        .select("kind, url, mime_type, size_bytes")
+        .eq("id", t.header_asset_id)
+        .maybeSingle();
+      if (assetErr) return sendDbError(reply, assetErr);
+      if (!asset) return reply.code(400).send({ error: "asset_not_found", message: "This template's attached header asset no longer exists" });
+      const a = asset as { kind: "image" | "document"; url: string; mime_type: string; size_bytes: number };
+      try {
+        const upload = await uploadMetaMedia(credentials, { url: a.url, mimeType: a.mime_type, sizeBytes: a.size_bytes });
+        header = { format: a.kind === "image" ? "IMAGE" : "DOCUMENT", handle: upload.handle };
+      } catch (err) {
+        return reply.code(502).send({ error: "meta_media_upload_failed", message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     let submission;
     try {
       submission = await submitMetaTemplate(credentials, {
@@ -71,6 +89,7 @@ export const waTemplatesRoutes: FastifyPluginAsync = async (app) => {
         category: body.category,
         bodyText: metaBody,
         bodyExamples: examples,
+        header,
       });
     } catch (err) {
       return reply.code(502).send({ error: "meta_submission_failed", message: err instanceof Error ? err.message : String(err) });
@@ -93,6 +112,8 @@ export const waTemplatesRoutes: FastifyPluginAsync = async (app) => {
           category: body.category,
           status: normalizedStatus,
           variable_map: variableMap,
+          header_format: header?.format ?? null,
+          header_handle: header?.handle ?? null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "template_id" }

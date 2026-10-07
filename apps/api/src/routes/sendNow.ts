@@ -40,6 +40,24 @@ function trackingConfig() {
   return { secret: process.env.TRACKING_SIGNING_SECRET ?? "", baseUrl: process.env.API_PUBLIC_URL ?? "" };
 }
 
+async function fetchGalleryUrls(db: ReturnType<typeof createAdminClient>, assetIds: string[] | null | undefined): Promise<string[]> {
+  if (!assetIds?.length) return [];
+  const { data } = await db.from("kb_assets").select("id, url").in("id", assetIds);
+  const byId = new Map(((data as { id: string; url: string }[]) ?? []).map((a) => [a.id, a.url]));
+  // Preserve selection order; silently drops any since-deleted asset rather
+  // than failing the whole send over a missing image.
+  return assetIds.map((id) => byId.get(id)).filter((u): u is string => Boolean(u));
+}
+
+async function fetchHeaderMedia(
+  db: ReturnType<typeof createAdminClient>,
+  assetId: string | null | undefined
+): Promise<{ url: string; kind: "image" | "document"; name: string } | null> {
+  if (!assetId) return null;
+  const { data } = await db.from("kb_assets").select("url, kind, name").eq("id", assetId).maybeSingle();
+  return (data as { url: string; kind: "image" | "document"; name: string } | null) ?? null;
+}
+
 // Same refresh-unconditionally pattern as apps/worker's emailWorker.ts — kept
 // as a small duplicate here rather than touching that already-verified
 // worker code for this unrelated feature.
@@ -139,10 +157,11 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         const trackingKey = `manual-${contactId}-${body.templateId}`;
         const tc = trackingConfig();
         const unsubscribeUrl = buildUnsubscribeUrl(tc, trackingKey);
+        const galleryUrls = await fetchGalleryUrls(db, t.gallery_asset_ids);
         const html = emailHTML(
           { body: t.body ?? "" },
           ctx,
-          { logoUrl: null, galleryUrls: [] },
+          { logoUrl: null, galleryUrls },
           { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, trackingKey), rewriteLink: makeRewriteLink(tc, trackingKey) }
         );
         const text = fillPlainText(t.body ?? "", ctx, { unsubscribeUrl });
@@ -218,7 +237,16 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
           variableMap.length > 0
             ? [{ type: "body" as const, parameters: variableMap.map((key) => ({ type: "text" as const, text: fill(`{{${key}}}`, fillCtx) })) }]
             : undefined;
-        const result = await sender(credentials, { to: toPhone, templateName: t.meta_name, language: "en", components });
+        const header = await fetchHeaderMedia(db, t.header_asset_id);
+        const result = await sender(credentials, {
+          to: toPhone,
+          templateName: t.meta_name,
+          language: "en",
+          components,
+          mediaUrls: header ? [header.url] : undefined,
+          mediaKind: header?.kind,
+          mediaFilename: header?.kind === "document" ? header.name : undefined,
+        });
         providerMessageId = result.providerMessageId;
       }
 

@@ -18,6 +18,7 @@ import { sourcesRoutes } from "./routes/sources.js";
 import { statusLogRoutes } from "./routes/statusLog.js";
 import { sendNowRoutes } from "./routes/sendNow.js";
 import { templateTestSendRoutes } from "./routes/templateTestSend.js";
+import { kbAssetsRoutes } from "./routes/kbAssets.js";
 
 initSentry();
 
@@ -89,6 +90,7 @@ await app.register(
     await api.register(statusLogRoutes);
     await api.register(sendNowRoutes);
     await api.register(templateTestSendRoutes);
+    await api.register(kbAssetsRoutes);
   },
   { prefix: "/v1" }
 );

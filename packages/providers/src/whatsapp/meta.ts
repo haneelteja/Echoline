@@ -8,7 +8,10 @@ function toMetaComponents(message: Parameters<WhatsAppTemplateSender>[1]) {
     ),
   }));
   if (message.mediaUrls?.length && !components.some((c) => c.type === "header")) {
-    components.unshift({ type: "header", parameters: [{ type: "image", image: { link: message.mediaUrls[0] } } as any] });
+    const kind = message.mediaKind ?? "image";
+    const media: Record<string, unknown> = { link: message.mediaUrls[0] };
+    if (kind === "document" && message.mediaFilename) media.filename = message.mediaFilename;
+    components.unshift({ type: "header", parameters: [{ type: kind, [kind]: media }] as any });
   }
   return components;
 }
@@ -55,6 +58,8 @@ export interface MetaTemplateSubmission {
    * (example.body_text) for any template with variables, or review can
    * reject or indefinitely hold the submission. */
   bodyExamples?: string[];
+  /** Attaches a HEADER component — handle comes from uploadMetaMedia(). */
+  header?: { format: "IMAGE" | "DOCUMENT"; handle: string };
 }
 
 export interface MetaTemplateSubmissionResult {
@@ -72,6 +77,11 @@ export async function submitMetaTemplate(
   if (!accessToken || !wabaId) throw new Error("accessToken and wabaId are required to submit a template");
   const bodyComponent: Record<string, unknown> = { type: "BODY", text: submission.bodyText };
   if (submission.bodyExamples?.length) bodyComponent.example = { body_text: [submission.bodyExamples] };
+  const components: Record<string, unknown>[] = [];
+  if (submission.header) {
+    components.push({ type: "HEADER", format: submission.header.format, example: { header_handle: [submission.header.handle] } });
+  }
+  components.push(bodyComponent);
   const res = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -79,7 +89,7 @@ export async function submitMetaTemplate(
       name: submission.name,
       language: submission.language,
       category: submission.category,
-      components: [bodyComponent],
+      components,
     }),
   });
   if (!res.ok) {
@@ -88,6 +98,49 @@ export async function submitMetaTemplate(
   }
   const data = (await res.json()) as { id?: string; status?: string };
   return { metaTemplateId: data.id ?? "", status: data.status ?? "PENDING" };
+}
+
+export interface MetaMediaUpload {
+  handle: string;
+}
+
+/**
+ * Meta's resumable upload API — required to get a `header_handle` for a
+ * WhatsApp template's HEADER media at submission time (unlike a *send*-time
+ * header, which can just be a URL Meta fetches per message, template
+ * registration needs the file re-hosted on Meta's side first). Fetches the
+ * asset's bytes from its own (public) URL, then does Meta's two-step
+ * session+upload flow. Needs an `appId` credential, distinct from wabaId/
+ * phoneNumberId — the Facebook App ID the access token belongs to.
+ */
+export async function uploadMetaMedia(
+  credentials: Record<string, string>,
+  file: { url: string; mimeType: string; sizeBytes: number }
+): Promise<MetaMediaUpload> {
+  const { accessToken, appId } = credentials;
+  if (!accessToken || !appId) throw new Error("accessToken and appId are required to upload template header media");
+
+  const sessionRes = await fetch(
+    `https://graph.facebook.com/v21.0/${appId}/uploads?file_length=${file.sizeBytes}&file_type=${encodeURIComponent(file.mimeType)}&access_token=${encodeURIComponent(accessToken)}`,
+    { method: "POST" }
+  );
+  if (!sessionRes.ok) throw new Error(`Meta upload session failed (${sessionRes.status}): ${await sessionRes.text().catch(() => "")}`);
+  const session = (await sessionRes.json()) as { id?: string };
+  if (!session.id) throw new Error("Meta upload session did not return an id");
+
+  const fileRes = await fetch(file.url);
+  if (!fileRes.ok) throw new Error(`Couldn't fetch asset bytes to upload (${fileRes.status})`);
+  const bytes = await fileRes.arrayBuffer();
+
+  const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${session.id}`, {
+    method: "POST",
+    headers: { Authorization: `OAuth ${accessToken}`, file_offset: "0" },
+    body: Buffer.from(bytes),
+  });
+  if (!uploadRes.ok) throw new Error(`Meta media upload failed (${uploadRes.status}): ${await uploadRes.text().catch(() => "")}`);
+  const result = (await uploadRes.json()) as { h?: string };
+  if (!result.h) throw new Error("Meta media upload did not return a handle");
+  return { handle: result.h };
 }
 
 /** Only valid inside the 24-hour customer-service window — enforced by the caller. */

@@ -60,6 +60,10 @@ export interface WhatsAppTemplateMessage {
   language: string;
   components?: WhatsAppTemplateComponent[];
   mediaUrls?: string[];
+  /** Only meaningful alongside mediaUrls — defaults to "image". */
+  mediaKind?: "image" | "document";
+  /** Required by Meta for a document header; ignored for images. */
+  mediaFilename?: string;
 }
 
 export interface WhatsAppTextMessage {

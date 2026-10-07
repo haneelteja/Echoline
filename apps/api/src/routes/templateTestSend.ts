@@ -47,6 +47,7 @@ const input = z.object({
   subject: z.string().min(1),
   body: z.string().min(1),
   categoryLines: z.record(z.string()).optional(),
+  galleryAssetIds: z.array(z.string().uuid()).optional(),
 });
 
 const SAMPLE_CONTACT = { name: "Acme Corp", contactPerson: null as string | null, area: "Gachibowli", category: "Restaurant" };
@@ -91,13 +92,20 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     const projectBrand = { name: p.name, brand: p.brand, senderName: p.sender_name, website: p.website, waNumber: p.wa_number, accent: p.accent };
     const ctx = { project: projectBrand, contact: SAMPLE_CONTACT, template: { body: body.body, categoryLines: body.categoryLines ?? {} } };
 
+    let galleryUrls: string[] = [];
+    if (body.galleryAssetIds?.length) {
+      const { data: assets } = await req.supabase.from("kb_assets").select("id, url").in("id", body.galleryAssetIds);
+      const byId = new Map(((assets as { id: string; url: string }[]) ?? []).map((a) => [a.id, a.url]));
+      galleryUrls = body.galleryAssetIds.map((aid) => byId.get(aid)).filter((u): u is string => Boolean(u));
+    }
+
     const trackingKey = `test-${id}-${Date.now()}`;
     const tc = trackingConfig();
     const unsubscribeUrl = buildUnsubscribeUrl(tc, trackingKey);
     const html = emailHTML(
       { body: body.body },
       ctx,
-      { logoUrl: null, galleryUrls: [] },
+      { logoUrl: null, galleryUrls },
       { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, trackingKey), rewriteLink: makeRewriteLink(tc, trackingKey) }
     );
     const text = fillPlainText(body.body, ctx, { unsubscribeUrl });

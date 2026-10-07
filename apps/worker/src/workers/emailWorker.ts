@@ -29,6 +29,13 @@ function trackingConfig() {
   return { secret: process.env.TRACKING_SIGNING_SECRET ?? "", baseUrl: process.env.API_PUBLIC_URL ?? "" };
 }
 
+async function fetchGalleryUrls(db: ReturnType<typeof createAdminClient>, assetIds: string[] | null | undefined): Promise<string[]> {
+  if (!assetIds?.length) return [];
+  const { data } = await db.from("kb_assets").select("id, url").in("id", assetIds);
+  const byId = new Map(((data as { id: string; url: string }[]) ?? []).map((a) => [a.id, a.url]));
+  return assetIds.map((aid) => byId.get(aid)).filter((u): u is string => Boolean(u));
+}
+
 /**
  * Gmail/Outlook access tokens expire in ~1 hour; refreshGoogleToken/
  * refreshMicrosoftToken existed but were never actually called anywhere,
@@ -142,10 +149,11 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
 
     const tc = trackingConfig();
     const unsubscribeUrl = buildUnsubscribeUrl(tc, messageId);
+    const galleryUrls = await fetchGalleryUrls(db, tRow.gallery_asset_ids);
     const html = emailHTML(
       t,
       ctx,
-      { logoUrl: null, galleryUrls: [] },
+      { logoUrl: null, galleryUrls },
       { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, messageId), rewriteLink: makeRewriteLink(tc, messageId) }
     );
     const text = fillPlainText(t.body, ctx, { unsubscribeUrl });

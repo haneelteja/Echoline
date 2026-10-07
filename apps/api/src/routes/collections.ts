@@ -85,4 +85,7 @@ export const collectionRoutes: FastifyPluginAsync = async (app) => {
   registerCollection(app, { path: "templates", table: "templates", orgScoped: true });
   registerCollection(app, { path: "kb", table: "kb_items", orgScoped: true });
   registerCollection(app, { path: "sources", table: "lead_sources", orgScoped: true });
+  // Deleting a folder just unfiles its assets (folder_id -> null via FK) —
+  // no storage cleanup needed here, unlike kb/assets (see kbAssets.ts).
+  registerCollection(app, { path: "kb/folders", table: "kb_folders", orgScoped: true });
 };

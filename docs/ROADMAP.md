@@ -597,11 +597,25 @@
 - Meta/Twilio's `sendText()` for session-window free-form replies (distinct from 360Messenger's
   primary-path use of the same function) — still no feature calls it for those two specifically;
   would be for replying within the 24h window after an inbound message, not the main send flow.
-- Meta template header-image attachment from KB, daily status poll (webhook-only currently), and
-  phone number quality-rating/messaging-tier tracking (a different webhook event,
-  `phone_number_quality_update`, never handled) + display on the Channels screen — not built.
+- Daily status poll (webhook-only currently), and phone number quality-rating/messaging-tier tracking
+  (a different webhook event, `phone_number_quality_update`, never handled) + display on the Channels
+  screen — not built.
 - Per-org monthly AI usage limit — not enforced.
 - Billing and plans (if sold as a product)
+- **Knowledge base file assets + Meta template header-image/document attachment — done.** New
+  `kb_folders`/`kb_assets` tables (nested folders) and a public `kb-assets` Storage bucket
+  (`0014_kb_assets.sql`); the browser uploads straight to Storage using its own session (RLS mirrors
+  `can_write_project`, same as every other per-project table) rather than proxying bytes through the
+  API. The Knowledge base page is now a real folder browser (upload, nested folders, delete) instead of
+  a read-only brand-facts panel. The template editor gained an `AssetPicker` dialog (shared with the KB
+  page) for picking images into an email's gallery (`templates.gallery_asset_ids`) or a single
+  image/document into a WhatsApp template's header (`templates.header_asset_id`). WhatsApp header
+  media is wired through both ends: submission (`uploadMetaMedia` — Meta's resumable upload API gets a
+  `header_handle`, stored on `wa_templates`) and send time (`sendMetaTemplate`'s existing `mediaUrls`
+  plumbing, generalized from image-only to image/document via a new `mediaKind`). Needs a Facebook App
+  ID (`appId`) on the Meta connection, which didn't exist as a credential field before this.
+  **Not yet applied**: migration `0014_kb_assets.sql` needs `pnpm db:migrate` run against the live
+  Supabase project (no CLI link available in the environment this was built in).
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
