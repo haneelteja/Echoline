@@ -1,6 +1,22 @@
 "use client";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, FileSpreadsheet, Mail, MessageCircle, MessagesSquare, Plus, Search, Upload, Users, X } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  FileSpreadsheet,
+  Mail,
+  MessageCircle,
+  MessagesSquare,
+  Plus,
+  Search,
+  Send,
+  Upload,
+  Users,
+  X,
+  XCircle,
+} from "lucide-react";
 import { SENTIMENT_VALUES, statusLabel, type ContactChannelStatus } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
@@ -8,16 +24,15 @@ import type { ContactRow } from "@/lib/types";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { StatusLogDialog } from "@/components/StatusLogDialog";
 import { SendNowDialog } from "@/components/SendNowDialog";
+import { SentimentPicker } from "@/components/SentimentPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ColumnFilter, SortIndicator, type SortDirection } from "@/components/ui/column-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
 
 const TERMINAL_GOOD: ContactChannelStatus[] = ["completed", "replied"];
 const TERMINAL_BAD: ContactChannelStatus[] = ["opted_out", "invalid", "bounced", "failed"];
@@ -29,11 +44,23 @@ function statusVariant(status: ContactChannelStatus): "success" | "destructive" 
   return "default";
 }
 
-function sentimentVariant(sentiment: string): "success" | "destructive" | "secondary" | "default" {
-  if (sentiment === "Converted" || sentiment === "Interested" || sentiment === "Offer Made") return "success";
-  if (sentiment === "Not Interested" || sentiment === "Lost") return "destructive";
-  if (sentiment === "Not Contacted") return "secondary";
-  return "default";
+function statusIcon(status: ContactChannelStatus) {
+  if (TERMINAL_GOOD.includes(status)) return CheckCircle2;
+  if (TERMINAL_BAD.includes(status)) return XCircle;
+  if (status === "not_contacted") return Clock;
+  return Send;
+}
+
+/** Status badge with an icon that echoes its color bucket — lets the eye
+ * scan a long column for "stuck"/"failed" rows without reading every label. */
+function StatusBadge({ status }: { status: ContactChannelStatus }) {
+  const Icon = statusIcon(status);
+  return (
+    <Badge variant={statusVariant(status)} className="gap-1 font-semibold">
+      <Icon className="h-3 w-3" />
+      {statusLabel(status)}
+    </Badge>
+  );
 }
 
 type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment";
@@ -351,7 +378,7 @@ export default function ContactsPage() {
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="[&>tr:nth-child(even)]:bg-muted/30">
             {pageItems.map((c) => {
               const latest = latestStatusByContact.get(c.id);
               return (
@@ -359,43 +386,32 @@ export default function ContactsPage() {
                   <TableCell className="font-semibold text-foreground">{c.name}</TableCell>
                   <TableCell className="text-muted-foreground">{c.area || "—"}</TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(c.em_status)}>{statusLabel(c.em_status)}</Badge>
+                    <StatusBadge status={c.em_status} />
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(c.wa_status)}>{statusLabel(c.wa_status)}</Badge>
+                    <StatusBadge status={c.wa_status} />
                   </TableCell>
                   <TableCell>
-                    <Select
-                      value={c.sentiment}
-                      onChange={(e) => updateSentiment(c.id, e.target.value)}
-                      className={cn(
-                        "h-7 w-[150px] text-xs",
-                        sentimentVariant(c.sentiment) === "success" && "border-success/30 text-success",
-                        sentimentVariant(c.sentiment) === "destructive" && "border-destructive/30 text-destructive"
-                      )}
-                    >
-                      {SENTIMENT_VALUES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </Select>
+                    <SentimentPicker value={c.sentiment} onChange={(v) => updateSentiment(c.id, v)} />
                   </TableCell>
                   <TableCell>
                     <button
-                      className="max-w-[180px] text-left text-xs text-muted-foreground hover:text-foreground hover:underline"
+                      className="group flex max-w-[190px] flex-col items-start gap-0.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors hover:bg-accent"
                       onClick={() => setStatusLogContact(c)}
                     >
                       {latest ? (
                         <>
-                          <span className="block truncate text-foreground">{latest.status}</span>
-                          <span>
+                          <span className="block truncate font-medium text-foreground group-hover:text-primary">{latest.status}</span>
+                          <span className="text-muted-foreground">
                             {new Date(latest.created_at).toLocaleDateString()}
                             {latest.follow_up_date && <> · next {new Date(latest.follow_up_date).toLocaleDateString()}</>}
                           </span>
                         </>
                       ) : (
-                        "+ Add update"
+                        <span className="inline-flex items-center gap-1 font-medium text-muted-foreground group-hover:text-primary">
+                          <Plus className="h-3 w-3" />
+                          Add update
+                        </span>
                       )}
                     </button>
                   </TableCell>
