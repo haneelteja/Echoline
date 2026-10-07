@@ -433,13 +433,13 @@ export default function SequencePage() {
       </Dialog>
 
       <Dialog open={!!(editing && draftTpl)} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-6xl max-h-[92vh]">
           {editing && draftTpl && (
             <>
               <DialogHeader>
                 <DialogTitle>Edit {editing.channel === "email" ? "email" : "WhatsApp"} template</DialogTitle>
               </DialogHeader>
-              <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+              <div className="grid gap-8 lg:grid-cols-[1fr_440px]">
                 <div className="flex flex-col gap-3">
                   <div className="field">
                     <label htmlFor="tn">Name</label>
@@ -453,7 +453,7 @@ export default function SequencePage() {
                   )}
                   <div className="field">
                     <label htmlFor="tb">Body</label>
-                    <textarea id="tb" style={{ minHeight: 160 }} value={draftTpl.body} onChange={(e) => setDraftTpl({ ...draftTpl, body: e.target.value })} />
+                    <textarea id="tb" style={{ minHeight: 320 }} value={draftTpl.body} onChange={(e) => setDraftTpl({ ...draftTpl, body: e.target.value })} />
                   </div>
                   <div className="field">
                     <label htmlFor="tcl">Default category line</label>
@@ -509,7 +509,7 @@ export default function SequencePage() {
                   <div className="field" style={{ marginBottom: 0 }}>
                     <label>Preview</label>
                     {editing.channel === "email" && previewHtml ? (
-                      <iframe title="Email preview" srcDoc={previewHtml} style={{ width: "100%", height: 360, border: "1px solid var(--border, #e0e0e0)", borderRadius: 8 }} />
+                      <iframe title="Email preview" srcDoc={previewHtml} style={{ width: "100%", height: 460, border: "1px solid var(--border, #e0e0e0)", borderRadius: 8 }} />
                     ) : (
                       <div className="panel" style={{ background: "#dcf8c6", whiteSpace: "pre-wrap", fontSize: 14 }}>
                         {waPreviewText}
