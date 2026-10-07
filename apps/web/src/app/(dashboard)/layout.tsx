@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -38,7 +38,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const supabase = createClient();
+  const [email, setEmail] = useState<string | null>(null);
+  const supabase = useMemo(() => createClient(), []);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
+  }, [supabase]);
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -111,6 +116,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
+        {email && <p className="mb-2 truncate px-1 text-xs text-muted-foreground" title={email}>{email}</p>}
         <button
           onClick={signOut}
           className="flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
