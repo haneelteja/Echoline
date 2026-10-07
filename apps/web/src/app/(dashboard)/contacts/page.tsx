@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock,
   FileSpreadsheet,
+  Loader2,
   Mail,
   MessageCircle,
   MessagesSquare,
@@ -121,7 +122,7 @@ function ColumnHead({
 }
 
 export default function ContactsPage() {
-  const { pid, contacts, templates, statusLog, refreshProjectData } = useWorkspace();
+  const { pid, contacts, templates, statusLog, loadingProject, refreshProjectData } = useWorkspace();
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
   const [name, setName] = useState("");
@@ -245,6 +246,18 @@ export default function ContactsPage() {
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't change sentiment." : "Couldn't update sentiment.");
     }
+  }
+
+  // contacts defaults to [] before the first fetch completes, which looks
+  // identical to a genuinely empty project — loadingProject disambiguates
+  // "still loading" from "actually zero leads" (same pattern as dashboard/page.tsx).
+  if (loadingProject && contacts.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-24 text-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Loading leads…</p>
+      </div>
+    );
   }
 
   return (

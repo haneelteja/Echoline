@@ -129,9 +129,17 @@ function Shell({ children }: { children: React.ReactNode }) {
       {open && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setOpen(false)} aria-hidden="true" />}
 
       <main className="min-w-0 flex-1 bg-gradient-to-br from-slate-50 via-blue-50/60 to-indigo-50/60 p-5 lg:p-8">
-        {!loadingProjects && projectsError ? (
+        {loadingProjects ? (
+          // Without this branch, children rendered immediately on first
+          // mount with pid/projects still empty — e.g. the Leads page would
+          // show a confident "0 of 0 leads" / "No leads in this project"
+          // during the gap before the first /v1/projects response landed
+          // (worse, longer, during a Render cold start), indistinguishable
+          // from a genuinely empty project.
+          <WorkspaceLoading />
+        ) : projectsError ? (
           <ProjectsLoadError message={projectsError} onRetry={refreshProjects} />
-        ) : !loadingProjects && projects.length === 0 ? (
+        ) : projects.length === 0 ? (
           <NoProjects />
         ) : (
           <>
@@ -140,6 +148,15 @@ function Shell({ children }: { children: React.ReactNode }) {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function WorkspaceLoading() {
+  return (
+    <div className="flex flex-col items-center gap-3 p-12 text-center">
+      <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+      <p className="text-sm text-muted-foreground">Loading your workspace… the server can take up to a minute to wake up if it&apos;s been idle.</p>
     </div>
   );
 }

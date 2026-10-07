@@ -43,7 +43,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [pid, setPidState] = useState<string | null>(null);
 
-  const [loadingProject, setLoadingProject] = useState(false);
+  // Starts true (not false): a page shouldn't treat an empty contacts/sources/kb
+  // array as "genuinely nothing here" before the first fetch has even had a
+  // chance to run — see the loadingProject-guard pattern in contacts/sources
+  // pages below.
+  const [loadingProject, setLoadingProject] = useState(true);
   const [projectDataError, setProjectDataError] = useState<string | null>(null);
   const [seq, setSeq] = useState<SequenceSettingsRow | null>(null);
   const [channels, setChannels] = useState<ChannelSettingsRow | null>(null);

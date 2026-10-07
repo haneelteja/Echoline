@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 type SourceType = "webhook" | "form" | "onedrive" | "google_sheets";
 
 export default function SourcesPage() {
-  const { pid, sources, refreshProjectData } = useWorkspace();
+  const { pid, sources, loadingProject, refreshProjectData } = useWorkspace();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<SourceType>("webhook");
@@ -234,7 +234,9 @@ export default function SourcesPage() {
         </div>
       )}
 
-      {sources.length ? (
+      {loadingProject && sources.length === 0 ? (
+        <p className="muted small">Loading…</p>
+      ) : sources.length ? (
         <div className="tbl-wrap">
           <table>
             <thead>
