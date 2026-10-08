@@ -1,9 +1,13 @@
 name: Keep API warm
 
 # Render's free tier spins echoline-api down after ~15 min of no traffic,
-# causing the first request afterward to cold-start (20-50s). This pings
-# /health often enough to keep it warm. Imperfect (GitHub Actions schedules
-# are best-effort and can slip by a few minutes), but free and simple.
+# causing the first request afterward to cold-start. Observed cold boots
+# have taken 70s+ (slower than Render's typical 20-50s), so --max-time must
+# stay above that or the ping times out and reports "failure" before the
+# server even finishes booting — even though the request still reached it
+# and the server kept booting anyway. This pings /health often enough to
+# keep it warm. Imperfect (GitHub Actions schedules are best-effort and can
+# slip by a few minutes), but free and simple.
 on:
   schedule:
     - cron: "*/10 * * * *"
@@ -14,4 +18,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping echoline-api health endpoint
-        run: curl -fsS --max-time 60 https://echoline-api.onrender.com/health
+        run: curl -fsS --max-time 120 https://echoline-api.onrender.com/health
