@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -40,6 +41,7 @@ export default function ChannelsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [pendingProvider, setPendingProvider] = useState<Record<string, string>>({});
 
   async function refresh() {
     if (!pid) return;
@@ -134,6 +136,16 @@ export default function ChannelsPage() {
     }
   }
 
+  function connectPending(kind: string) {
+    const p = PROVIDERS.find((x) => x.id === pendingProvider[kind]);
+    if (!p) return;
+    if (p.auth === "oauth") startOAuth(p);
+    else {
+      setAdding(p);
+      setCredentials({});
+    }
+  }
+
   const emailConns = connections.filter((c) => c.kind === "email");
   const waConns = connections.filter((c) => c.kind === "whatsapp");
   const aiConns = connections.filter((c) => c.kind === "ai");
@@ -193,19 +205,31 @@ export default function ChannelsPage() {
             )}
           </div>
 
-          <div className="flex flex-col gap-1.5 border-t border-border bg-muted/20 p-4 lg:border-l lg:border-t-0">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add a provider</p>
-            {PROVIDERS.filter((p) => p.kind === kind).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => (p.auth === "oauth" ? startOAuth(p) : (setAdding(p), setCredentials({})))}
-                className="flex items-center justify-between rounded-md px-2.5 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-background"
-              >
-                {p.label}
-                {p.auth === "oauth" ? <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" /> : <Plus className="h-3.5 w-3.5 text-muted-foreground" />}
-              </button>
-            ))}
+          <div className="flex flex-col justify-center gap-2 border-t border-border bg-muted/20 p-4 lg:border-l lg:border-t-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add a provider</p>
+            <Select
+              value={pendingProvider[kind] ?? ""}
+              onChange={(e) => setPendingProvider({ ...pendingProvider, [kind]: e.target.value })}
+            >
+              <option value="">Choose a provider…</option>
+              {PROVIDERS.filter((p) => p.kind === kind).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
+            <Button size="sm" disabled={!pendingProvider[kind]} onClick={() => connectPending(kind)}>
+              {PROVIDERS.find((p) => p.id === pendingProvider[kind])?.auth === "oauth" ? (
+                <>
+                  Continue <ArrowRight className="h-3.5 w-3.5" />
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3.5 w-3.5" />
+                  Connect
+                </>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>
