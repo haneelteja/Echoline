@@ -18,7 +18,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { SENTIMENT_VALUES, statusLabel, type ContactChannelStatus } from "@echoline/core";
+import { normPhone, SENTIMENT_VALUES, statusLabel, validEmail, type ContactChannelStatus } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import type { ContactRow } from "@/lib/types";
@@ -436,10 +436,22 @@ export default function ContactsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" title="Send email now" onClick={() => setSendNow({ contact: c, channel: "email" })}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={validEmail(c.email) ? "Send email now" : "No valid email on file"}
+                        disabled={!validEmail(c.email)}
+                        onClick={() => setSendNow({ contact: c, channel: "email" })}
+                      >
                         <Mail className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" title="Send WhatsApp now" onClick={() => setSendNow({ contact: c, channel: "whatsapp" })}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={normPhone(c.phone) ? "Send WhatsApp now" : "No valid WhatsApp number on file"}
+                        disabled={!normPhone(c.phone)}
+                        onClick={() => setSendNow({ contact: c, channel: "whatsapp" })}
+                      >
                         <MessageCircle className="h-4 w-4" />
                       </Button>
                     </div>
