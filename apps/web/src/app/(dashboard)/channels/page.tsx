@@ -141,58 +141,66 @@ export default function ChannelsPage() {
   function section(kind: "email" | "whatsapp" | "ai", conns: ConnectionRow[]) {
     const { title, icon: Icon } = KIND_META[kind];
     return (
-      <Card key={kind}>
-        <CardHeader className="flex-row items-center gap-2 space-y-0 pb-3">
+      <Card key={kind} className="overflow-hidden">
+        <CardHeader className="flex-row items-center gap-2 space-y-0 border-b border-border bg-muted/30 py-3.5">
           <Icon className="h-4 w-4 text-muted-foreground" />
           <h2 className="font-display text-base font-semibold text-foreground">{title}</h2>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 pt-0">
-          {conns.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {conns.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-semibold text-foreground">{providerInfo(c.provider)?.label ?? c.provider}</TableCell>
-                    <TableCell className="text-muted-foreground">{c.account_label || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[c.status]} className="gap-1" title={c.needs_reconnect_reason ?? undefined}>
-                        {c.status === "connected" ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                        {STATUS_LABEL[c.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1.5">
-                        <Button variant="outline" size="sm" disabled={busyId === c.id} onClick={() => testConnection(c)}>
-                          {busyId === c.id ? "…" : "Test"}
-                        </Button>
-                        <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={busyId === c.id} onClick={() => disconnect(c)}>
-                          Disconnect
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-sm text-muted-foreground">No {title.toLowerCase()} providers connected yet.</p>
+          {conns.length > 0 && (
+            <Badge variant="secondary" className="ml-auto font-normal text-muted-foreground">
+              {conns.length} connected
+            </Badge>
           )}
+        </CardHeader>
+        <CardContent className="grid gap-0 p-0 lg:grid-cols-[1fr_300px]">
+          <div className="flex flex-col justify-center p-5">
+            {conns.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {conns.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-semibold text-foreground">{providerInfo(c.provider)?.label ?? c.provider}</TableCell>
+                      <TableCell className="text-muted-foreground">{c.account_label || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_VARIANT[c.status]} className="gap-1" title={c.needs_reconnect_reason ?? undefined}>
+                          {c.status === "connected" ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                          {STATUS_LABEL[c.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-1.5">
+                          <Button variant="outline" size="sm" disabled={busyId === c.id} onClick={() => testConnection(c)}>
+                            {busyId === c.id ? "…" : "Test"}
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={busyId === c.id} onClick={() => disconnect(c)}>
+                            Disconnect
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-sm text-muted-foreground">No {title.toLowerCase()} providers connected yet.</p>
+            )}
+          </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5 border-t border-border bg-muted/20 p-4 lg:border-l lg:border-t-0">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add a provider</p>
             {PROVIDERS.filter((p) => p.kind === kind).map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => (p.auth === "oauth" ? startOAuth(p) : (setAdding(p), setCredentials({})))}
-                className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-accent"
+                className="flex items-center justify-between rounded-md px-2.5 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-background"
               >
                 {p.label}
                 {p.auth === "oauth" ? <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" /> : <Plus className="h-3.5 w-3.5 text-muted-foreground" />}
@@ -224,7 +232,7 @@ export default function ChannelsPage() {
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading connections…</p>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="flex flex-col gap-5">
           {section("email", emailConns)}
           {section("whatsapp", waConns)}
           {section("ai", aiConns)}
