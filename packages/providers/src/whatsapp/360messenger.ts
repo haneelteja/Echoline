@@ -4,11 +4,7 @@ const BASE_URL = "https://api.360messenger.com";
 
 // 360Messenger is an unofficial WhatsApp-Web-automation API (sends from a
 // personal number, not an official WhatsApp Business number) — no template
-// approval system, just free-form text. Field names below are a best-effort
-// guess from the product's own API reference (phone/message for sendMessage,
-// state for getState) since no live account was available to verify the
-// exact request/response shape against; confirm and fix via a real test
-// connection + send before relying on this for a live campaign.
+// approval system, just free-form text.
 export const test360Messenger: ConnectionTester = async (credentials) => {
   const apiKey = credentials.apiKey;
   if (!apiKey) return { ok: false, error: "apiKey is required" };
@@ -33,10 +29,18 @@ export const test360Messenger: ConnectionTester = async (credentials) => {
 export const send360MessengerText: WhatsAppTextSender = async (credentials, message) => {
   const apiKey = credentials.apiKey;
   if (!apiKey) throw new Error("apiKey is required");
-  const res = await fetch(`${BASE_URL}/v2/sendMessage/`, {
+  // Confirmed against 360Messenger's own n8n integration source
+  // (github.com/360messenger/n8n-nodes-360messenger): the request goes as
+  // multipart/form-data (not JSON) with fields `phonenumber` and `text`, not
+  // `phone`/`message` — mismatching either one gets a bare 400 "Bad Request
+  // Exception" with no further detail from their API.
+  const form = new FormData();
+  form.append("phonenumber", message.to);
+  form.append("text", message.text);
+  const res = await fetch(`${BASE_URL}/v2/sendMessage`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ phone: message.to, message: message.text }),
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
