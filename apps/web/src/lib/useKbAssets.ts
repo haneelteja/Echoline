@@ -108,5 +108,32 @@ export function useKbAssets(pid: string | null) {
     }
   }
 
-  return { folders, assets, loading, uploading, error, setError, refresh, uploadFiles, createFolder, deleteFolder, deleteAsset };
+  // Bulk variants for the Knowledge base page's multi-select toolbar — loop
+  // over the same single-item endpoints (fine at per-project file-library
+  // scale) and refresh once at the end instead of after every item.
+  async function deleteAssets(ids: string[]): Promise<void> {
+    if (!pid || !ids.length) return;
+    try {
+      for (const id of ids) {
+        await apiFetch(`/v1/projects/${pid}/kb/assets/${id}`, { method: "DELETE" });
+      }
+      await refresh();
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't delete files." : "Couldn't delete one or more files.");
+    }
+  }
+
+  async function moveAssets(ids: string[], folderId: string | null): Promise<void> {
+    if (!pid || !ids.length) return;
+    try {
+      for (const id of ids) {
+        await apiFetch(`/v1/projects/${pid}/kb/assets/${id}`, { method: "PATCH", body: JSON.stringify({ folderId }) });
+      }
+      await refresh();
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't move files." : "Couldn't move one or more files.");
+    }
+  }
+
+  return { folders, assets, loading, uploading, error, setError, refresh, uploadFiles, createFolder, deleteFolder, deleteAsset, deleteAssets, moveAssets };
 }

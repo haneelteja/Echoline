@@ -1,11 +1,12 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
-import { ChevronRight, File, FolderPlus, Home, Loader2, Trash2, Upload } from "lucide-react";
+import { Check, ChevronRight, File, FolderPlus, Home, Loader2, Trash2, Upload, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useKbAssets } from "@/lib/useKbAssets";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { KbAssetRow } from "@/lib/types";
+import { Select } from "@/components/ui/select";
+import type { KbAssetRow, KbFolderRow } from "@/lib/types";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -15,10 +16,12 @@ function formatSize(bytes: number): string {
 
 export default function KbPage() {
   const { pid, brand } = useWorkspace();
-  const { folders, assets, loading, uploading, error, uploadFiles, createFolder, deleteFolder, deleteAsset } = useKbAssets(pid);
+  const { folders, assets, loading, uploading, error, uploadFiles, createFolder, deleteFolder, deleteAsset, deleteAssets, moveAssets } = useKbAssets(pid);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [moveTarget, setMoveTarget] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const breadcrumb = useMemo(() => {
@@ -36,6 +39,20 @@ export default function KbPage() {
   const childFolders = folders.filter((f) => f.parent_id === currentFolderId);
   const childAssets = assets.filter((a) => a.folder_id === currentFolderId);
 
+  function goToFolder(id: string | null) {
+    setCurrentFolderId(id);
+    setSelected(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
     await uploadFiles(files, currentFolderId);
@@ -46,6 +63,19 @@ export default function KbPage() {
     await createFolder(newFolderName, currentFolderId);
     setNewFolderName("");
     setAddingFolder(false);
+  }
+
+  async function bulkDelete() {
+    if (!confirm(`Delete ${selected.size} file${selected.size === 1 ? "" : "s"}?`)) return;
+    await deleteAssets([...selected]);
+    setSelected(new Set());
+  }
+
+  async function bulkMove() {
+    if (!moveTarget) return;
+    await moveAssets([...selected], moveTarget === "root" ? null : moveTarget);
+    setSelected(new Set());
+    setMoveTarget("");
   }
 
   return (
@@ -96,14 +126,14 @@ export default function KbPage() {
         </div>
 
         <div className="row small" style={{ gap: 4, marginBottom: 14, color: "var(--muted)" }}>
-          <button className="row small" style={{ gap: 4, color: currentFolderId ? "var(--muted)" : "var(--ink)" }} onClick={() => setCurrentFolderId(null)}>
+          <button className="row small" style={{ gap: 4, color: currentFolderId ? "var(--muted)" : "var(--ink)" }} onClick={() => goToFolder(null)}>
             <Home className="h-3.5 w-3.5" />
             Files
           </button>
           {breadcrumb.map((b, i) => (
             <span key={b.id} className="row small" style={{ gap: 4 }}>
               <ChevronRight className="h-3 w-3" />
-              <button style={{ color: i === breadcrumb.length - 1 ? "var(--ink)" : "var(--muted)" }} onClick={() => setCurrentFolderId(b.id)}>
+              <button style={{ color: i === breadcrumb.length - 1 ? "var(--ink)" : "var(--muted)" }} onClick={() => goToFolder(b.id)}>
                 {b.name}
               </button>
             </span>
@@ -129,6 +159,39 @@ export default function KbPage() {
           </div>
         )}
 
+        {selected.size > 0 && (
+          <div
+            className="row"
+            style={{ justifyContent: "space-between", marginBottom: 14, padding: "10px 14px", borderRadius: 8, background: "var(--bg)", border: "1px solid var(--line)" }}
+          >
+            <span className="small" style={{ fontWeight: 600 }}>
+              {selected.size} selected
+            </span>
+            <div className="row small" style={{ gap: 8 }}>
+              <Select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} style={{ height: 32, fontSize: 13 }}>
+                <option value="">Move to…</option>
+                <option value="root">Files (root)</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {folderPath(f, folders)}
+                  </option>
+                ))}
+              </Select>
+              <Button size="sm" variant="outline" disabled={!moveTarget} onClick={bulkMove}>
+                Move
+              </Button>
+              <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={bulkDelete}>
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                <X className="h-3.5 w-3.5" />
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <p className="small" style={{ color: "var(--bad)", marginBottom: 12 }}>
             {error}
@@ -144,7 +207,7 @@ export default function KbPage() {
             {childFolders.map((f) => {
               const count = folders.filter((x) => x.parent_id === f.id).length + assets.filter((a) => a.folder_id === f.id).length;
               return (
-                <div key={f.id} className="panel" style={{ cursor: "pointer", position: "relative" }} onClick={() => setCurrentFolderId(f.id)}>
+                <div key={f.id} className="panel" style={{ cursor: "pointer", position: "relative" }} onClick={() => goToFolder(f.id)}>
                   <b className="small">📁 {f.name}</b>
                   <div className="small muted">{count ? `${count} item${count === 1 ? "" : "s"}` : "Empty"}</div>
                   <button
@@ -161,7 +224,13 @@ export default function KbPage() {
               );
             })}
             {childAssets.map((a) => (
-              <AssetCard key={a.id} asset={a} onDelete={() => confirm(`Delete "${a.name}"?`) && deleteAsset(a.id)} />
+              <AssetCard
+                key={a.id}
+                asset={a}
+                selected={selected.has(a.id)}
+                onToggle={() => toggleSelected(a.id)}
+                onDelete={() => confirm(`Delete "${a.name}"?`) && deleteAsset(a.id)}
+              />
             ))}
           </div>
         )}
@@ -170,9 +239,52 @@ export default function KbPage() {
   );
 }
 
-function AssetCard({ asset, onDelete }: { asset: KbAssetRow; onDelete: () => void }) {
+function folderPath(f: KbFolderRow, all: KbFolderRow[]): string {
+  const parts = [f.name];
+  let cursor = f.parent_id;
+  while (cursor) {
+    const parent = all.find((x) => x.id === cursor);
+    if (!parent) break;
+    parts.unshift(parent.name);
+    cursor = parent.parent_id;
+  }
+  return parts.join(" / ");
+}
+
+function AssetCard({
+  asset,
+  selected,
+  onToggle,
+  onDelete,
+}: {
+  asset: KbAssetRow;
+  selected: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
   return (
-    <div className="panel" style={{ position: "relative" }}>
+    <div
+      className="panel"
+      style={{ position: "relative", cursor: "pointer", outline: selected ? "2px solid var(--email)" : undefined }}
+      onClick={onToggle}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 10,
+          left: 10,
+          width: 20,
+          height: 20,
+          borderRadius: 5,
+          border: "1.5px solid " + (selected ? "var(--email)" : "var(--line)"),
+          background: selected ? "var(--email)" : "var(--panel)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {selected && <Check className="h-3 w-3" style={{ color: "#fff" }} />}
+      </span>
       {asset.kind === "image" ? (
         <img src={asset.url} alt={asset.name} style={{ width: "100%", height: 110, objectFit: "cover", borderRadius: 8, marginBottom: 8 }} />
       ) : (
@@ -184,7 +296,14 @@ function AssetCard({ asset, onDelete }: { asset: KbAssetRow; onDelete: () => voi
         {asset.name}
       </b>
       <div className="small muted">{formatSize(asset.size_bytes)}</div>
-      <button className="btn small danger" style={{ position: "absolute", top: 10, right: 10 }} onClick={onDelete}>
+      <button
+        className="btn small danger"
+        style={{ position: "absolute", top: 10, right: 10 }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+      >
         <Trash2 className="h-3 w-3" />
       </button>
     </div>

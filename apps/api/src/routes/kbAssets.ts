@@ -12,6 +12,10 @@ const createInput = z.object({
   url: z.string().url(),
 });
 
+const updateInput = z.object({
+  folderId: z.string().uuid().nullable(),
+});
+
 /**
  * Knowledge base file assets (photos/documents selectable from the template
  * editor). The browser uploads bytes straight to Supabase Storage using its
@@ -54,6 +58,25 @@ export const kbAssetsRoutes: FastifyPluginAsync = async (app) => {
       .single();
     if (error) return sendDbError(reply, error);
     return reply.code(201).send(data);
+  });
+
+  // Bulk move (select several assets on the Knowledge base page, move them
+  // all into one folder) calls this once per asset — fine at the scale a
+  // single project's file library runs at, and keeps the server surface to
+  // the same per-row RLS-checked update every other mutation here uses.
+  app.patch("/projects/:projectId/kb/assets/:assetId", async (req, reply) => {
+    const { projectId, assetId } = req.params as { projectId: string; assetId: string };
+    const body = updateInput.parse(req.body);
+    const { data, error } = await req.supabase
+      .from("kb_assets")
+      .update({ folder_id: body.folderId })
+      .eq("project_id", projectId)
+      .eq("id", assetId)
+      .select()
+      .maybeSingle();
+    if (error) return sendDbError(reply, error);
+    if (!data) return reply.code(404).send({ error: "not_found" });
+    return data;
   });
 
   app.delete("/projects/:projectId/kb/assets/:assetId", async (req, reply) => {
