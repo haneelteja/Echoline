@@ -23,7 +23,7 @@ import {
   TEXT_ONLY_WHATSAPP_PROVIDERS,
   type WhatsAppProviderId,
 } from "@echoline/providers";
-import { buildUnsubscribeHeaders, emailHTML, fill, fillPlainText, normPhone, validEmail } from "@echoline/core";
+import { buildUnsubscribeHeaders, emailHTML, fill, fillPlainText, normPhone, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 import { isTestSendMode, testSendEmail, testSendWhatsApp } from "../testSendMode.js";
 
@@ -88,12 +88,118 @@ async function ensureFreshOAuthToken(
 }
 
 /**
- * Manual, instant single-lead send — deliberately outside the sequence
- * engine. Does not touch `messages` (sequence-step-unique-constrained) or
- * contacts.em_stage/wa_stage/em_status/wa_status, so it never collides with
- * or disrupts the automated scheduler's bookkeeping. Only a message_events
- * row (message_id: null) gets logged, which the Activity log already
- * handles fine as a nullable join.
+ * Claims this (contact, channel, step) slot the exact same way the automated
+ * scheduler does (claim_message_send — see 0004_claim_message_send.sql),
+ * after checking the same daily-cap accounting it uses (messages
+ * queued-or-sent today for this channel). A manual send is no longer a
+ * side-channel the scheduler is unaware of: it counts toward today's cap and
+ * occupies the same unique (project,contact,channel,step) slot, so the
+ * scheduler can never double-send a step this route already claimed.
+ */
+async function checkDailyCapAndClaim(
+  db: ReturnType<typeof createAdminClient>,
+  opts: { orgId: string; projectId: string; contactId: string; channel: "em" | "wa"; step: number; dailyCap: number }
+): Promise<{ ok: true; messageId: string } | { ok: false; reason: "daily_cap_reached" | "already_sent" }> {
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const { count } = await db
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", opts.projectId)
+    .eq("channel", opts.channel)
+    .gte("queued_at", todayStart.toISOString());
+  if ((count ?? 0) >= opts.dailyCap) return { ok: false, reason: "daily_cap_reached" };
+
+  const { data: claimed, error } = await db.rpc("claim_message_send", {
+    p_org_id: opts.orgId,
+    p_project_id: opts.projectId,
+    p_contact_id: opts.contactId,
+    p_channel: opts.channel,
+    p_step: opts.step,
+  });
+  if (error) throw error;
+  const claimedId = (claimed as { id?: string } | null)?.id;
+  if (!claimedId) return { ok: false, reason: "already_sent" };
+  return { ok: true, messageId: claimedId };
+}
+
+/** Advances the lead exactly as an automated send would — same newStage/
+ * newStatus derivation as emailWorker.ts/whatsappWorker.ts — plus the
+ * em_manual_last/wa_manual_last marker so the Leads table can show this was
+ * a manual send. Firing this is what lets the scheduler pick up and send the
+ * next follow-up on schedule afterward, instead of the lead being stuck. */
+async function markSent(
+  db: ReturnType<typeof createAdminClient>,
+  opts: {
+    messageId: string;
+    contactId: string;
+    channel: "em" | "wa";
+    step: number;
+    totalSteps: number;
+    providerMessageId: string;
+    providerConnectionId: string;
+    orgId: string;
+    projectId: string;
+    templateId: string;
+    testMode: boolean;
+  }
+): Promise<void> {
+  const newStage = opts.step + 1;
+  const newStatus = newStage >= opts.totalSteps ? "completed" : STAGE_STATUS_KEYS[newStage];
+  const prefix = opts.channel;
+
+  await Promise.all([
+    db
+      .from("messages")
+      .update({ status: "sent", provider_message_id: opts.providerMessageId, provider_connection_id: opts.providerConnectionId, sent_at: new Date().toISOString() })
+      .eq("id", opts.messageId),
+    db
+      .from("contacts")
+      .update({
+        [`${prefix}_stage`]: newStage,
+        [`${prefix}_status`]: newStatus,
+        [`${prefix}_last`]: new Date().toISOString(),
+        [`${prefix}_track`]: "sent",
+        [`${prefix}_manual_last`]: true,
+      })
+      .eq("id", opts.contactId),
+    db.from("message_events").insert({
+      org_id: opts.orgId,
+      project_id: opts.projectId,
+      message_id: opts.messageId,
+      contact_id: opts.contactId,
+      channel: opts.channel,
+      event_type: "sent",
+      payload: { manual: true, templateId: opts.templateId, step: opts.step, providerMessageId: opts.providerMessageId, test: opts.testMode },
+    }),
+  ]);
+}
+
+async function markFailed(
+  db: ReturnType<typeof createAdminClient>,
+  opts: { messageId: string | null; contactId: string; channel: "em" | "wa"; step: number; orgId: string; projectId: string; templateId: string; error: string }
+): Promise<void> {
+  await Promise.all([
+    opts.messageId ? db.from("messages").update({ status: "failed" }).eq("id", opts.messageId) : Promise.resolve(),
+    db.from("message_events").insert({
+      org_id: opts.orgId,
+      project_id: opts.projectId,
+      message_id: opts.messageId,
+      contact_id: opts.contactId,
+      channel: opts.channel,
+      event_type: "failed",
+      payload: { manual: true, templateId: opts.templateId, step: opts.step, error: opts.error },
+    }),
+  ]);
+}
+
+/**
+ * Manual, instant single-lead send. Used to be fully decoupled from the
+ * sequence engine; now claims the same (contact,channel,step) slot and
+ * counts toward the same daily cap as an automated send (see
+ * checkDailyCapAndClaim/markSent above), so a manual send of a lead's next
+ * due step is indistinguishable from the scheduler having sent it — the
+ * scheduler naturally continues with the next follow-up afterward.
  */
 export const sendNowRoutes: FastifyPluginAsync = async (app) => {
   app.post("/projects/:projectId/contacts/:contactId/send-now", async (req, reply) => {
@@ -126,6 +232,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
     const p = project as ProjectRow;
     const t = template as TemplateRow;
     const db = createAdminClient();
+    const channelKind: "em" | "wa" = body.channel === "email" ? "em" : "wa";
 
     const kind = body.channel === "email" ? "email" : "whatsapp";
     const { data: conn, error: connErr } = await db
@@ -137,6 +244,24 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
       .maybeSingle();
     if (connErr) return sendDbError(reply, connErr);
     if (!conn) return reply.code(400).send({ error: "no_connection", message: `No connected ${kind} provider for this project` });
+
+    const { data: seqRow, error: seqErr } = await db.from("sequence_settings").select("daily_cap, em, wa").eq("project_id", projectId).maybeSingle();
+    if (seqErr) return sendDbError(reply, seqErr);
+    const seq = seqRow as { daily_cap: number; em: { steps: unknown[] }; wa: { steps: unknown[] } } | null;
+    const dailyCap = seq?.daily_cap ?? 50;
+    const totalSteps = seq?.[channelKind]?.steps?.length ?? t.step + 1;
+
+    const claim = await checkDailyCapAndClaim(db, { orgId: p.org_id, projectId, contactId, channel: channelKind, step: t.step, dailyCap });
+    if (!claim.ok) {
+      return reply.code(claim.reason === "daily_cap_reached" ? 429 : 409).send({
+        error: claim.reason,
+        message:
+          claim.reason === "daily_cap_reached"
+            ? `This project's daily ${kind} cap (${dailyCap}) has already been reached today.`
+            : "This step has already been sent to this contact.",
+      });
+    }
+    const messageId = claim.messageId;
 
     const projectBrand = { name: p.name, brand: p.brand, senderName: p.sender_name, website: p.website, waNumber: p.wa_number, accent: p.accent };
 
@@ -151,18 +276,14 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         // apps/worker/src/workers/emailWorker.ts.
         const contactCtx = { name: c.name, contactPerson: c.contact_person, area: c.area, category: c.category };
         const ctx = { project: projectBrand, contact: contactCtx, template: { body: t.body ?? "", categoryLines: t.category_lines ?? {} } };
-        // messageId isn't a real messages row here, but the tracking/unsub
-        // links still need *some* stable id to key off of — contactId+templateId
-        // is unique enough for this one-off send.
-        const trackingKey = `manual-${contactId}-${body.templateId}`;
         const tc = trackingConfig();
-        const unsubscribeUrl = buildUnsubscribeUrl(tc, trackingKey);
+        const unsubscribeUrl = buildUnsubscribeUrl(tc, messageId);
         const galleryUrls = await fetchGalleryUrls(db, t.gallery_asset_ids);
         const html = emailHTML(
           { body: t.body ?? "" },
           ctx,
           { logoUrl: null, galleryUrls },
-          { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, trackingKey), rewriteLink: makeRewriteLink(tc, trackingKey) }
+          { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, messageId), rewriteLink: makeRewriteLink(tc, messageId) }
         );
         const text = fillPlainText(t.body ?? "", ctx, { unsubscribeUrl });
         let subject = fill(t.subject, ctx);
@@ -186,14 +307,18 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
 
         const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers });
 
-        await db.from("message_events").insert({
-          org_id: p.org_id,
-          project_id: projectId,
-          message_id: null,
-          contact_id: contactId,
+        await markSent(db, {
+          messageId,
+          contactId,
           channel: "em",
-          event_type: "sent",
-          payload: { manual: true, templateId: body.templateId, step: t.step, providerMessageId: result.providerMessageId, test: testMode },
+          step: t.step,
+          totalSteps,
+          providerMessageId: result.providerMessageId,
+          providerConnectionId: (conn as any).id,
+          orgId: p.org_id,
+          projectId,
+          templateId: body.templateId,
+          testMode,
         });
         return { ok: true };
       }
@@ -250,27 +375,23 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         providerMessageId = result.providerMessageId;
       }
 
-      await db.from("message_events").insert({
-        org_id: p.org_id,
-        project_id: projectId,
-        message_id: null,
-        contact_id: contactId,
+      await markSent(db, {
+        messageId,
+        contactId,
         channel: "wa",
-        event_type: "sent",
-        payload: { manual: true, templateId: body.templateId, step: t.step, providerMessageId, test: testMode },
+        step: t.step,
+        totalSteps,
+        providerMessageId,
+        providerConnectionId: (conn as any).id,
+        orgId: p.org_id,
+        projectId,
+        templateId: body.templateId,
+        testMode,
       });
       return { ok: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await db.from("message_events").insert({
-        org_id: p.org_id,
-        project_id: projectId,
-        message_id: null,
-        contact_id: contactId,
-        channel: body.channel === "email" ? "em" : "wa",
-        event_type: "failed",
-        payload: { manual: true, templateId: body.templateId, step: t.step, error: message },
-      });
+      await markFailed(db, { messageId, contactId, channel: channelKind, step: t.step, orgId: p.org_id, projectId, templateId: body.templateId, error: message });
       return reply.code(502).send({ error: "send_failed", message });
     }
   });

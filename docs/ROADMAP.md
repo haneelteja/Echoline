@@ -527,11 +527,11 @@
     table's "latest status" column) plus per-contact `GET`/`POST`.
   - `apps/api/src/routes/sendNow.ts`: `POST /contacts/:id/send-now` — reuses the exact same
     rendering/sending logic as `emailWorker.ts`/`whatsappWorker.ts` (template fill, OAuth refresh,
-    Meta-approved-template requirement for WhatsApp cold sends) but deliberately does **not** touch
-    `messages` (sequence-step-unique-constrained) or `contacts.em_stage`/`wa_stage`/`em_status`/
-    `wa_status` — only a `message_events` row (`message_id: null`, `payload.manual: true`) gets logged,
-    so a manual send never collides with or disrupts the automated scheduler's bookkeeping, and can be
-    repeated freely.
+    Meta-approved-template requirement for WhatsApp cold sends). Originally deliberately decoupled from
+    `messages`/`contacts.em_stage`/`wa_stage`/`em_status`/`wa_status` so it could never collide with the
+    scheduler; **changed by later product decision** — see the dedicated entry below — to claim the same
+    slot and advance stage like an automated send, specifically so the scheduler continues the sequence
+    afterward instead of the lead being stuck.
   - Leads page: client-side search (name/email/phone) + sentiment filter + sortable columns (now that
     the table can really be filtered/sorted/searched, done entirely client-side — the dataset is in the
     low thousands, no pagination/server-side query needed yet). Removed Category/Area/Source columns,
@@ -614,8 +614,29 @@
   `header_handle`, stored on `wa_templates`) and send time (`sendMetaTemplate`'s existing `mediaUrls`
   plumbing, generalized from image-only to image/document via a new `mediaKind`). Needs a Facebook App
   ID (`appId`) on the Meta connection, which didn't exist as a credential field before this.
-  **Not yet applied**: migration `0014_kb_assets.sql` needs `pnpm db:migrate` run against the live
-  Supabase project (no CLI link available in the environment this was built in).
+  Migration `0014_kb_assets.sql` applied to the live Supabase project.
+- **Fixed: 360Messenger sends always failed with a bare 400 "Bad Request Exception."** The original
+  code (shipped with a comment admitting the request shape was an unverified guess) sent JSON with
+  `{phone, message}`; confirmed against 360Messenger's own n8n integration source
+  (github.com/360messenger/n8n-nodes-360messenger) that the real API takes `multipart/form-data` with
+  `{phonenumber, text}`. Phone formatting itself was already correct.
+- **"Send now" (manual per-lead send) now integrates with the sequence engine instead of bypassing it —
+  product decision, changing the original Phase 7 design documented above.** Previously deliberately
+  decoupled (no `messages` row, no `contacts.em_stage`/`wa_stage` update) so a manual send could never
+  disrupt the scheduler's bookkeeping — but that meant a manually-sent lead's follow-ups never continued
+  automatically, and the Leads table kept showing "Not contacted" after a real send.
+  `apps/api/src/routes/sendNow.ts` now: (1) checks the same today's-messages-per-channel daily cap the
+  scheduler enforces, returning `429 daily_cap_reached` if it's full; (2) claims the slot via the same
+  `claim_message_send` RPC the workers use (returning `409 already_sent` if that exact step was already
+  sent to this contact — manual or automated); (3) on success, advances
+  `contacts.em_stage`/`wa_stage`/`em_status`/`wa_status`/`em_last`/`wa_last` exactly like
+  `emailWorker.ts`/`whatsappWorker.ts` do, keyed off the *sent template's own step number* (so manually
+  sending Follow-up 2 sets the lead's stage as if Follow-up 2 just happened, regardless of what stage it
+  was at before) — the scheduler then naturally sends the next follow-up on schedule. Two new boolean
+  columns, `contacts.em_manual_last`/`wa_manual_last` (migration `0015_manual_send_integration.sql`,
+  applied), mark whether the most recent send on each channel was manual vs automated — surfaced in the
+  Leads table as a small "Manual" chip next to the status badge, distinct from `em_track`/`wa_track`
+  (which track delivery status, not who triggered the send).
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.

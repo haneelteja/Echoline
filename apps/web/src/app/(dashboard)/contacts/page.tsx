@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock,
   FileSpreadsheet,
+  Hand,
   Loader2,
   Mail,
   MessageCircle,
@@ -54,14 +55,26 @@ function statusIcon(status: ContactChannelStatus) {
 }
 
 /** Status badge with an icon that echoes its color bucket — lets the eye
- * scan a long column for "stuck"/"failed" rows without reading every label. */
-function StatusBadge({ status }: { status: ContactChannelStatus }) {
+ * scan a long column for "stuck"/"failed" rows without reading every label.
+ * `manual` shows a small "Manually sent" chip next to it when the most
+ * recent send for this channel was a one-off "Send now" rather than the
+ * automated sequence — they now advance stage/status identically, so this
+ * is purely informational, not a different status. */
+function StatusBadge({ status, manual }: { status: ContactChannelStatus; manual?: boolean }) {
   const Icon = statusIcon(status);
   return (
-    <Badge variant={statusVariant(status)} className="gap-1 font-semibold">
-      <Icon className="h-3 w-3" />
-      {statusLabel(status)}
-    </Badge>
+    <div className="flex items-center gap-1.5">
+      <Badge variant={statusVariant(status)} className="gap-1 font-semibold">
+        <Icon className="h-3 w-3" />
+        {statusLabel(status)}
+      </Badge>
+      {manual && (
+        <Badge variant="outline" className="gap-1 text-muted-foreground" title="Most recently sent manually, via Send now">
+          <Hand className="h-3 w-3" />
+          Manual
+        </Badge>
+      )}
+    </div>
   );
 }
 
@@ -463,10 +476,10 @@ export default function ContactsPage() {
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">{c.phone || "—"}</TableCell>
                   <TableCell>
-                    <StatusBadge status={c.em_status} />
+                    <StatusBadge status={c.em_status} manual={c.em_manual_last} />
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={c.wa_status} />
+                    <StatusBadge status={c.wa_status} manual={c.wa_manual_last} />
                   </TableCell>
                   <TableCell>
                     <SentimentPicker value={c.sentiment} onChange={(v) => updateSentiment(c.id, v)} />

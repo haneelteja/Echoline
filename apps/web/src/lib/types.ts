@@ -61,10 +61,12 @@ export interface ContactRow {
   em_status: ContactChannelStatus;
   em_last: string | null;
   em_track: string | null;
+  em_manual_last: boolean;
   wa_stage: number;
   wa_status: ContactChannelStatus;
   wa_last: string | null;
   wa_track: string | null;
+  wa_manual_last: boolean;
   sentiment: string;
 }
 

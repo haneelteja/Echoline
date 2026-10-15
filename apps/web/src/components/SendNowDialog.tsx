@@ -54,7 +54,10 @@ export function SendNowDialog({ pid, contactId, contactName, channel, templates,
             <Icon className="h-4 w-4" />
             Send {channel === "email" ? "email" : "WhatsApp"} now — {contactName}
           </DialogTitle>
-          <DialogDescription>Sends immediately, outside the normal sequence timing.</DialogDescription>
+          <DialogDescription>
+            Sends immediately, outside the normal schedule timing — but still counts as that step happening, so the next
+            follow-up will go out on schedule afterward.
+          </DialogDescription>
         </DialogHeader>
 
         {!sent ? (
