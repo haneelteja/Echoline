@@ -6,6 +6,12 @@ import type { KbAssetRow, KbFolderRow } from "@/lib/types";
 
 const BUCKET = "kb-assets";
 
+export interface UploadItem {
+  name: string;
+  status: "pending" | "uploading" | "done" | "error";
+  errorMessage?: string;
+}
+
 /**
  * Shared data layer for the Knowledge base file browser and the template
  * editor's AssetPicker — both need the same folder tree + asset list, and
@@ -21,6 +27,7 @@ export function useKbAssets(pid: string | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([]);
 
   const refresh = useCallback(async () => {
     if (!pid) return;
@@ -46,11 +53,18 @@ export function useKbAssets(pid: string | null) {
 
   async function uploadFiles(files: FileList | File[], folderId: string | null): Promise<void> {
     if (!pid) return;
+    const fileArr = Array.from(files);
+    if (!fileArr.length) return;
     setUploading(true);
     setError(null);
-    try {
-      const supabase = createClient();
-      for (const file of Array.from(files)) {
+    setUploadQueue(fileArr.map((f) => ({ name: f.name, status: "pending" })));
+
+    const supabase = createClient();
+    const failed: string[] = [];
+    for (let i = 0; i < fileArr.length; i++) {
+      const file = fileArr[i];
+      setUploadQueue((q) => q.map((item, idx) => (idx === i ? { ...item, status: "uploading" } : item)));
+      try {
         const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
         const path = `${pid}/${crypto.randomUUID()}${ext}`;
         const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || "application/octet-stream" });
@@ -69,13 +83,22 @@ export function useKbAssets(pid: string | null) {
             url: pub.publicUrl,
           }),
         });
+        setUploadQueue((q) => q.map((item, idx) => (idx === i ? { ...item, status: "done" } : item)));
+      } catch (e) {
+        // Keep going on a per-file failure rather than abandoning the rest
+        // of the batch — one bad file (wrong type, name collision, etc.)
+        // shouldn't block everything else the user selected.
+        const msg = e instanceof ApiError && e.status === 403 ? "View-only access" : e instanceof Error ? e.message : "Upload failed";
+        setUploadQueue((q) => q.map((item, idx) => (idx === i ? { ...item, status: "error", errorMessage: msg } : item)));
+        failed.push(file.name);
       }
-      await refresh();
-    } catch (e) {
-      setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't upload files." : e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
     }
+    await refresh();
+    if (failed.length) setError(`${failed.length} file${failed.length === 1 ? "" : "s"} failed to upload: ${failed.join(", ")}`);
+    setUploading(false);
+    // Leave the final state visible briefly so completed/errored rows are
+    // readable, then clear so the panel doesn't linger after the user moves on.
+    setTimeout(() => setUploadQueue([]), 2500);
   }
 
   async function createFolder(name: string, parentId: string | null): Promise<void> {
@@ -135,5 +158,5 @@ export function useKbAssets(pid: string | null) {
     }
   }
 
-  return { folders, assets, loading, uploading, error, setError, refresh, uploadFiles, createFolder, deleteFolder, deleteAsset, deleteAssets, moveAssets };
+  return { folders, assets, loading, uploading, uploadQueue, error, setError, refresh, uploadFiles, createFolder, deleteFolder, deleteAsset, deleteAssets, moveAssets };
 }

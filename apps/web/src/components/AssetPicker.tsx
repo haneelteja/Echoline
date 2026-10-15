@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, File, FolderPlus, Home, Loader2, Upload } from "lucide-react";
 import { useKbAssets } from "@/lib/useKbAssets";
+import { UploadProgress } from "@/components/UploadProgress";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ interface AssetPickerProps {
  * as the Knowledge base page (useKbAssets), just a selection UI instead of
  * a management one. */
 export function AssetPicker({ pid, open, onClose, mode, kindFilter, initialSelected, onConfirm }: AssetPickerProps) {
-  const { folders, assets, loading, uploading, error, uploadFiles, createFolder } = useKbAssets(pid);
+  const { folders, assets, loading, uploading, uploadQueue, error, uploadFiles, createFolder } = useKbAssets(pid);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>(initialSelected);
   const [addingFolder, setAddingFolder] = useState(false);
@@ -137,6 +138,8 @@ export function AssetPicker({ pid, open, onClose, mode, kindFilter, initialSelec
             </Button>
           </div>
         )}
+
+        {uploadQueue.length > 0 && <UploadProgress items={uploadQueue} />}
 
         {error && (
           <p className="small" style={{ color: "var(--bad)" }}>

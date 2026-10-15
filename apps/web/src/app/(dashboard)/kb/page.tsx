@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, File, FolderPlus, Home, Loader2, Trash2, Upload, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useKbAssets } from "@/lib/useKbAssets";
+import { UploadProgress } from "@/components/UploadProgress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -16,7 +17,7 @@ function formatSize(bytes: number): string {
 
 export default function KbPage() {
   const { pid, brand } = useWorkspace();
-  const { folders, assets, loading, uploading, error, uploadFiles, createFolder, deleteFolder, deleteAsset, deleteAssets, moveAssets } = useKbAssets(pid);
+  const { folders, assets, loading, uploading, uploadQueue, error, uploadFiles, createFolder, deleteFolder, deleteAsset, deleteAssets, moveAssets } = useKbAssets(pid);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -189,6 +190,12 @@ export default function KbPage() {
                 Clear
               </Button>
             </div>
+          </div>
+        )}
+
+        {uploadQueue.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <UploadProgress items={uploadQueue} />
           </div>
         )}
 
