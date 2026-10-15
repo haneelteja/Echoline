@@ -14,9 +14,14 @@ interface Props {
   channel: "email" | "whatsapp";
   templates: TemplateRow[];
   onClose: () => void;
+  /** Called right after a successful send so the Leads table reflects the
+   * new stage/status immediately, instead of waiting on the realtime
+   * subscription's 800ms debounce (which can lag enough to look stale if
+   * you check right away). */
+  onSent?: () => void;
 }
 
-export function SendNowDialog({ pid, contactId, contactName, channel, templates, onClose }: Props) {
+export function SendNowDialog({ pid, contactId, contactName, channel, templates, onClose, onSent }: Props) {
   const options = templates.filter((t) => t.channel === channel);
   const [templateId, setTemplateId] = useState(options[0]?.id ?? "");
   const [sending, setSending] = useState(false);
@@ -33,6 +38,7 @@ export function SendNowDialog({ pid, contactId, contactName, channel, templates,
         body: JSON.stringify({ channel, templateId }),
       });
       setSent(true);
+      onSent?.();
     } catch (e) {
       if (e instanceof ApiError) {
         setError(e.message || "Send failed.");

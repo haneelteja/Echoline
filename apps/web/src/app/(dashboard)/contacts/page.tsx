@@ -394,6 +394,7 @@ export default function ContactsPage() {
           channel={sendNow.channel}
           templates={templates}
           onClose={() => setSendNow(null)}
+          onSent={refreshProjectData}
         />
       )}
 
