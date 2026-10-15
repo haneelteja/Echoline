@@ -34,6 +34,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ColumnFilter, SortIndicator, type SortDirection } from "@/components/ui/column-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 const TERMINAL_GOOD: ContactChannelStatus[] = ["completed", "replied"];
 const TERMINAL_BAD: ContactChannelStatus[] = ["opted_out", "invalid", "bounced", "failed"];
@@ -67,6 +68,42 @@ function StatusBadge({ status }: { status: ContactChannelStatus }) {
 type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment";
 
 const EMPTY_FILTERS: Record<ColumnKey, string> = { name: "", area: "", em_status: "", wa_status: "", sentiment: "" };
+
+// "all" isn't a real ContactChannelStatus — it means "don't filter by stage".
+// completed/replied/opted_out/invalid/bounced/failed leads only show up
+// under "All", same as before; these 5 tabs cover the sequence-progress
+// states a lead walks through on its way there.
+type StageTab = "all" | "not_contacted" | "initial_sent" | "fu1_sent" | "fu2_sent";
+const STAGE_TABS: { key: StageTab; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "not_contacted", label: "Not contacted" },
+  { key: "initial_sent", label: "Initial" },
+  { key: "fu1_sent", label: "Follow-up 1" },
+  { key: "fu2_sent", label: "Follow-up 2" },
+];
+
+function StageTabs({ label, value, onChange }: { label: string; value: StageTab; onChange: (v: StageTab) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <div className="flex flex-wrap gap-1">
+        {STAGE_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => onChange(t.key)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+              value === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function sortValue(c: ContactRow, key: ColumnKey): string {
   if (key === "em_status") return statusLabel(c.em_status);
@@ -133,8 +170,19 @@ export default function ContactsPage() {
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, string>>(EMPTY_FILTERS);
   const [sort, setSort] = useState<{ key: ColumnKey; dir: "asc" | "desc" } | null>(null);
+  const [emStageTab, setEmStageTabState] = useState<StageTab>("all");
+  const [waStageTab, setWaStageTabState] = useState<StageTab>("all");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
+
+  function setEmStageTab(v: StageTab) {
+    setEmStageTabState(v);
+    setPage(1);
+  }
+  function setWaStageTab(v: StageTab) {
+    setWaStageTabState(v);
+    setPage(1);
+  }
 
   const [statusLogContact, setStatusLogContact] = useState<ContactRow | null>(null);
   const [sendNow, setSendNow] = useState<{ contact: ContactRow; channel: "email" | "whatsapp" } | null>(null);
@@ -173,12 +221,15 @@ export default function ContactsPage() {
     setPage(1);
   }
 
-  const hasActiveFilters = Boolean(search) || Object.values(columnFilters).some(Boolean) || sort !== null;
+  const hasActiveFilters =
+    Boolean(search) || Object.values(columnFilters).some(Boolean) || sort !== null || emStageTab !== "all" || waStageTab !== "all";
 
   function clearFilters() {
     setSearch("");
     setColumnFilters(EMPTY_FILTERS);
     setSort(null);
+    setEmStageTabState("all");
+    setWaStageTabState("all");
     setPage(1);
   }
 
@@ -190,6 +241,8 @@ export default function ContactsPage() {
       if (columnFilters.em_status && statusLabel(c.em_status) !== columnFilters.em_status) return false;
       if (columnFilters.wa_status && statusLabel(c.wa_status) !== columnFilters.wa_status) return false;
       if (columnFilters.sentiment && c.sentiment !== columnFilters.sentiment) return false;
+      if (emStageTab !== "all" && c.em_status !== emStageTab) return false;
+      if (waStageTab !== "all" && c.wa_status !== waStageTab) return false;
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q);
     });
@@ -201,7 +254,7 @@ export default function ContactsPage() {
       });
     }
     return rows;
-  }, [contacts, search, columnFilters, sort]);
+  }, [contacts, search, columnFilters, sort, emStageTab, waStageTab]);
 
   // Pagination keeps the table from ever mounting hundreds of fully-interactive
   // rows (each with a native <select>, two icon buttons, two badges) in one
@@ -286,6 +339,11 @@ export default function ContactsPage() {
         <KpiCard label="Email sent" value={kpis.emailSent} sub={`of ${kpis.total}`} icon={Mail} accent="sky" />
         <KpiCard label="WhatsApp sent" value={kpis.waSent} sub={`of ${kpis.total}`} icon={MessageCircle} accent="teal" />
         <KpiCard label="Replied" value={kpis.replied} sub="across both channels" icon={MessagesSquare} accent="emerald" />
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        <StageTabs label="Email" value={emStageTab} onChange={setEmStageTab} />
+        <StageTabs label="WhatsApp" value={waStageTab} onChange={setWaStageTab} />
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
