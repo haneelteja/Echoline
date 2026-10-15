@@ -36,7 +36,8 @@ export const send360MessengerText: WhatsAppTextSender = async (credentials, mess
   // Exception" with no further detail from their API.
   const form = new FormData();
   form.append("phonenumber", message.to);
-  form.append("text", message.text);
+  if (message.text) form.append("text", message.text);
+  if (message.mediaUrl) form.append("url", message.mediaUrl);
   const res = await fetch(`${BASE_URL}/v2/sendMessage`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },

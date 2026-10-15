@@ -344,8 +344,19 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         const sender = getWhatsAppTextSender(providerId);
         if (!sender) return reply.code(400).send({ error: "no_sender", message: `No text sender implemented for provider ${providerId}` });
         const text = testMode ? `[TEST → ${c.name} ${phone}]\n${fill(t.body, fillCtx)}` : fill(t.body, fillCtx);
-        const result = await sender(credentials, { to: toPhone, text });
-        providerMessageId = result.providerMessageId;
+        // Unlike a Meta template header (capped at one attachment), a
+        // free-text provider has no such limit — the text plus the first
+        // gallery item go out together in one message, then each remaining
+        // item follows as its own message.
+        const galleryUrls = await fetchGalleryUrls(db, t.gallery_asset_ids);
+        const sends = galleryUrls.length
+          ? [{ text, mediaUrl: galleryUrls[0] }, ...galleryUrls.slice(1).map((mediaUrl) => ({ text: "", mediaUrl }))]
+          : [{ text, mediaUrl: undefined }];
+        providerMessageId = "";
+        for (const s of sends) {
+          const result = await sender(credentials, { to: toPhone, text: s.text, mediaUrl: s.mediaUrl });
+          if (!providerMessageId) providerMessageId = result.providerMessageId;
+        }
       } else {
         if (t.meta_status !== "Approved") {
           return reply

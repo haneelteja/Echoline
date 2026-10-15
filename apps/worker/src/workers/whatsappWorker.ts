@@ -24,6 +24,13 @@ async function fetchHeaderMedia(
   return (data as { url: string; kind: "image" | "document"; name: string } | null) ?? null;
 }
 
+async function fetchGalleryUrls(db: ReturnType<typeof createAdminClient>, assetIds: string[] | null | undefined): Promise<string[]> {
+  if (!assetIds?.length) return [];
+  const { data } = await db.from("kb_assets").select("id, url").in("id", assetIds);
+  const byId = new Map(((data as { id: string; url: string }[]) ?? []).map((a) => [a.id, a.url]));
+  return assetIds.map((id) => byId.get(id)).filter((u): u is string => Boolean(u));
+}
+
 export function startWhatsAppWorker(): Worker<SendJobData> {
   const worker = new Worker<SendJobData>(SEND_WHATSAPP_QUEUE, processWhatsAppJob, {
     connection: getRedisConnection(),
@@ -120,7 +127,19 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
       const sender = getWhatsAppTextSender(providerId);
       if (!sender) throw new Error(`No text sender implemented for provider ${providerId}`);
       const text = testMode ? `[TEST → ${c.name} ${phone}, step ${step}]\n${fill(t.body, fillCtx)}` : fill(t.body, fillCtx);
-      result = await sender(credentials, { to: toPhone, text });
+      // Unlike a Meta template header (capped at one attachment), a
+      // free-text provider has no such limit — text plus the first gallery
+      // item go out together in one message, each remaining item follows as
+      // its own message.
+      const galleryUrls = await fetchGalleryUrls(db, t.gallery_asset_ids);
+      const sends = galleryUrls.length
+        ? [{ text, mediaUrl: galleryUrls[0] }, ...galleryUrls.slice(1).map((mediaUrl) => ({ text: "", mediaUrl }))]
+        : [{ text, mediaUrl: undefined }];
+      result = { providerMessageId: "" };
+      for (const s of sends) {
+        const r = await sender(credentials, { to: toPhone, text: s.text, mediaUrl: s.mediaUrl });
+        if (!result.providerMessageId) result = r;
+      }
     } else {
       // Cold, business-initiated WhatsApp sends must use an approved
       // template — a hard Meta policy requirement, not just a best practice.

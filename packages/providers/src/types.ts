@@ -69,6 +69,12 @@ export interface WhatsAppTemplateMessage {
 export interface WhatsAppTextMessage {
   to: string;
   text: string;
+  /** Only implemented by providers whose API genuinely accepts an arbitrary
+   * file URL per message (currently 360Messenger) — unlike a Meta template
+   * header, a free-text provider has no one-attachment-per-template limit,
+   * so a single logical "send" can become several physical messages
+   * (text+first image together, then one message per remaining image). */
+  mediaUrl?: string;
 }
 
 export type WhatsAppTemplateSender = (

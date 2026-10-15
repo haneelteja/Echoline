@@ -637,6 +637,16 @@
   applied), mark whether the most recent send on each channel was manual vs automated — surfaced in the
   Leads table as a small "Manual" chip next to the status badge, distinct from `em_track`/`wa_track`
   (which track delivery status, not who triggered the send).
+- **WhatsApp templates can now carry multiple images/files for free-text providers (360Messenger),
+  reusing `templates.gallery_asset_ids` — user-requested, after confirming this is distinct from the
+  Meta template header (which stays capped at one attachment, a hard Meta platform limit, not
+  something liftable here).** `WhatsAppTextMessage` gained an optional `mediaUrl`; `send360MessengerText`
+  passes it through as 360Messenger's `url` form field (their API takes one file URL per call, same as
+  before). `whatsappWorker.ts`/`sendNow.ts`'s free-text branch now sends the body text together with the
+  first gallery item in one message, then each remaining item as its own message — only for providers in
+  `TEXT_ONLY_WHATSAPP_PROVIDERS`; Meta/360dialog/etc. template sends are untouched. Template editor's
+  "Additional images / files" field (same `AssetPicker`, multi-select, images+documents) now shows for
+  WhatsApp templates too, previously email-only.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.

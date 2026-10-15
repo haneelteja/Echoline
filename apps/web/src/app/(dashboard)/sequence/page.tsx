@@ -487,37 +487,49 @@ export default function SequencePage() {
                     />
                   </div>
 
-                  {editing.channel === "email" && (
-                    <div className="field">
-                      <label>Gallery images</label>
-                      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-                        {draftTpl.galleryAssetIds.map((aid) => {
-                          const a = assets.find((x) => x.id === aid);
-                          return (
-                            <div key={aid} style={{ position: "relative" }}>
+                  <div className="field">
+                    <label>{editing.channel === "email" ? "Gallery images" : "Additional images / files"}</label>
+                    <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                      {draftTpl.galleryAssetIds.map((aid) => {
+                        const a = assets.find((x) => x.id === aid);
+                        return (
+                          <div key={aid} style={{ position: "relative" }}>
+                            {a?.kind === "document" ? (
+                              <div
+                                className="row"
+                                style={{ width: 64, height: 64, alignItems: "center", justifyContent: "center", border: "1px solid var(--line)", borderRadius: 6 }}
+                                title={a.name}
+                              >
+                                <File className="h-6 w-6" style={{ color: "var(--muted)" }} />
+                              </div>
+                            ) : (
                               <img
                                 src={a?.url}
                                 alt={a?.name ?? ""}
                                 style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }}
                               />
-                              <button
-                                className="btn small danger"
-                                style={{ position: "absolute", top: -6, right: -6, padding: 2, borderRadius: "50%" }}
-                                onClick={() => setDraftTpl({ ...draftTpl, galleryAssetIds: draftTpl.galleryAssetIds.filter((id) => id !== aid) })}
-                                aria-label="Remove image"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                        <button className="btn small" onClick={() => setPicking("gallery")}>
-                          + Add images
-                        </button>
-                      </div>
-                      <p className="hint">Up to 3 shown in the email, selected from the knowledge base.</p>
+                            )}
+                            <button
+                              className="btn small danger"
+                              style={{ position: "absolute", top: -6, right: -6, padding: 2, borderRadius: "50%" }}
+                              onClick={() => setDraftTpl({ ...draftTpl, galleryAssetIds: draftTpl.galleryAssetIds.filter((id) => id !== aid) })}
+                              aria-label="Remove"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                      <button className="btn small" onClick={() => setPicking("gallery")}>
+                        + Add {editing.channel === "email" ? "images" : "images / files"}
+                      </button>
                     </div>
-                  )}
+                    <p className="hint">
+                      {editing.channel === "email"
+                        ? "Up to 3 shown in the email, selected from the knowledge base."
+                        : "Only sent by free-text providers (e.g. 360Messenger) — Meta's official template header is capped at one image/document, so these are ignored for Meta sends. Sent as the first item + text together, then one message per remaining item."}
+                    </p>
+                  </div>
 
                   {editing.channel === "whatsapp" && (
                     <div className="field">
@@ -611,6 +623,27 @@ export default function SequencePage() {
                             );
                           })()}
                         <div style={{ whiteSpace: "pre-wrap" }}>{waPreviewText}</div>
+                        {draftTpl.galleryAssetIds.length > 0 && (
+                          <div className="row" style={{ flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                            {draftTpl.galleryAssetIds.map((aid) => {
+                              const a = assets.find((x) => x.id === aid);
+                              if (!a) return null;
+                              return a.kind === "image" ? (
+                                <img key={aid} src={a.url} alt={a.name} style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 6 }} />
+                              ) : (
+                                <div
+                                  key={aid}
+                                  className="row small"
+                                  style={{ width: 70, height: 70, alignItems: "center", justifyContent: "center", border: "1px solid rgba(0,0,0,.1)", borderRadius: 6, textAlign: "center" }}
+                                  title={a.name}
+                                >
+                                  <File className="h-5 w-5" />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <p className="hint" style={{ marginTop: 6 }}>Each additional item sends as a separate message (free-text providers only).</p>
                       </div>
                     )}
                   </div>
@@ -673,7 +706,7 @@ export default function SequencePage() {
           open={picking !== null}
           onClose={() => setPicking(null)}
           mode={picking === "header" ? "single" : "multi"}
-          kindFilter={picking === "header" ? "all" : "image"}
+          kindFilter={picking === "header" || editing?.channel === "whatsapp" ? "all" : "image"}
           initialSelected={picking === "header" ? (draftTpl.headerAssetId ? [draftTpl.headerAssetId] : []) : draftTpl.galleryAssetIds}
           onConfirm={(ids) => {
             if (picking === "header") setDraftTpl({ ...draftTpl, headerAssetId: ids[0] ?? null });
