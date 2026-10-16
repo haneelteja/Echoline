@@ -1,13 +1,23 @@
 "use client";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, File, FolderPlus, Home, Loader2, Trash2, Upload, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useKbAssets } from "@/lib/useKbAssets";
 import { UploadProgress } from "@/components/UploadProgress";
+import { apiFetch, ApiError } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { KbAssetRow, KbFolderRow } from "@/lib/types";
+
+const BRAND_FIELDS = [
+  { key: "about", label: "About" },
+  { key: "offer", label: "Offer / USP" },
+  { key: "pricing", label: "Pricing notes" },
+  { key: "tone", label: "Tone" },
+  { key: "cta", label: "Call to action" },
+] as const;
+type BrandFieldKey = (typeof BRAND_FIELDS)[number]["key"];
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -16,9 +26,46 @@ function formatSize(bytes: number): string {
 }
 
 export default function KbPage() {
-  const { pid, brand } = useWorkspace();
+  const { pid, brand, refreshProjectData } = useWorkspace();
   const { folders, assets, loading, uploading, uploadQueue, error, uploadFiles, createFolder, deleteFolder, deleteAsset, deleteAssets, moveAssets } = useKbAssets(pid);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+
+  const [brandDraft, setBrandDraft] = useState<Record<BrandFieldKey, string>>({ about: "", offer: "", pricing: "", tone: "", cta: "" });
+  const [savingBrand, setSavingBrand] = useState(false);
+  const [brandSaved, setBrandSaved] = useState(false);
+  const [brandError, setBrandError] = useState<string | null>(null);
+
+  // brand loads async (null on first render) — re-sync whenever it changes,
+  // same pattern as project/page.tsx's name/brand/sender fields.
+  useEffect(() => {
+    if (!brand) return;
+    setBrandDraft({
+      about: brand.about ?? "",
+      offer: brand.offer ?? "",
+      pricing: brand.pricing ?? "",
+      tone: brand.tone ?? "",
+      cta: brand.cta ?? "",
+    });
+  }, [brand]);
+
+  async function saveBrand() {
+    if (!pid) return;
+    setSavingBrand(true);
+    setBrandError(null);
+    setBrandSaved(false);
+    try {
+      await apiFetch(`/v1/projects/${pid}/brand`, {
+        method: "PUT",
+        body: JSON.stringify({ ...brandDraft, skus: brand?.skus ?? [] }),
+      });
+      setBrandSaved(true);
+      await refreshProjectData();
+    } catch (e) {
+      setBrandError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't edit brand facts." : "Couldn't save.");
+    } finally {
+      setSavingBrand(false);
+    }
+  }
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -89,25 +136,30 @@ export default function KbPage() {
       </div>
       <section className="panel" style={{ maxWidth: 680, marginBottom: 20 }}>
         <h2 style={{ marginBottom: 12 }}>Brand facts</h2>
-        {[
-          ["About", brand?.about],
-          ["Offer / USP", brand?.offer],
-          ["Pricing notes", brand?.pricing],
-          ["Tone", brand?.tone],
-          ["Call to action", brand?.cta],
-        ].map(([label, value]) => (
-          <div key={label} style={{ marginBottom: 14 }}>
-            <div className="small" style={{ fontWeight: 600, color: "var(--ink2)" }}>
-              {label}
-            </div>
-            <p className="small">{value || "—"}</p>
+        {BRAND_FIELDS.map(({ key, label }) => (
+          <div key={key} className="field">
+            <label htmlFor={`brand-${key}`}>{label}</label>
+            <textarea
+              id={`brand-${key}`}
+              style={{ minHeight: key === "tone" ? 44 : 70 }}
+              value={brandDraft[key]}
+              onChange={(e) => setBrandDraft({ ...brandDraft, [key]: e.target.value })}
+            />
           </div>
         ))}
+        <button className="btn primary" onClick={saveBrand} disabled={savingBrand}>
+          {savingBrand ? "Saving…" : "Save brand facts"}
+        </button>
+        {brandSaved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
+        {brandError && (
+          <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+            {brandError}
+          </p>
+        )}
       </section>
       <p className="hint" style={{ marginBottom: 16 }}>
-        Editing and SKU management are on the backlog, planned alongside real pgvector retrieval for AI
-        context (see docs/ROADMAP.md). AI template generation already reads these brand facts as plain
-        text.
+        SKU management is on the backlog, planned alongside real pgvector retrieval for AI context (see
+        docs/ROADMAP.md). AI template generation reads these brand facts as plain text.
       </p>
 
       <section className="panel">
