@@ -26,8 +26,8 @@ export interface SequenceSettingsRow {
   window_start: string;
   window_end: string;
   stop_on_reply: boolean;
-  em: { enabled: boolean; steps: { delayDays: number }[] };
-  wa: { enabled: boolean; steps: { delayDays: number }[] };
+  em: { enabled: boolean; steps: { delayDays: number; delayMinutes?: number; delaySeconds?: number }[] };
+  wa: { enabled: boolean; steps: { delayDays: number; delayMinutes?: number; delaySeconds?: number }[] };
 }
 
 export interface ChannelSettingsRow {

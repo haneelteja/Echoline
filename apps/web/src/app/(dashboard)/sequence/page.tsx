@@ -312,28 +312,38 @@ export default function SequencePage() {
               className="row"
               style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid var(--border, #e8e8e8)" }}
             >
-              <div style={{ minWidth: 140 }}>
+              <div style={{ minWidth: 230 }}>
                 <b className="small">{STEP_LABEL[i] ?? `Step ${i + 1}`}</b>
                 <div className="small muted">
                   {i === 0 ? (
                     "sent immediately"
                   ) : (
-                    <>
+                    <div className="row small" style={{ gap: 4, flexWrap: "nowrap", marginTop: 2 }}>
                       wait
-                      <input
-                        className="inp"
-                        type="number"
-                        min={0}
-                        style={{ width: 56, margin: "0 6px" }}
-                        value={s.delayDays}
-                        onChange={(e) => {
-                          const next = [...steps];
-                          next[i] = { delayDays: Math.max(0, Number(e.target.value) || 0) };
-                          setDraft({ ...draft!, [ch]: { ...draft![ch], steps: next } });
-                        }}
-                      />
-                      days
-                    </>
+                      {(
+                        [
+                          ["delayDays", "d"],
+                          ["delayMinutes", "m"],
+                          ["delaySeconds", "s"],
+                        ] as const
+                      ).map(([field, unit]) => (
+                        <span key={field} className="row small" style={{ gap: 2, flexWrap: "nowrap" }}>
+                          <input
+                            className="inp"
+                            type="number"
+                            min={0}
+                            style={{ width: 44 }}
+                            value={s[field] ?? 0}
+                            onChange={(e) => {
+                              const next = [...steps];
+                              next[i] = { ...s, [field]: Math.max(0, Number(e.target.value) || 0) };
+                              setDraft({ ...draft!, [ch]: { ...draft![ch], steps: next } });
+                            }}
+                          />
+                          {unit}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
@@ -368,6 +378,11 @@ export default function SequencePage() {
         <div>
           <h1>Sequence &amp; Templates</h1>
           <p>When each message goes out, and what it says. Email and WhatsApp run independently.</p>
+          <p className="hint" style={{ marginTop: 4 }}>
+            Follow-up waits add days + minutes + seconds together. The scheduler checks for due sends every ~5
+            minutes, so very short waits (seconds, low minutes) won&apos;t fire instantly — useful for quick
+            testing, not sub-5-minute precision.
+          </p>
         </div>
       </div>
 

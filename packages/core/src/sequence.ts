@@ -46,8 +46,9 @@ export function nextDue(c: Contact, ch: ChannelKey, seq: SequenceSettings): DueS
   }
 
   const last = lastOf(c, ch);
-  const delayDays = cfg.steps[stage]?.delayDays ?? 0;
-  const at = new Date(new Date(last ?? 0).getTime() + delayDays * 864e5).toISOString();
+  const step = cfg.steps[stage];
+  const delayMs = (step?.delayDays ?? 0) * 86_400_000 + (step?.delayMinutes ?? 0) * 60_000 + (step?.delaySeconds ?? 0) * 1_000;
+  const at = new Date(new Date(last ?? 0).getTime() + delayMs).toISOString();
   return { contactId: c.id, channel: ch, step: stage, at, valid };
 }
 

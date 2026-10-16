@@ -2,6 +2,11 @@ import type { ChannelKey, ContactChannelStatus } from "./status";
 
 export interface SequenceStep {
   delayDays: number;
+  /** Additive, not alternatives — total wait is days + minutes + seconds
+   * combined. Optional/undefined treated as 0, so existing stored steps
+   * (days-only) keep working unchanged. */
+  delayMinutes?: number;
+  delaySeconds?: number;
 }
 
 export interface SequenceChannelConfig {
