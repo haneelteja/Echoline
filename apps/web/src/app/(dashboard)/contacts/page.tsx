@@ -118,6 +118,33 @@ function StageTabs({ label, value, onChange }: { label: string; value: StageTab;
   );
 }
 
+const VIEW_TABS = [
+  { key: "database", label: "Database" },
+  { key: "email", label: "Email status" },
+  { key: "whatsapp", label: "WhatsApp status" },
+] as const;
+type ViewTab = (typeof VIEW_TABS)[number]["key"];
+
+function ViewTabs({ value, onChange }: { value: ViewTab; onChange: (v: ViewTab) => void }) {
+  return (
+    <div className="flex gap-1 border-b border-border">
+      {VIEW_TABS.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={cn(
+            "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+            value === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function sortValue(c: ContactRow, key: ColumnKey): string {
   if (key === "em_status") return statusLabel(c.em_status);
   if (key === "wa_status") return statusLabel(c.wa_status);
@@ -181,6 +208,7 @@ export default function ContactsPage() {
   const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const [activeTab, setActiveTab] = useState<ViewTab>("database");
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, string>>(EMPTY_FILTERS);
   // Ordered list, not a single value — the order entries appear in is the
@@ -207,8 +235,10 @@ export default function ContactsPage() {
     const total = contacts.length;
     const emailSent = contacts.filter((c) => c.em_stage > 0).length;
     const waSent = contacts.filter((c) => c.wa_stage > 0).length;
+    const emailReplied = contacts.filter((c) => c.em_status === "replied").length;
+    const waReplied = contacts.filter((c) => c.wa_status === "replied").length;
     const replied = contacts.filter((c) => c.em_status === "replied" || c.wa_status === "replied").length;
-    return { total, emailSent, waSent, replied };
+    return { total, emailSent, waSent, emailReplied, waReplied, replied };
   }, [contacts]);
 
   const emStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.em_status)))).sort(), [contacts]);
@@ -361,16 +391,34 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
-        <KpiCard label="Email sent" value={kpis.emailSent} sub={`of ${kpis.total}`} icon={Mail} accent="sky" />
-        <KpiCard label="WhatsApp sent" value={kpis.waSent} sub={`of ${kpis.total}`} icon={MessageCircle} accent="teal" />
-        <KpiCard label="Replied" value={kpis.replied} sub="across both channels" icon={MessagesSquare} accent="emerald" />
-      </div>
+      {activeTab === "database" && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
+          <KpiCard label="Email sent" value={kpis.emailSent} sub={`of ${kpis.total}`} icon={Mail} accent="sky" />
+          <KpiCard label="WhatsApp sent" value={kpis.waSent} sub={`of ${kpis.total}`} icon={MessageCircle} accent="teal" />
+          <KpiCard label="Replied" value={kpis.replied} sub="across both channels" icon={MessagesSquare} accent="emerald" />
+        </div>
+      )}
+      {activeTab === "email" && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
+          <KpiCard label="Email sent" value={kpis.emailSent} sub={`of ${kpis.total}`} icon={Mail} accent="sky" />
+          <KpiCard label="Replied" value={kpis.emailReplied} sub={`of ${kpis.emailSent} sent`} icon={MessagesSquare} accent="emerald" />
+        </div>
+      )}
+      {activeTab === "whatsapp" && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
+          <KpiCard label="WhatsApp sent" value={kpis.waSent} sub={`of ${kpis.total}`} icon={MessageCircle} accent="teal" />
+          <KpiCard label="Replied" value={kpis.waReplied} sub={`of ${kpis.waSent} sent`} icon={MessagesSquare} accent="emerald" />
+        </div>
+      )}
+
+      <ViewTabs value={activeTab} onChange={setActiveTab} />
 
       <div className="flex flex-col gap-2.5">
-        <StageTabs label="Email" value={emStageTab} onChange={setEmStageTab} />
-        <StageTabs label="WhatsApp" value={waStageTab} onChange={setWaStageTab} />
+        {activeTab !== "whatsapp" && <StageTabs label="Email" value={emStageTab} onChange={setEmStageTab} />}
+        {activeTab !== "email" && <StageTabs label="WhatsApp" value={waStageTab} onChange={setWaStageTab} />}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -447,40 +495,46 @@ export default function ContactsPage() {
             <TableRow>
               <ColumnHead columnKey="name" label="Business" sort={sort} filterValue={columnFilters.name} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
               <ColumnHead columnKey="area" label="Location" sort={sort} filterValue={columnFilters.area} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
-              <TableHead>Email</TableHead>
-              <TableHead>WhatsApp</TableHead>
-              <ColumnHead
-                columnKey="em_status"
-                label="Email status"
-                dataType="select"
-                options={emStatusOptions}
-                sort={sort}
-                filterValue={columnFilters.em_status}
-                onFilterChange={setColumnFilter}
-                onSortChange={setColumnSort}
-              />
-              <ColumnHead
-                columnKey="wa_status"
-                label="WhatsApp status"
-                dataType="select"
-                options={waStatusOptions}
-                sort={sort}
-                filterValue={columnFilters.wa_status}
-                onFilterChange={setColumnFilter}
-                onSortChange={setColumnSort}
-              />
-              <ColumnHead
-                columnKey="sentiment"
-                label="Response / Sentiment"
-                dataType="select"
-                options={[...SENTIMENT_VALUES]}
-                sort={sort}
-                filterValue={columnFilters.sentiment}
-                onFilterChange={setColumnFilter}
-                onSortChange={setColumnSort}
-              />
-              <TableHead>Status log</TableHead>
-              <TableHead>Actions</TableHead>
+              {activeTab !== "whatsapp" && <TableHead>Email</TableHead>}
+              {activeTab !== "email" && <TableHead>WhatsApp</TableHead>}
+              {activeTab !== "whatsapp" && (
+                <ColumnHead
+                  columnKey="em_status"
+                  label="Email status"
+                  dataType="select"
+                  options={emStatusOptions}
+                  sort={sort}
+                  filterValue={columnFilters.em_status}
+                  onFilterChange={setColumnFilter}
+                  onSortChange={setColumnSort}
+                />
+              )}
+              {activeTab !== "email" && (
+                <ColumnHead
+                  columnKey="wa_status"
+                  label="WhatsApp status"
+                  dataType="select"
+                  options={waStatusOptions}
+                  sort={sort}
+                  filterValue={columnFilters.wa_status}
+                  onFilterChange={setColumnFilter}
+                  onSortChange={setColumnSort}
+                />
+              )}
+              {activeTab === "database" && (
+                <ColumnHead
+                  columnKey="sentiment"
+                  label="Response / Sentiment"
+                  dataType="select"
+                  options={[...SENTIMENT_VALUES]}
+                  sort={sort}
+                  filterValue={columnFilters.sentiment}
+                  onFilterChange={setColumnFilter}
+                  onSortChange={setColumnSort}
+                />
+              )}
+              {activeTab === "database" && <TableHead>Status log</TableHead>}
+              {activeTab === "database" && <TableHead>Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody className="[&>tr:nth-child(even)]:bg-muted/30">
@@ -490,62 +544,74 @@ export default function ContactsPage() {
                 <TableRow key={c.id}>
                   <TableCell className="font-semibold text-foreground">{c.name}</TableCell>
                   <TableCell className="text-muted-foreground">{c.area || "—"}</TableCell>
-                  <TableCell className="max-w-[180px] truncate text-muted-foreground" title={c.email ?? undefined}>
-                    {c.email || "—"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">{c.phone || "—"}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={c.em_status} manual={c.em_manual_last} />
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={c.wa_status} manual={c.wa_manual_last} />
-                  </TableCell>
-                  <TableCell>
-                    <SentimentPicker value={c.sentiment} onChange={(v) => updateSentiment(c.id, v)} />
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      className="group flex max-w-[190px] flex-col items-start gap-0.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors hover:bg-accent"
-                      onClick={() => setStatusLogContact(c)}
-                    >
-                      {latest ? (
-                        <>
-                          <span className="block truncate font-medium text-foreground group-hover:text-primary">{latest.status}</span>
-                          <span className="text-muted-foreground">
-                            {new Date(latest.created_at).toLocaleDateString()}
-                            {latest.follow_up_date && <> · next {new Date(latest.follow_up_date).toLocaleDateString()}</>}
+                  {activeTab !== "whatsapp" && (
+                    <TableCell className="max-w-[180px] truncate text-muted-foreground" title={c.email ?? undefined}>
+                      {c.email || "—"}
+                    </TableCell>
+                  )}
+                  {activeTab !== "email" && <TableCell className="whitespace-nowrap text-muted-foreground">{c.phone || "—"}</TableCell>}
+                  {activeTab !== "whatsapp" && (
+                    <TableCell>
+                      <StatusBadge status={c.em_status} manual={c.em_manual_last} />
+                    </TableCell>
+                  )}
+                  {activeTab !== "email" && (
+                    <TableCell>
+                      <StatusBadge status={c.wa_status} manual={c.wa_manual_last} />
+                    </TableCell>
+                  )}
+                  {activeTab === "database" && (
+                    <TableCell>
+                      <SentimentPicker value={c.sentiment} onChange={(v) => updateSentiment(c.id, v)} />
+                    </TableCell>
+                  )}
+                  {activeTab === "database" && (
+                    <TableCell>
+                      <button
+                        className="group flex max-w-[190px] flex-col items-start gap-0.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors hover:bg-accent"
+                        onClick={() => setStatusLogContact(c)}
+                      >
+                        {latest ? (
+                          <>
+                            <span className="block truncate font-medium text-foreground group-hover:text-primary">{latest.status}</span>
+                            <span className="text-muted-foreground">
+                              {new Date(latest.created_at).toLocaleDateString()}
+                              {latest.follow_up_date && <> · next {new Date(latest.follow_up_date).toLocaleDateString()}</>}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 font-medium text-muted-foreground group-hover:text-primary">
+                            <Plus className="h-3 w-3" />
+                            Add update
                           </span>
-                        </>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 font-medium text-muted-foreground group-hover:text-primary">
-                          <Plus className="h-3 w-3" />
-                          Add update
-                        </span>
-                      )}
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title={validEmail(c.email) ? "Send email now" : "No valid email on file"}
-                        disabled={!validEmail(c.email)}
-                        onClick={() => setSendNow({ contact: c, channel: "email" })}
-                      >
-                        <Mail className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title={normPhone(c.phone) ? "Send WhatsApp now" : "No valid WhatsApp number on file"}
-                        disabled={!normPhone(c.phone)}
-                        onClick={() => setSendNow({ contact: c, channel: "whatsapp" })}
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+                        )}
+                      </button>
+                    </TableCell>
+                  )}
+                  {activeTab === "database" && (
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={validEmail(c.email) ? "Send email now" : "No valid email on file"}
+                          disabled={!validEmail(c.email)}
+                          onClick={() => setSendNow({ contact: c, channel: "email" })}
+                        >
+                          <Mail className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={normPhone(c.phone) ? "Send WhatsApp now" : "No valid WhatsApp number on file"}
+                          disabled={!normPhone(c.phone)}
+                          onClick={() => setSendNow({ contact: c, channel: "whatsapp" })}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}
