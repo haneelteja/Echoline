@@ -146,17 +146,18 @@ function ColumnHead({
   label: string;
   dataType?: "text" | "select";
   options?: string[];
-  sort: { key: ColumnKey; dir: "asc" | "desc" } | null;
+  sort: { key: ColumnKey; dir: "asc" | "desc" }[];
   filterValue: string;
   onFilterChange: (key: ColumnKey, value: string) => void;
   onSortChange: (key: ColumnKey, dir: SortDirection) => void;
 }) {
-  const dir = sort?.key === columnKey ? sort.dir : null;
+  const index = sort.findIndex((s) => s.key === columnKey);
+  const dir = index >= 0 ? sort[index].dir : null;
   return (
     <TableHead>
       <div className="flex items-center gap-1">
         <span>{label}</span>
-        <SortIndicator direction={dir} />
+        <SortIndicator direction={dir} priority={index >= 0 ? index + 1 : undefined} />
         <ColumnFilter
           label={label}
           dataType={dataType}
@@ -182,7 +183,9 @@ export default function ContactsPage() {
 
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, string>>(EMPTY_FILTERS);
-  const [sort, setSort] = useState<{ key: ColumnKey; dir: "asc" | "desc" } | null>(null);
+  // Ordered list, not a single value — the order entries appear in is the
+  // sort priority (first = primary sort, rest = tie-breakers in order).
+  const [sort, setSort] = useState<{ key: ColumnKey; dir: "asc" | "desc" }[]>([]);
   const [emStageTab, setEmStageTabState] = useState<StageTab>("all");
   const [waStageTab, setWaStageTabState] = useState<StageTab>("all");
   const [page, setPage] = useState(1);
@@ -224,8 +227,17 @@ export default function ContactsPage() {
     setPage(1);
   }
 
+  // A column clicked for the first time is appended as the new lowest-priority
+  // tie-breaker; toggling an already-sorted column's direction updates it in
+  // place without changing its priority. Matches "first sort by X, then by Y"
+  // phrasing directly: click X's sort, then click Y's sort.
   function setColumnSort(key: ColumnKey, dir: SortDirection) {
-    setSort(dir ? { key, dir } : null);
+    setSort((cur) => {
+      if (!dir) return cur.filter((s) => s.key !== key);
+      const existing = cur.findIndex((s) => s.key === key);
+      if (existing >= 0) return cur.map((s, i) => (i === existing ? { key, dir } : s));
+      return [...cur, { key, dir }];
+    });
     setPage(1);
   }
 
@@ -235,12 +247,12 @@ export default function ContactsPage() {
   }
 
   const hasActiveFilters =
-    Boolean(search) || Object.values(columnFilters).some(Boolean) || sort !== null || emStageTab !== "all" || waStageTab !== "all";
+    Boolean(search) || Object.values(columnFilters).some(Boolean) || sort.length > 0 || emStageTab !== "all" || waStageTab !== "all";
 
   function clearFilters() {
     setSearch("");
     setColumnFilters(EMPTY_FILTERS);
-    setSort(null);
+    setSort([]);
     setEmStageTabState("all");
     setWaStageTabState("all");
     setPage(1);
@@ -259,11 +271,13 @@ export default function ContactsPage() {
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q);
     });
-    if (sort) {
-      const { key, dir } = sort;
+    if (sort.length) {
       rows = [...rows].sort((a, b) => {
-        const cmp = sortValue(a, key).localeCompare(sortValue(b, key));
-        return dir === "asc" ? cmp : -cmp;
+        for (const { key, dir } of sort) {
+          const cmp = sortValue(a, key).localeCompare(sortValue(b, key));
+          if (cmp !== 0) return dir === "asc" ? cmp : -cmp;
+        }
+        return 0;
       });
     }
     return rows;
@@ -368,7 +382,10 @@ export default function ContactsPage() {
           <X className="h-3.5 w-3.5" />
           Clear filters
         </Button>
-        <p className="text-xs text-muted-foreground">Use the ⋮ menu on any column header to sort or filter it.</p>
+        <p className="text-xs text-muted-foreground">
+          Use the ⋮ menu on any column header to sort or filter it — sort multiple columns by clicking them in
+          priority order.
+        </p>
       </div>
 
       {error && !adding && <p className="text-sm text-destructive">{error}</p>}

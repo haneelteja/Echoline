@@ -102,7 +102,15 @@ export function ColumnFilter({ label, dataType = "text", options = [], filterVal
   );
 }
 
-export function SortIndicator({ direction }: { direction: SortDirection }) {
+/** `priority` (1-indexed) shows a small number badge when more than one
+ * column is sorted at once, so it's clear which column is the primary sort
+ * vs a tie-breaker — otherwise multi-column sort order is invisible. */
+export function SortIndicator({ direction, priority }: { direction: SortDirection; priority?: number }) {
   const Icon = direction === "asc" ? ArrowUp : direction === "desc" ? ArrowDown : ArrowUpDown;
-  return <Icon className={cn("h-3 w-3", direction ? "text-foreground" : "text-muted-foreground/50")} />;
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <Icon className={cn("h-3 w-3", direction ? "text-foreground" : "text-muted-foreground/50")} />
+      {direction && priority && priority > 1 && <span className="text-[10px] font-semibold leading-none text-muted-foreground">{priority}</span>}
+    </span>
+  );
 }
