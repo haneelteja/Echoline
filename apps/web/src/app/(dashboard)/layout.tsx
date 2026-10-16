@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Eye,
+  EyeOff,
   KeyRound,
   LayoutDashboard,
   Users,
@@ -195,6 +197,40 @@ function SetPasswordBanner({ onSetPassword, onDismiss }: { onSetPassword: () => 
   );
 }
 
+const PASSWORD_MIN_LENGTH = 5;
+
+/** Returns the first unmet rule's message, or null if the password satisfies
+ * all of them. Checked client-side before ever calling Supabase, so the
+ * error shows up immediately rather than as a round-trip failure. */
+function passwordError(password: string): string | null {
+  if (password.length < PASSWORD_MIN_LENGTH) return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+  if (!/[A-Z]/.test(password)) return "Password must include at least one uppercase letter.";
+  if (!/[a-z]/.test(password)) return "Password must include at least one lowercase letter.";
+  if (!/[0-9]/.test(password)) return "Password must include at least one number.";
+  if (!/[^A-Za-z0-9]/.test(password)) return "Password must include at least one special character.";
+  return null;
+}
+
+function PasswordField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (v: string) => void }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input id={id} type={visible ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)} className="pr-9" />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+        >
+          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SetPasswordDialog({ open, onClose, onSet }: { open: boolean; onClose: () => void; onSet: () => void }) {
   const supabase = useMemo(() => createClient(), []);
   const [password, setPassword] = useState("");
@@ -203,7 +239,8 @@ function SetPasswordDialog({ open, onClose, onSet }: { open: boolean; onClose: (
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (password.length < 8) return setError("Password must be at least 8 characters.");
+    const complexityError = passwordError(password);
+    if (complexityError) return setError(complexityError);
     if (password !== confirm) return setError("Passwords don't match.");
     setBusy(true);
     setError(null);
@@ -225,14 +262,12 @@ function SetPasswordDialog({ open, onClose, onSet }: { open: boolean; onClose: (
           <DialogDescription>Lets you sign in with email + password, in addition to the sign-in link.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="newPw">New password</Label>
-            <Input id="newPw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="confirmPw">Confirm password</Label>
-            <Input id="confirmPw" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-          </div>
+          <PasswordField id="newPw" label="New password" value={password} onChange={setPassword} />
+          <PasswordField id="confirmPw" label="Confirm password" value={confirm} onChange={setConfirm} />
+          <p className="text-xs text-muted-foreground">
+            At least {PASSWORD_MIN_LENGTH} characters, with an uppercase letter, a lowercase letter, a number, and a
+            special character.
+          </p>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
