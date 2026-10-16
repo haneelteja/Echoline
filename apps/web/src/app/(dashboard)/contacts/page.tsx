@@ -298,6 +298,12 @@ export default function ContactsPage() {
       if (columnFilters.sentiment && c.sentiment !== columnFilters.sentiment) return false;
       if (emStageTab !== "all" && c.em_status !== emStageTab) return false;
       if (waStageTab !== "all" && c.wa_status !== waStageTab) return false;
+      // The Email/WhatsApp status tabs are scoped to leads that channel can
+      // actually be sent to — an invalid email/number is clutter there, not
+      // useful signal. The Database tab still shows everything, invalid
+      // included, since it's meant to be the full picture.
+      if (activeTab === "email" && c.em_status === "invalid") return false;
+      if (activeTab === "whatsapp" && c.wa_status === "invalid") return false;
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q);
     });
@@ -311,7 +317,7 @@ export default function ContactsPage() {
       });
     }
     return rows;
-  }, [contacts, search, columnFilters, sort, emStageTab, waStageTab]);
+  }, [contacts, search, columnFilters, sort, emStageTab, waStageTab, activeTab]);
 
   // Pagination keeps the table from ever mounting hundreds of fully-interactive
   // rows (each with a native <select>, two icon buttons, two badges) in one
