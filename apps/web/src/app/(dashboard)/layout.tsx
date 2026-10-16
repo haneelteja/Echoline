@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  KeyRound,
   LayoutDashboard,
   Users,
   SendHorizontal,
@@ -15,10 +16,15 @@ import {
   LogOut,
   Menu,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { WorkspaceProvider, useWorkspace } from "@/components/WorkspaceProvider";
 import { LogoMark } from "@/components/LogoMark";
 import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -39,10 +45,16 @@ function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
+  const [hasPassword, setHasPassword] = useState(true); // assume set until we know otherwise, avoids a flash of the prompt
+  const [promptDismissed, setPromptDismissed] = useState(false);
+  const [settingPassword, setSettingPassword] = useState(false);
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null);
+      setHasPassword(Boolean(data.user?.user_metadata?.has_password));
+    });
   }, [supabase]);
 
   async function signOut() {
@@ -143,12 +155,96 @@ function Shell({ children }: { children: React.ReactNode }) {
           <NoProjects />
         ) : (
           <>
+            {!hasPassword && !promptDismissed && (
+              <SetPasswordBanner onSetPassword={() => setSettingPassword(true)} onDismiss={() => setPromptDismissed(true)} />
+            )}
             {projectDataError && <ProjectDataErrorBanner message={projectDataError} onRetry={refreshProjectData} />}
             {children}
           </>
         )}
       </main>
+
+      <SetPasswordDialog
+        open={settingPassword}
+        onClose={() => setSettingPassword(false)}
+        onSet={() => {
+          setHasPassword(true);
+          setSettingPassword(false);
+        }}
+      />
     </div>
+  );
+}
+
+function SetPasswordBanner({ onSetPassword, onDismiss }: { onSetPassword: () => void; onDismiss: () => void }) {
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+      <div className="flex items-center gap-2 text-sm text-foreground">
+        <KeyRound className="h-4 w-4 shrink-0 text-primary" />
+        Set a password so you can sign in without waiting for an email link next time.
+      </div>
+      <div className="flex shrink-0 items-center gap-3">
+        <button onClick={onSetPassword} className="text-sm font-medium text-primary hover:underline">
+          Set password
+        </button>
+        <button onClick={onDismiss} aria-label="Dismiss" className="text-muted-foreground hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SetPasswordDialog({ open, onClose, onSet }: { open: boolean; onClose: () => void; onSet: () => void }) {
+  const supabase = useMemo(() => createClient(), []);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (password.length < 8) return setError("Password must be at least 8 characters.");
+    if (password !== confirm) return setError("Passwords don't match.");
+    setBusy(true);
+    setError(null);
+    // The password only ever leaves the browser as part of this direct
+    // Supabase Auth call — it's never emailed or passed through our own API.
+    const { error: err } = await supabase.auth.updateUser({ password, data: { has_password: true } });
+    setBusy(false);
+    if (err) return setError(err.message);
+    setPassword("");
+    setConfirm("");
+    onSet();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Set a password</DialogTitle>
+          <DialogDescription>Lets you sign in with email + password, in addition to the sign-in link.</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="newPw">New password</Label>
+            <Input id="newPw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="confirmPw">Confirm password</Label>
+            <Input id="confirmPw" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={busy || !password || !confirm}>
+            {busy ? "Saving…" : "Set password"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

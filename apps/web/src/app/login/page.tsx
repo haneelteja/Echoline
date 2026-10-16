@@ -14,6 +14,22 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Password is opt-in: an account only has one once the user explicitly
+  // sets it from the "Set a password" prompt after signing in via magic
+  // link — there's no separate signup-with-password flow, since
+  // signInWithOtp's shouldCreateUser already handles account creation.
+  const [usePassword, setUsePassword] = useState(false);
+  const [password, setPassword] = useState("");
+
+  async function signInWithPassword() {
+    setBusy(true);
+    setError(null);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setBusy(false);
+    if (error) return setError(error.message);
+    window.location.href = "/dashboard";
+  }
+
   // Supabase's Site URL / Redirect URL allow-list controls where the email link
   // actually lands — until those are configured in the dashboard it may land
   // here on /login (with ?code=... or ?token_hash=...&type=...) instead of
@@ -109,8 +125,36 @@ export default function LoginPage() {
               <label htmlFor="email">Email</label>
               <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
             </div>
-            <button className="btn primary" style={{ width: "100%", justifyContent: "center" }} onClick={sendCode} disabled={busy || !email}>
-              Send sign-in link
+            {usePassword && (
+              <div className="field">
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  onKeyDown={(e) => e.key === "Enter" && email && password && signInWithPassword()}
+                />
+              </div>
+            )}
+            <button
+              className="btn primary"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={usePassword ? signInWithPassword : sendCode}
+              disabled={busy || !email || (usePassword && !password)}
+            >
+              {usePassword ? "Sign in" : "Send sign-in link"}
+            </button>
+            <button
+              className="btn small"
+              style={{ marginTop: 8 }}
+              onClick={() => {
+                setUsePassword((v) => !v);
+                setError(null);
+              }}
+            >
+              {usePassword ? "Use a sign-in link instead" : "Sign in with password instead"}
             </button>
           </>
         ) : step === "sent" ? (
