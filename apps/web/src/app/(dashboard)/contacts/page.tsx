@@ -534,7 +534,7 @@ export default function ContactsPage() {
                 />
               )}
               {activeTab === "database" && <TableHead>Status log</TableHead>}
-              {activeTab === "database" && <TableHead>Actions</TableHead>}
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody className="[&>tr:nth-child(even)]:bg-muted/30">
@@ -588,9 +588,9 @@ export default function ContactsPage() {
                       </button>
                     </TableCell>
                   )}
-                  {activeTab === "database" && (
-                    <TableCell>
-                      <div className="flex gap-1">
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {activeTab !== "whatsapp" && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -600,6 +600,8 @@ export default function ContactsPage() {
                         >
                           <Mail className="h-4 w-4" />
                         </Button>
+                      )}
+                      {activeTab !== "email" && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -609,9 +611,9 @@ export default function ContactsPage() {
                         >
                           <MessageCircle className="h-4 w-4" />
                         </Button>
-                      </div>
-                    </TableCell>
-                  )}
+                      )}
+                    </div>
+                  </TableCell>
                 </TableRow>
               );
             })}
