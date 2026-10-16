@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { File, Send, X } from "lucide-react";
+import { Clock, File, Pencil, Send, X } from "lucide-react";
 import { emailHTML, fill } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
@@ -8,7 +8,9 @@ import { useKbAssets } from "@/lib/useKbAssets";
 import { AssetPicker } from "@/components/AssetPicker";
 import type { SequenceSettingsRow, TemplateRow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 type ChannelKey = "em" | "wa";
 type GenChannel = "email" | "whatsapp";
@@ -16,6 +18,16 @@ type GenChannel = "email" | "whatsapp";
 const CH_LABEL: Record<ChannelKey, string> = { em: "Email", wa: "WhatsApp" };
 const CH_TEMPLATE: Record<ChannelKey, GenChannel> = { em: "email", wa: "whatsapp" };
 const STEP_LABEL = ["Initial", "Follow-up 1", "Follow-up 2", "Follow-up 3"];
+
+/** Compact human summary for the wait-time trigger button — e.g. "2d 30m",
+ * "90s", "5d". Omits any unit that's zero rather than padding with "0d 0m". */
+function formatWait(s: { delayDays: number; delayMinutes?: number; delaySeconds?: number }): string {
+  const parts: string[] = [];
+  if (s.delayDays) parts.push(`${s.delayDays}d`);
+  if (s.delayMinutes) parts.push(`${s.delayMinutes}m`);
+  if (s.delaySeconds) parts.push(`${s.delaySeconds}s`);
+  return parts.length ? parts.join(" ") : "0s";
+}
 
 interface TemplateDraft {
   name: string;
@@ -51,6 +63,7 @@ export default function SequencePage() {
 
   const { assets } = useKbAssets(pid);
   const [picking, setPicking] = useState<"header" | "gallery" | null>(null);
+  const [editingWait, setEditingWait] = useState<{ ch: ChannelKey; index: number } | null>(null);
 
   // Syncs the local draft once seq finishes loading (it's null on first
   // render — WorkspaceProvider fetches it async). Calling setState directly
@@ -318,32 +331,23 @@ export default function SequencePage() {
                   {i === 0 ? (
                     "sent immediately"
                   ) : (
-                    <div className="row small" style={{ gap: 4, flexWrap: "nowrap", marginTop: 2 }}>
-                      wait
-                      {(
-                        [
-                          ["delayDays", "d"],
-                          ["delayMinutes", "m"],
-                          ["delaySeconds", "s"],
-                        ] as const
-                      ).map(([field, unit]) => (
-                        <span key={field} className="row small" style={{ gap: 2, flexWrap: "nowrap" }}>
-                          <input
-                            className="inp"
-                            type="number"
-                            min={0}
-                            style={{ width: 44 }}
-                            value={s[field] ?? 0}
-                            onChange={(e) => {
-                              const next = [...steps];
-                              next[i] = { ...s, [field]: Math.max(0, Number(e.target.value) || 0) };
-                              setDraft({ ...draft!, [ch]: { ...draft![ch], steps: next } });
-                            }}
-                          />
-                          {unit}
-                        </span>
-                      ))}
-                    </div>
+                    <button
+                      type="button"
+                      className="row small"
+                      style={{
+                        gap: 6,
+                        marginTop: 4,
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        border: "1px solid var(--line)",
+                        background: "var(--bg)",
+                      }}
+                      onClick={() => setEditingWait({ ch, index: i })}
+                    >
+                      <Clock className="h-3 w-3" />
+                      wait {formatWait(s)}
+                      <Pencil className="h-3 w-3" style={{ opacity: 0.6 }} />
+                    </button>
                   )}
                 </div>
               </div>
@@ -729,6 +733,52 @@ export default function SequencePage() {
           }}
         />
       )}
+
+      <Dialog open={editingWait !== null} onOpenChange={(o) => !o && setEditingWait(null)}>
+        <DialogContent className="max-w-sm">
+          {editingWait && draft && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {CH_LABEL[editingWait.ch]} — {STEP_LABEL[editingWait.index] ?? `Step ${editingWait.index + 1}`} delay
+                </DialogTitle>
+                <DialogDescription>How long to wait after the previous step before sending this one.</DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-3 gap-3">
+                {(
+                  [
+                    ["delayDays", "Days"],
+                    ["delayMinutes", "Minutes"],
+                    ["delaySeconds", "Seconds"],
+                  ] as const
+                ).map(([field, label]) => {
+                  const steps = draft[editingWait.ch].steps;
+                  const value = steps[editingWait.index]?.[field] ?? 0;
+                  return (
+                    <div key={field} className="flex flex-col gap-1.5">
+                      <Label htmlFor={`wait-${field}`}>{label}</Label>
+                      <Input
+                        id={`wait-${field}`}
+                        type="number"
+                        min={0}
+                        value={value}
+                        onChange={(e) => {
+                          const next = [...steps];
+                          next[editingWait.index] = { ...next[editingWait.index], [field]: Math.max(0, Number(e.target.value) || 0) };
+                          setDraft({ ...draft, [editingWait.ch]: { ...draft[editingWait.ch], steps: next } });
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setEditingWait(null)}>Done</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
