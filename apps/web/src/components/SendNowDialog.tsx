@@ -12,6 +12,11 @@ interface Props {
   contactId: string;
   contactName: string;
   channel: "email" | "whatsapp";
+  /** The contact's current em_stage/wa_stage for this channel (0 = nothing
+   * sent yet, 1 = initial sent, ...) — used to default the dropdown to
+   * whatever step is actually next for this specific lead, rather than
+   * whichever template happened to load first. */
+  currentStage: number;
   templates: TemplateRow[];
   onClose: () => void;
   /** Called right after a successful send so the Leads table reflects the
@@ -21,9 +26,10 @@ interface Props {
   onSent?: () => void;
 }
 
-export function SendNowDialog({ pid, contactId, contactName, channel, templates, onClose, onSent }: Props) {
-  const options = templates.filter((t) => t.channel === channel);
-  const [templateId, setTemplateId] = useState(options[0]?.id ?? "");
+export function SendNowDialog({ pid, contactId, contactName, channel, currentStage, templates, onClose, onSent }: Props) {
+  const options = templates.filter((t) => t.channel === channel).sort((a, b) => a.step - b.step);
+  const nextDue = options.find((t) => t.step === currentStage);
+  const [templateId, setTemplateId] = useState(nextDue?.id ?? options[0]?.id ?? "");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -69,13 +75,19 @@ export function SendNowDialog({ pid, contactId, contactName, channel, templates,
         {!sent ? (
           <>
             {options.length ? (
-              <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                {options.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name || `Step ${t.step}`}
-                  </option>
-                ))}
-              </Select>
+              <>
+                <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                  {options.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name || `Step ${t.step}`}
+                      {t.id === nextDue?.id ? " (next due)" : ""}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Pre-selected to this lead&apos;s next step in the sequence — change it to send a different one instead.
+                </p>
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">
                 No {channel === "email" ? "email" : "WhatsApp"} templates exist for this project yet.

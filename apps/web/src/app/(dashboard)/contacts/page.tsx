@@ -409,6 +409,7 @@ export default function ContactsPage() {
           contactId={sendNow.contact.id}
           contactName={sendNow.contact.name}
           channel={sendNow.channel}
+          currentStage={sendNow.channel === "email" ? sendNow.contact.em_stage : sendNow.contact.wa_stage}
           templates={templates}
           onClose={() => setSendNow(null)}
           onSent={refreshProjectData}
