@@ -16,6 +16,7 @@ import {
   Plus,
   Search,
   Send,
+  Trash2,
   Upload,
   Users,
   X,
@@ -34,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ColumnFilter, SortIndicator, type SortDirection } from "@/components/ui/column-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -198,14 +200,16 @@ const VIEW_TABS = [
   { key: "database", label: "Database", icon: Database },
   { key: "email", label: "Email status", icon: Mail },
   { key: "whatsapp", label: "WhatsApp status", icon: MessageCircle },
+  { key: "invalidLeads", label: "Invalid leads", icon: Trash2 },
 ] as const;
 type ViewTab = (typeof VIEW_TABS)[number]["key"];
 
-function ViewTabs({ value, onChange }: { value: ViewTab; onChange: (v: ViewTab) => void }) {
+function ViewTabs({ value, onChange, invalidCount }: { value: ViewTab; onChange: (v: ViewTab) => void; invalidCount: number }) {
   return (
     <div className="flex gap-1 border-b border-border">
       {VIEW_TABS.map((t) => {
         const Icon = t.icon;
+        const isInvalid = t.key === "invalidLeads";
         return (
           <button
             key={t.key}
@@ -213,11 +217,20 @@ function ViewTabs({ value, onChange }: { value: ViewTab; onChange: (v: ViewTab) 
             onClick={() => onChange(t.key)}
             className={cn(
               "-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
-              value === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              isInvalid
+                ? value === t.key
+                  ? "border-rose-600 text-rose-600"
+                  : "border-transparent text-rose-600/70 hover:text-rose-600"
+                : value === t.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <Icon className="h-4 w-4" />
             {t.label}
+            {isInvalid && invalidCount > 0 && (
+              <span className="rounded-full bg-rose-100 px-1.5 text-[10px] font-semibold tabular-nums text-rose-700">{invalidCount}</span>
+            )}
           </button>
         );
       })}
@@ -316,6 +329,18 @@ export default function ContactsPage() {
   const [statusLogContact, setStatusLogContact] = useState<ContactRow | null>(null);
   const [sendNow, setSendNow] = useState<{ contact: ContactRow; channel: "email" | "whatsapp" } | null>(null);
 
+  // Bulk cleanup on the "Invalid leads" tab — leads with no valid email AND
+  // no valid WhatsApp number, unreachable on either channel.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState<{ ids: string[] } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  function changeTab(v: ViewTab) {
+    setActiveTab(v);
+    if (v !== "invalidLeads") setSelected(new Set());
+  }
+
   const kpis = useMemo(() => {
     const total = contacts.length;
     const emailSent = contacts.filter((c) => c.em_stage > 0).length;
@@ -323,7 +348,8 @@ export default function ContactsPage() {
     const emailReplied = contacts.filter((c) => c.em_status === "replied").length;
     const waReplied = contacts.filter((c) => c.wa_status === "replied").length;
     const replied = contacts.filter((c) => c.em_status === "replied" || c.wa_status === "replied").length;
-    return { total, emailSent, waSent, emailReplied, waReplied, replied };
+    const bothInvalid = contacts.filter((c) => c.em_status === "invalid_email" && c.wa_status === "invalid_whatsapp").length;
+    return { total, emailSent, waSent, emailReplied, waReplied, replied, bothInvalid };
   }, [contacts]);
 
   const emStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.em_status)))).sort(), [contacts]);
@@ -402,20 +428,27 @@ export default function ContactsPage() {
       if (columnFilters.em_status && statusLabel(c.em_status) !== columnFilters.em_status) return false;
       if (columnFilters.wa_status && statusLabel(c.wa_status) !== columnFilters.wa_status) return false;
       if (columnFilters.sentiment && c.sentiment !== columnFilters.sentiment) return false;
-      // "invalid" isn't a literal ContactChannelStatus — it maps to
-      // invalid_email/invalid_whatsapp depending on which channel's tab this is.
-      if (emStageTab === "invalid") {
-        if (c.em_status !== "invalid_email") return false;
-      } else if (emStageTab !== "all" && c.em_status !== emStageTab) return false;
-      if (waStageTab === "invalid") {
-        if (c.wa_status !== "invalid_whatsapp") return false;
-      } else if (waStageTab !== "all" && c.wa_status !== waStageTab) return false;
-      // The Email/WhatsApp status tabs default to leads that channel can
-      // actually be sent to — invalid email/number is clutter under "All",
-      // not useful signal. Selecting the "Invalid" stage tab explicitly
-      // overrides this. The Database tab always shows everything.
-      if (activeTab === "email" && emStageTab === "all" && c.em_status === "invalid_email") return false;
-      if (activeTab === "whatsapp" && waStageTab === "all" && c.wa_status === "invalid_whatsapp") return false;
+      // The Invalid leads tab is its own fixed definition (no valid email AND
+      // no valid WhatsApp number) — the per-channel stage tabs don't apply
+      // to it and aren't shown in its UI.
+      if (activeTab === "invalidLeads") {
+        if (!(c.em_status === "invalid_email" && c.wa_status === "invalid_whatsapp")) return false;
+      } else {
+        // "invalid" isn't a literal ContactChannelStatus — it maps to
+        // invalid_email/invalid_whatsapp depending on which channel's tab this is.
+        if (emStageTab === "invalid") {
+          if (c.em_status !== "invalid_email") return false;
+        } else if (emStageTab !== "all" && c.em_status !== emStageTab) return false;
+        if (waStageTab === "invalid") {
+          if (c.wa_status !== "invalid_whatsapp") return false;
+        } else if (waStageTab !== "all" && c.wa_status !== waStageTab) return false;
+        // The Email/WhatsApp status tabs default to leads that channel can
+        // actually be sent to — invalid email/number is clutter under "All",
+        // not useful signal. Selecting the "Invalid" stage tab explicitly
+        // overrides this.
+        if (activeTab === "email" && emStageTab === "all" && c.em_status === "invalid_email") return false;
+        if (activeTab === "whatsapp" && waStageTab === "all" && c.wa_status === "invalid_whatsapp") return false;
+      }
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q);
     });
@@ -476,6 +509,35 @@ export default function ContactsPage() {
     }
   }
 
+  function toggleSelected(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((s) => (s.size === filtered.length ? new Set() : new Set(filtered.map((c) => c.id))));
+  }
+
+  async function confirmDeleteLeads() {
+    if (!pid || !confirmDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await Promise.all(confirmDelete.ids.map((id) => apiFetch(`/v1/projects/${pid}/contacts/${id}`, { method: "DELETE" })));
+      setSelected(new Set());
+      setConfirmDelete(null);
+      await refreshProjectData();
+    } catch (e) {
+      setDeleteError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't delete leads." : "Couldn't delete one or more leads.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   // contacts defaults to [] before the first fetch completes, which looks
   // identical to a genuinely empty project — loadingProject disambiguates
   // "still loading" from "actually zero leads" (same pattern as dashboard/page.tsx).
@@ -532,17 +594,59 @@ export default function ContactsPage() {
           <KpiCard label="Replied" value={kpis.waReplied} sub={`of ${kpis.waSent} sent`} icon={MessagesSquare} accent="emerald" />
         </div>
       )}
+      {activeTab === "invalidLeads" && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
+          <KpiCard label="Invalid on both channels" value={kpis.bothInvalid} sub={`of ${kpis.total}`} icon={Trash2} accent="rose" />
+          <KpiCard label="Selected" value={selected.size} sub="ready to delete" icon={CheckCircle2} accent="amber" />
+        </div>
+      )}
 
-      <ViewTabs value={activeTab} onChange={setActiveTab} />
+      <ViewTabs value={activeTab} onChange={changeTab} invalidCount={kpis.bothInvalid} />
 
-      <div className="flex flex-col gap-2.5">
-        {activeTab !== "whatsapp" && (
-          <StageTabs label="Email" accent="sky" value={emStageTab} onChange={setEmStageTab} counts={emStageCounts} />
-        )}
-        {activeTab !== "email" && (
-          <StageTabs label="WhatsApp" accent="teal" value={waStageTab} onChange={setWaStageTab} counts={waStageCounts} />
-        )}
-      </div>
+      {activeTab !== "invalidLeads" && (
+        <div className="flex flex-col gap-2.5">
+          {activeTab !== "whatsapp" && (
+            <StageTabs label="Email" accent="sky" value={emStageTab} onChange={setEmStageTab} counts={emStageCounts} />
+          )}
+          {activeTab !== "email" && (
+            <StageTabs label="WhatsApp" accent="teal" value={waStageTab} onChange={setWaStageTab} counts={waStageCounts} />
+          )}
+        </div>
+      )}
+
+      {activeTab === "invalidLeads" && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-rose-900">
+            <input
+              type="checkbox"
+              className="h-4 w-4 cursor-pointer rounded border-rose-300 accent-rose-600"
+              checked={filtered.length > 0 && selected.size === filtered.length}
+              onChange={toggleSelectAll}
+            />
+            {selected.size > 0 ? `${selected.size} selected` : `Select all ${filtered.length} invalid leads`}
+          </label>
+          {selected.size > 0 && (
+            <>
+              <Button variant="outline" size="sm" className="rounded-full" onClick={() => setSelected(new Set())}>
+                Clear selection
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="rounded-full"
+                onClick={() => setConfirmDelete({ ids: [...selected] })}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete {selected.size} lead{selected.size > 1 ? "s" : ""}
+              </Button>
+            </>
+          )}
+          <p className="text-xs text-rose-700 sm:ml-auto">
+            No valid email and no valid WhatsApp number — safe to clean up once reviewed.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center">
         <div className="relative flex-1 sm:max-w-xs">
@@ -560,6 +664,32 @@ export default function ContactsPage() {
       </div>
 
       {error && !adding && <p className="text-sm text-destructive">{error}</p>}
+
+      {confirmDelete && (
+        <Dialog open onOpenChange={(open) => !open && !deleting && setConfirmDelete(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                Delete {confirmDelete.ids.length} invalid lead{confirmDelete.ids.length > 1 ? "s" : ""}?
+              </DialogTitle>
+              <DialogDescription>
+                This permanently removes {confirmDelete.ids.length > 1 ? "these leads" : "this lead"} from the
+                database, along with their send history — there&apos;s no undo.
+              </DialogDescription>
+            </DialogHeader>
+            {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteLeads} disabled={deleting}>
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {importing && pid && <ImportLeadsDialog pid={pid} onClose={() => setImporting(false)} onImported={refreshProjectData} />}
 
@@ -616,6 +746,16 @@ export default function ContactsPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              {activeTab === "invalidLeads" && (
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 cursor-pointer rounded border-rose-300 accent-rose-600"
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    onChange={toggleSelectAll}
+                  />
+                </TableHead>
+              )}
               <ColumnHead columnKey="name" label="Business" icon={Users} iconClassName="text-muted-foreground" sort={sort} filterValue={columnFilters.name} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
               <ColumnHead columnKey="area" label="Location" icon={MapPin} iconClassName="text-muted-foreground" sort={sort} filterValue={columnFilters.area} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
               {activeTab !== "whatsapp" && (
@@ -688,6 +828,16 @@ export default function ContactsPage() {
               const latest = latestStatusByContact.get(c.id);
               return (
                 <TableRow key={c.id}>
+                  {activeTab === "invalidLeads" && (
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer rounded border-rose-300 accent-rose-600"
+                        checked={selected.has(c.id)}
+                        onChange={() => toggleSelected(c.id)}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="font-semibold text-foreground">
                     <div className="flex items-center gap-2.5">
                       <BusinessAvatar name={c.name} />
@@ -768,32 +918,44 @@ export default function ContactsPage() {
                     </button>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1 rounded-full border border-border bg-muted/30 p-1">
-                      {activeTab !== "whatsapp" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-full hover:bg-sky-100 hover:text-sky-700"
-                          title={validEmail(c.email) ? "Send email now" : "No valid email on file"}
-                          disabled={!validEmail(c.email)}
-                          onClick={() => setSendNow({ contact: c, channel: "email" })}
-                        >
-                          <Mail className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {activeTab !== "email" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-full hover:bg-teal-100 hover:text-teal-700"
-                          title={normPhone(c.phone) ? "Send WhatsApp now" : "No valid WhatsApp number on file"}
-                          disabled={!normPhone(c.phone)}
-                          onClick={() => setSendNow({ contact: c, channel: "whatsapp" })}
-                        >
-                          <MessageCircle className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+                    {activeTab === "invalidLeads" ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-full text-rose-600 hover:bg-rose-100 hover:text-rose-700"
+                        title="Delete this lead"
+                        onClick={() => setConfirmDelete({ ids: [c.id] })}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-1 rounded-full border border-border bg-muted/30 p-1">
+                        {activeTab !== "whatsapp" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded-full hover:bg-sky-100 hover:text-sky-700"
+                            title={validEmail(c.email) ? "Send email now" : "No valid email on file"}
+                            disabled={!validEmail(c.email)}
+                            onClick={() => setSendNow({ contact: c, channel: "email" })}
+                          >
+                            <Mail className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {activeTab !== "email" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded-full hover:bg-teal-100 hover:text-teal-700"
+                            title={normPhone(c.phone) ? "Send WhatsApp now" : "No valid WhatsApp number on file"}
+                            disabled={!normPhone(c.phone)}
+                            onClick={() => setSendNow({ contact: c, channel: "whatsapp" })}
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               );
