@@ -1,14 +1,16 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ComponentType } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
+  Database,
   FileSpreadsheet,
   Hand,
   Loader2,
   Mail,
+  MapPin,
   MessageCircle,
   MessagesSquare,
   Plus,
@@ -78,6 +80,38 @@ function StatusBadge({ status, manual }: { status: ContactChannelStatus; manual?
   );
 }
 
+// Deterministic per-business color + initials, purely a scanning aid for a
+// long list of otherwise-identical rows — same name always gets the same
+// color/letters, no state or randomness involved.
+const AVATAR_PALETTE = [
+  { bg: "bg-purple-100", text: "text-purple-700" },
+  { bg: "bg-sky-100", text: "text-sky-700" },
+  { bg: "bg-teal-100", text: "text-teal-700" },
+  { bg: "bg-amber-100", text: "text-amber-700" },
+  { bg: "bg-rose-100", text: "text-rose-700" },
+  { bg: "bg-emerald-100", text: "text-emerald-700" },
+  { bg: "bg-indigo-100", text: "text-indigo-700" },
+  { bg: "bg-violet-100", text: "text-violet-700" },
+] as const;
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function BusinessAvatar({ name }: { name: string }) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  const p = AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+  return (
+    <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold", p.bg, p.text)}>
+      {initials(name)}
+    </span>
+  );
+}
+
 type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment";
 
 const EMPTY_FILTERS: Record<ColumnKey, string> = { name: "", area: "", em_status: "", wa_status: "", sentiment: "" };
@@ -95,10 +129,29 @@ const STAGE_TABS: { key: StageTab; label: string }[] = [
   { key: "fu2_sent", label: "Follow-up 2" },
 ];
 
-function StageTabs({ label, value, onChange }: { label: string; value: StageTab; onChange: (v: StageTab) => void }) {
+function StageTabs({
+  label,
+  accent,
+  value,
+  onChange,
+  counts,
+}: {
+  label: string;
+  accent: "sky" | "teal";
+  value: StageTab;
+  onChange: (v: StageTab) => void;
+  counts: Record<StageTab, number>;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "text-xs font-semibold uppercase tracking-wide",
+          accent === "sky" ? "text-sky-700" : "text-teal-700"
+        )}
+      >
+        {label}
+      </span>
       <div className="flex flex-wrap gap-1">
         {STAGE_TABS.map((t) => (
           <button
@@ -106,11 +159,23 @@ function StageTabs({ label, value, onChange }: { label: string; value: StageTab;
             type="button"
             onClick={() => onChange(t.key)}
             className={cn(
-              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              value === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+              value === t.key
+                ? accent === "sky"
+                  ? "bg-sky-600 text-white"
+                  : "bg-teal-600 text-white"
+                : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
             )}
           >
             {t.label}
+            <span
+              className={cn(
+                "rounded-full px-1.5 text-[10px] font-semibold tabular-nums",
+                value === t.key ? "bg-white/20" : "bg-background text-muted-foreground"
+              )}
+            >
+              {counts[t.key]}
+            </span>
           </button>
         ))}
       </div>
@@ -119,28 +184,32 @@ function StageTabs({ label, value, onChange }: { label: string; value: StageTab;
 }
 
 const VIEW_TABS = [
-  { key: "database", label: "Database" },
-  { key: "email", label: "Email status" },
-  { key: "whatsapp", label: "WhatsApp status" },
+  { key: "database", label: "Database", icon: Database },
+  { key: "email", label: "Email status", icon: Mail },
+  { key: "whatsapp", label: "WhatsApp status", icon: MessageCircle },
 ] as const;
 type ViewTab = (typeof VIEW_TABS)[number]["key"];
 
 function ViewTabs({ value, onChange }: { value: ViewTab; onChange: (v: ViewTab) => void }) {
   return (
     <div className="flex gap-1 border-b border-border">
-      {VIEW_TABS.map((t) => (
-        <button
-          key={t.key}
-          type="button"
-          onClick={() => onChange(t.key)}
-          className={cn(
-            "-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
-            value === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {t.label}
-        </button>
-      ))}
+      {VIEW_TABS.map((t) => {
+        const Icon = t.icon;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => onChange(t.key)}
+            className={cn(
+              "-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+              value === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {t.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -162,6 +231,8 @@ function sortValue(c: ContactRow, key: ColumnKey): string {
 function ColumnHead({
   columnKey,
   label,
+  icon: Icon,
+  iconClassName,
   dataType,
   options,
   sort,
@@ -171,6 +242,8 @@ function ColumnHead({
 }: {
   columnKey: ColumnKey;
   label: string;
+  icon?: ComponentType<{ className?: string }>;
+  iconClassName?: string;
   dataType?: "text" | "select";
   options?: string[];
   sort: { key: ColumnKey; dir: "asc" | "desc" }[];
@@ -183,6 +256,7 @@ function ColumnHead({
   return (
     <TableHead>
       <div className="flex items-center gap-1">
+        {Icon && <Icon className={cn("h-3.5 w-3.5", iconClassName)} />}
         <span>{label}</span>
         <SortIndicator direction={dir} priority={index >= 0 ? index + 1 : undefined} />
         <ColumnFilter
@@ -243,6 +317,21 @@ export default function ContactsPage() {
 
   const emStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.em_status)))).sort(), [contacts]);
   const waStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.wa_status)))).sort(), [contacts]);
+
+  // Per-stage counts shown as little badges on the StageTabs pills — only the
+  // sequence-progress states, since terminal statuses (completed/replied/
+  // opted_out/invalid_*/bounced/failed) all collapse into "All", same as the
+  // filter logic below.
+  const emStageCounts = useMemo(() => {
+    const counts: Record<StageTab, number> = { all: contacts.length, not_contacted: 0, initial_sent: 0, fu1_sent: 0, fu2_sent: 0 };
+    for (const c of contacts) if (c.em_status in counts) counts[c.em_status as StageTab]++;
+    return counts;
+  }, [contacts]);
+  const waStageCounts = useMemo(() => {
+    const counts: Record<StageTab, number> = { all: contacts.length, not_contacted: 0, initial_sent: 0, fu1_sent: 0, fu2_sent: 0 };
+    for (const c of contacts) if (c.wa_status in counts) counts[c.wa_status as StageTab]++;
+    return counts;
+  }, [contacts]);
 
   const latestStatusByContact = useMemo(() => {
     const map = new Map<string, (typeof statusLog)[number]>();
@@ -379,11 +468,12 @@ export default function ContactsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="flex flex-col gap-1.5">
           <h1 className="font-display text-2xl font-bold text-foreground">Leads &amp; status</h1>
-          <p className="text-sm text-muted-foreground">
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             {filtered.length} of {contacts.length} leads
-          </p>
+          </span>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => setImporting(true)}>
@@ -423,20 +513,24 @@ export default function ContactsPage() {
       <ViewTabs value={activeTab} onChange={setActiveTab} />
 
       <div className="flex flex-col gap-2.5">
-        {activeTab !== "whatsapp" && <StageTabs label="Email" value={emStageTab} onChange={setEmStageTab} />}
-        {activeTab !== "email" && <StageTabs label="WhatsApp" value={waStageTab} onChange={setWaStageTab} />}
+        {activeTab !== "whatsapp" && (
+          <StageTabs label="Email" accent="sky" value={emStageTab} onChange={setEmStageTab} counts={emStageCounts} />
+        )}
+        {activeTab !== "email" && (
+          <StageTabs label="WhatsApp" accent="teal" value={waStageTab} onChange={setWaStageTab} counts={waStageCounts} />
+        )}
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center">
         <div className="relative flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search name, email, phone…" value={search} onChange={(e) => onSearchChange(e.target.value)} className="pl-8" />
         </div>
-        <Button variant="outline" size="sm" onClick={clearFilters} disabled={!hasActiveFilters}>
+        <Button variant="outline" size="sm" className="rounded-full" onClick={clearFilters} disabled={!hasActiveFilters}>
           <X className="h-3.5 w-3.5" />
           Clear filters
         </Button>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground sm:ml-auto sm:text-right">
           Use the ⋮ menu on any column header to sort or filter it — sort multiple columns by clicking them in
           priority order.
         </p>
@@ -499,14 +593,30 @@ export default function ContactsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <ColumnHead columnKey="name" label="Business" sort={sort} filterValue={columnFilters.name} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
-              <ColumnHead columnKey="area" label="Location" sort={sort} filterValue={columnFilters.area} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
-              {activeTab !== "whatsapp" && <TableHead>Email</TableHead>}
-              {activeTab !== "email" && <TableHead>WhatsApp</TableHead>}
+              <ColumnHead columnKey="name" label="Business" icon={Users} iconClassName="text-muted-foreground" sort={sort} filterValue={columnFilters.name} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              <ColumnHead columnKey="area" label="Location" icon={MapPin} iconClassName="text-muted-foreground" sort={sort} filterValue={columnFilters.area} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              {activeTab !== "whatsapp" && (
+                <TableHead>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 text-sky-600" />
+                    Email
+                  </span>
+                </TableHead>
+              )}
+              {activeTab !== "email" && (
+                <TableHead>
+                  <span className="inline-flex items-center gap-1.5">
+                    <MessageCircle className="h-3.5 w-3.5 text-teal-600" />
+                    WhatsApp
+                  </span>
+                </TableHead>
+              )}
               {activeTab !== "whatsapp" && (
                 <ColumnHead
                   columnKey="em_status"
                   label="Email status"
+                  icon={Mail}
+                  iconClassName="text-sky-600"
                   dataType="select"
                   options={emStatusOptions}
                   sort={sort}
@@ -519,6 +629,8 @@ export default function ContactsPage() {
                 <ColumnHead
                   columnKey="wa_status"
                   label="WhatsApp status"
+                  icon={MessageCircle}
+                  iconClassName="text-teal-600"
                   dataType="select"
                   options={waStatusOptions}
                   sort={sort}
@@ -527,19 +639,24 @@ export default function ContactsPage() {
                   onSortChange={setColumnSort}
                 />
               )}
-              {activeTab === "database" && (
-                <ColumnHead
-                  columnKey="sentiment"
-                  label="Response / Sentiment"
-                  dataType="select"
-                  options={[...SENTIMENT_VALUES]}
-                  sort={sort}
-                  filterValue={columnFilters.sentiment}
-                  onFilterChange={setColumnFilter}
-                  onSortChange={setColumnSort}
-                />
-              )}
-              {activeTab === "database" && <TableHead>Status log</TableHead>}
+              <ColumnHead
+                columnKey="sentiment"
+                label="Response / Sentiment"
+                icon={MessagesSquare}
+                iconClassName="text-violet-600"
+                dataType="select"
+                options={[...SENTIMENT_VALUES]}
+                sort={sort}
+                filterValue={columnFilters.sentiment}
+                onFilterChange={setColumnFilter}
+                onSortChange={setColumnSort}
+              />
+              <TableHead>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  Status log
+                </span>
+              </TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -548,14 +665,46 @@ export default function ContactsPage() {
               const latest = latestStatusByContact.get(c.id);
               return (
                 <TableRow key={c.id}>
-                  <TableCell className="font-semibold text-foreground">{c.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.area || "—"}</TableCell>
+                  <TableCell className="font-semibold text-foreground">
+                    <div className="flex items-center gap-2.5">
+                      <BusinessAvatar name={c.name} />
+                      <span className="truncate">{c.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {c.area ? (
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="h-3 w-3 shrink-0 opacity-60" />
+                        {c.area}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
                   {activeTab !== "whatsapp" && (
                     <TableCell className="max-w-[180px] truncate text-muted-foreground" title={c.email ?? undefined}>
-                      {c.email || "—"}
+                      {c.email ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Mail className="h-3 w-3 shrink-0 opacity-50" />
+                          <span className="truncate">{c.email}</span>
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                   )}
-                  {activeTab !== "email" && <TableCell className="whitespace-nowrap text-muted-foreground">{c.phone || "—"}</TableCell>}
+                  {activeTab !== "email" && (
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {c.phone ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <MessageCircle className="h-3 w-3 shrink-0 opacity-50" />
+                          {c.phone}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                  )}
                   {activeTab !== "whatsapp" && (
                     <TableCell>
                       <StatusBadge status={c.em_status} manual={c.em_manual_last} />
@@ -566,40 +715,42 @@ export default function ContactsPage() {
                       <StatusBadge status={c.wa_status} manual={c.wa_manual_last} />
                     </TableCell>
                   )}
-                  {activeTab === "database" && (
-                    <TableCell>
-                      <SentimentPicker value={c.sentiment} onChange={(v) => updateSentiment(c.id, v)} />
-                    </TableCell>
-                  )}
-                  {activeTab === "database" && (
-                    <TableCell>
-                      <button
-                        className="group flex max-w-[190px] flex-col items-start gap-0.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors hover:bg-accent"
-                        onClick={() => setStatusLogContact(c)}
-                      >
-                        {latest ? (
-                          <>
-                            <span className="block truncate font-medium text-foreground group-hover:text-primary">{latest.status}</span>
-                            <span className="text-muted-foreground">
-                              {new Date(latest.created_at).toLocaleDateString()}
-                              {latest.follow_up_date && <> · next {new Date(latest.follow_up_date).toLocaleDateString()}</>}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 font-medium text-muted-foreground group-hover:text-primary">
-                            <Plus className="h-3 w-3" />
-                            Add update
-                          </span>
-                        )}
-                      </button>
-                    </TableCell>
-                  )}
                   <TableCell>
-                    <div className="flex gap-1">
+                    <SentimentPicker value={c.sentiment} onChange={(v) => updateSentiment(c.id, v)} />
+                  </TableCell>
+                  <TableCell>
+                    <button
+                      className={cn(
+                        "group flex max-w-[190px] flex-col items-start gap-0.5 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors",
+                        latest
+                          ? "border-border bg-muted/40 hover:border-primary/40 hover:bg-accent"
+                          : "border-dashed border-border text-muted-foreground hover:border-primary hover:bg-accent hover:text-primary"
+                      )}
+                      onClick={() => setStatusLogContact(c)}
+                    >
+                      {latest ? (
+                        <>
+                          <span className="block truncate font-semibold text-foreground group-hover:text-primary">{latest.status}</span>
+                          <span className="text-muted-foreground">
+                            {new Date(latest.created_at).toLocaleDateString()}
+                            {latest.follow_up_date && <> · next {new Date(latest.follow_up_date).toLocaleDateString()}</>}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 font-medium">
+                          <Plus className="h-3 w-3" />
+                          Add update
+                        </span>
+                      )}
+                    </button>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1 rounded-full border border-border bg-muted/30 p-1">
                       {activeTab !== "whatsapp" && (
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-7 w-7 rounded-full hover:bg-sky-100 hover:text-sky-700"
                           title={validEmail(c.email) ? "Send email now" : "No valid email on file"}
                           disabled={!validEmail(c.email)}
                           onClick={() => setSendNow({ contact: c, channel: "email" })}
@@ -611,6 +762,7 @@ export default function ContactsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-7 w-7 rounded-full hover:bg-teal-100 hover:text-teal-700"
                           title={normPhone(c.phone) ? "Send WhatsApp now" : "No valid WhatsApp number on file"}
                           disabled={!normPhone(c.phone)}
                           onClick={() => setSendNow({ contact: c, channel: "whatsapp" })}
@@ -628,19 +780,29 @@ export default function ContactsPage() {
       ) : null}
 
       {filtered.length > PAGE_SIZE && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
           <p className="text-sm text-muted-foreground">
-            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+            Showing{" "}
+            <span className="font-semibold tabular-nums text-foreground">
+              {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)}
+            </span>{" "}
+            of <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span>
           </p>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
               <ChevronLeft className="h-3.5 w-3.5" />
               Previous
             </Button>
-            <span className="text-sm text-muted-foreground">
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold tabular-nums text-muted-foreground">
               Page {currentPage} of {pageCount}
             </span>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={currentPage >= pageCount}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={currentPage >= pageCount}
+            >
               Next
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
