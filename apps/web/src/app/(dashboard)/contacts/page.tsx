@@ -117,16 +117,20 @@ type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment";
 const EMPTY_FILTERS: Record<ColumnKey, string> = { name: "", area: "", em_status: "", wa_status: "", sentiment: "" };
 
 // "all" isn't a real ContactChannelStatus — it means "don't filter by stage".
-// completed/replied/opted_out/invalid/bounced/failed leads only show up
-// under "All", same as before; these 5 tabs cover the sequence-progress
-// states a lead walks through on its way there.
-type StageTab = "all" | "not_contacted" | "initial_sent" | "fu1_sent" | "fu2_sent";
+// completed/replied/opted_out/bounced/failed leads only show up under "All",
+// same as before; the first 4 tabs cover the sequence-progress states a lead
+// walks through on its way there. "invalid" is its own tab (mapped to
+// invalid_email/invalid_whatsapp depending on which channel's StageTabs this
+// is) so a stuck-on-bad-contact-info lead can be isolated instead of only
+// ever showing up buried in "All" on the Database tab.
+type StageTab = "all" | "not_contacted" | "initial_sent" | "fu1_sent" | "fu2_sent" | "invalid";
 const STAGE_TABS: { key: StageTab; label: string }[] = [
   { key: "all", label: "All" },
   { key: "not_contacted", label: "Not contacted" },
   { key: "initial_sent", label: "Initial" },
   { key: "fu1_sent", label: "Follow-up 1" },
   { key: "fu2_sent", label: "Follow-up 2" },
+  { key: "invalid", label: "Invalid" },
 ];
 
 function StageTabs({
@@ -153,31 +157,38 @@ function StageTabs({
         {label}
       </span>
       <div className="flex flex-wrap gap-1">
-        {STAGE_TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => onChange(t.key)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              value === t.key
-                ? accent === "sky"
-                  ? "bg-sky-600 text-white"
-                  : "bg-teal-600 text-white"
-                : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-            )}
-          >
-            {t.label}
-            <span
+        {STAGE_TABS.map((t) => {
+          const isInvalid = t.key === "invalid";
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => onChange(t.key)}
               className={cn(
-                "rounded-full px-1.5 text-[10px] font-semibold tabular-nums",
-                value === t.key ? "bg-white/20" : "bg-background text-muted-foreground"
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                value === t.key
+                  ? isInvalid
+                    ? "bg-rose-600 text-white"
+                    : accent === "sky"
+                      ? "bg-sky-600 text-white"
+                      : "bg-teal-600 text-white"
+                  : isInvalid
+                    ? "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                    : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
-              {counts[t.key]}
-            </span>
-          </button>
-        ))}
+              {t.label}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 text-[10px] font-semibold tabular-nums",
+                  value === t.key ? "bg-white/20" : isInvalid ? "bg-rose-100 text-rose-700" : "bg-background text-muted-foreground"
+                )}
+              >
+                {counts[t.key]}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -318,18 +329,24 @@ export default function ContactsPage() {
   const emStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.em_status)))).sort(), [contacts]);
   const waStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.wa_status)))).sort(), [contacts]);
 
-  // Per-stage counts shown as little badges on the StageTabs pills — only the
-  // sequence-progress states, since terminal statuses (completed/replied/
-  // opted_out/invalid_*/bounced/failed) all collapse into "All", same as the
-  // filter logic below.
+  // Per-stage counts shown as little badges on the StageTabs pills — the
+  // sequence-progress states plus "invalid" get their own count; the
+  // remaining terminal statuses (completed/replied/opted_out/bounced/failed)
+  // all collapse into "All", same as the filter logic below.
   const emStageCounts = useMemo(() => {
-    const counts: Record<StageTab, number> = { all: contacts.length, not_contacted: 0, initial_sent: 0, fu1_sent: 0, fu2_sent: 0 };
-    for (const c of contacts) if (c.em_status in counts) counts[c.em_status as StageTab]++;
+    const counts: Record<StageTab, number> = { all: contacts.length, not_contacted: 0, initial_sent: 0, fu1_sent: 0, fu2_sent: 0, invalid: 0 };
+    for (const c of contacts) {
+      if (c.em_status === "invalid_email") counts.invalid++;
+      else if (c.em_status in counts) counts[c.em_status as StageTab]++;
+    }
     return counts;
   }, [contacts]);
   const waStageCounts = useMemo(() => {
-    const counts: Record<StageTab, number> = { all: contacts.length, not_contacted: 0, initial_sent: 0, fu1_sent: 0, fu2_sent: 0 };
-    for (const c of contacts) if (c.wa_status in counts) counts[c.wa_status as StageTab]++;
+    const counts: Record<StageTab, number> = { all: contacts.length, not_contacted: 0, initial_sent: 0, fu1_sent: 0, fu2_sent: 0, invalid: 0 };
+    for (const c of contacts) {
+      if (c.wa_status === "invalid_whatsapp") counts.invalid++;
+      else if (c.wa_status in counts) counts[c.wa_status as StageTab]++;
+    }
     return counts;
   }, [contacts]);
 
@@ -385,14 +402,20 @@ export default function ContactsPage() {
       if (columnFilters.em_status && statusLabel(c.em_status) !== columnFilters.em_status) return false;
       if (columnFilters.wa_status && statusLabel(c.wa_status) !== columnFilters.wa_status) return false;
       if (columnFilters.sentiment && c.sentiment !== columnFilters.sentiment) return false;
-      if (emStageTab !== "all" && c.em_status !== emStageTab) return false;
-      if (waStageTab !== "all" && c.wa_status !== waStageTab) return false;
-      // The Email/WhatsApp status tabs are scoped to leads that channel can
-      // actually be sent to — an invalid email/number is clutter there, not
-      // useful signal. The Database tab still shows everything, invalid
-      // included, since it's meant to be the full picture.
-      if (activeTab === "email" && c.em_status === "invalid_email") return false;
-      if (activeTab === "whatsapp" && c.wa_status === "invalid_whatsapp") return false;
+      // "invalid" isn't a literal ContactChannelStatus — it maps to
+      // invalid_email/invalid_whatsapp depending on which channel's tab this is.
+      if (emStageTab === "invalid") {
+        if (c.em_status !== "invalid_email") return false;
+      } else if (emStageTab !== "all" && c.em_status !== emStageTab) return false;
+      if (waStageTab === "invalid") {
+        if (c.wa_status !== "invalid_whatsapp") return false;
+      } else if (waStageTab !== "all" && c.wa_status !== waStageTab) return false;
+      // The Email/WhatsApp status tabs default to leads that channel can
+      // actually be sent to — invalid email/number is clutter under "All",
+      // not useful signal. Selecting the "Invalid" stage tab explicitly
+      // overrides this. The Database tab always shows everything.
+      if (activeTab === "email" && emStageTab === "all" && c.em_status === "invalid_email") return false;
+      if (activeTab === "whatsapp" && waStageTab === "all" && c.wa_status === "invalid_whatsapp") return false;
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q);
     });
