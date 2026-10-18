@@ -150,7 +150,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
           eventType: "bounced",
           messageStatus: "bounced",
           payload: { bounceType: body.data?.bounce?.type },
-          contactUpdate: { em_status: isHardBounce ? "invalid" : "bounced" },
+          contactUpdate: { em_status: isHardBounce ? "invalid_email" : "bounced" },
         });
         break;
       }
@@ -197,7 +197,7 @@ export const webhookRoutes: FastifyPluginAsync = async (app) => {
           // bounce signal (temporary delivery issues arrive as a separate
           // "blocked"/"deferred" event, not a sub-type of "bounce") — the
           // address itself is bad, so mark it invalid rather than just bounced.
-          await recordEvent(db, { ...base, eventType: "bounced", messageStatus: "bounced", contactUpdate: { em_status: "invalid" } });
+          await recordEvent(db, { ...base, eventType: "bounced", messageStatus: "bounced", contactUpdate: { em_status: "invalid_email" } });
           break;
         case "dropped":
           await recordEvent(db, { ...base, eventType: "dropped", messageStatus: "failed", contactUpdate: { em_status: "failed" } });
@@ -462,7 +462,7 @@ const body = req.body as {
           eventType: "bounced",
           messageStatus: "bounced",
           payload: { bounceType: event.bounce?.bounceType },
-          contactUpdate: { em_status: isHardBounce ? "invalid" : "bounced" },
+          contactUpdate: { em_status: isHardBounce ? "invalid_email" : "bounced" },
         });
         break;
       }

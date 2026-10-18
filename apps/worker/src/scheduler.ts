@@ -120,7 +120,8 @@ async function markInvalid(
   channel: "em" | "wa"
 ): Promise<void> {
   const statusField = `${channel}_status`;
-  await db.from("contacts").update({ [statusField]: "invalid" }).eq("id", contactId);
+  const statusValue = channel === "em" ? "invalid_email" : "invalid_whatsapp";
+  await db.from("contacts").update({ [statusField]: statusValue }).eq("id", contactId);
   await db.from("message_events").insert({
     org_id: orgId,
     project_id: projectId,

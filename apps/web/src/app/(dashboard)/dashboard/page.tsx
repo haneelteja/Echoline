@@ -485,7 +485,7 @@ function ChannelFunnel({ ch, label, contacts, color }: { ch: "em" | "wa"; label:
   const mx = Math.max(1, counts[0]);
   const sent = counts[1];
   const eng = ch === "em" ? contacts.filter((c) => ["opened", "clicked"].includes(c.em_track ?? "")).length : contacts.filter((c) => c.wa_track === "read").length;
-  const inval = contacts.filter((c) => statusOf(c) === "invalid").length;
+  const inval = contacts.filter((c) => statusOf(c) === (ch === "em" ? "invalid_email" : "invalid_whatsapp")).length;
   return (
     <div className="chrow">
       <div className="chname">

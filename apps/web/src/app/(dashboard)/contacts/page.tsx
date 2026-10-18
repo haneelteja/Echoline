@@ -38,7 +38,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 
 const TERMINAL_GOOD: ContactChannelStatus[] = ["completed", "replied"];
-const TERMINAL_BAD: ContactChannelStatus[] = ["opted_out", "invalid", "bounced", "failed"];
+const TERMINAL_BAD: ContactChannelStatus[] = ["opted_out", "invalid_email", "invalid_whatsapp", "bounced", "failed"];
 
 function statusVariant(status: ContactChannelStatus): "success" | "destructive" | "secondary" | "default" {
   if (TERMINAL_GOOD.includes(status)) return "success";
@@ -302,8 +302,8 @@ export default function ContactsPage() {
       // actually be sent to — an invalid email/number is clutter there, not
       // useful signal. The Database tab still shows everything, invalid
       // included, since it's meant to be the full picture.
-      if (activeTab === "email" && c.em_status === "invalid") return false;
-      if (activeTab === "whatsapp" && c.wa_status === "invalid") return false;
+      if (activeTab === "email" && c.em_status === "invalid_email") return false;
+      if (activeTab === "whatsapp" && c.wa_status === "invalid_whatsapp") return false;
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q);
     });

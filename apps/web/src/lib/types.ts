@@ -5,7 +5,7 @@ export type MembershipRole = "owner" | "admin" | "operator" | "viewer" | "client
 
 export type ContactChannelStatus =
   | "not_contacted" | "initial_sent" | "fu1_sent" | "fu2_sent" | "completed"
-  | "replied" | "opted_out" | "invalid" | "bounced" | "failed";
+  | "replied" | "opted_out" | "invalid_email" | "invalid_whatsapp" | "bounced" | "failed";
 
 export interface ProjectRow {
   id: string;

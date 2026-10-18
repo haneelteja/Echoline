@@ -16,7 +16,7 @@ All data is scoped under `projects/{projectId}`.
 
 ## Status model (per channel)
 `not_contacted → initial_sent → fu1_sent → fu2_sent → completed`
-Terminal: `replied`, `opted_out`, `invalid`, `bounced`, `failed`.
+Terminal: `replied`, `opted_out`, `invalid_email` (em_status only), `invalid_whatsapp` (wa_status only), `bounced`, `failed`.
 Delivery tracking: email `sent | opened | clicked | bounced`; WhatsApp `delivered | read | failed`.
 
 ## Template placeholders

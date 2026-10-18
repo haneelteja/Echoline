@@ -38,7 +38,7 @@ describe("nextDue", () => {
   });
 
   it("returns null for terminal statuses", () => {
-    for (const status of ["replied", "opted_out", "invalid", "bounced", "failed"] as const) {
+    for (const status of ["replied", "opted_out", "invalid_email", "invalid_whatsapp", "bounced", "failed"] as const) {
       const c = makeContact({ em_status: status });
       expect(nextDue(c, "em", seq)).toBeNull();
     }

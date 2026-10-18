@@ -12,7 +12,8 @@ export type ContactChannelStatus =
   | "completed"
   | "replied"
   | "opted_out"
-  | "invalid"
+  | "invalid_email"
+  | "invalid_whatsapp"
   | "bounced"
   | "failed";
 

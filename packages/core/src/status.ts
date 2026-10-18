@@ -16,7 +16,8 @@ export type StageStatus = (typeof STAGE_STATUS_KEYS)[number];
 export const TERMINAL_STATUSES = {
   replied: "Replied",
   opted_out: "Opted out",
-  invalid: "Invalid contact",
+  invalid_email: "Invalid email",
+  invalid_whatsapp: "Invalid WhatsApp number",
   bounced: "Bounced",
   failed: "Failed",
 } as const;
