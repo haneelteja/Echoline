@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState, type ComponentType } from "react";
 import {
+  CalendarClock,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -22,9 +23,10 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { normPhone, SENTIMENT_VALUES, statusLabel, validEmail, type ContactChannelStatus } from "@echoline/core";
+import { nextDue, normPhone, SENTIMENT_VALUES, statusLabel, validEmail, type ContactChannelStatus } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
+import { toCoreContact, toCoreSequence } from "@/lib/adapt";
 import type { ContactRow } from "@/lib/types";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { StatusLogDialog } from "@/components/StatusLogDialog";
@@ -114,9 +116,72 @@ function BusinessAvatar({ name }: { name: string }) {
   );
 }
 
-type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment";
+type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment" | "next_email" | "next_whatsapp";
 
-const EMPTY_FILTERS: Record<ColumnKey, string> = { name: "", area: "", em_status: "", wa_status: "", sentiment: "" };
+const EMPTY_FILTERS: Record<ColumnKey, string> = {
+  name: "",
+  area: "",
+  em_status: "",
+  wa_status: "",
+  sentiment: "",
+  next_email: "",
+  next_whatsapp: "",
+};
+
+// Fixed buckets rather than the literal relative-time string ("in 3 days" is
+// a moving target and a poor filter value) — coarse enough to be useful in a
+// dropdown, specific enough to distinguish "nothing scheduled because this
+// lead is done/stopped" from "nothing scheduled because the contact info is
+// bad" from genuinely upcoming sends.
+const DUE_BUCKET_OPTIONS = ["Due now", "Today", "This week", "Later", "Invalid contact info", "Not scheduled"] as const;
+// Sorts after every real due date, including the step-0 epoch(0) sentinel
+// nextDue() returns for "due immediately" — so an ascending sort reads as
+// "most urgent first, nothing-scheduled rows last".
+const NO_DUE_SENTINEL = "9999-12-31T23:59:59.999Z";
+
+function dueBucket(due: ReturnType<typeof nextDue> | null): (typeof DUE_BUCKET_OPTIONS)[number] {
+  if (!due) return "Not scheduled";
+  if (!due.valid) return "Invalid contact info";
+  const diffMs = new Date(due.at).getTime() - Date.now();
+  if (diffMs <= 0) return "Due now";
+  const hours = diffMs / 3_600_000;
+  if (hours < 24) return "Today";
+  if (hours < 24 * 7) return "This week";
+  return "Later";
+}
+
+function relativeLabel(diffMs: number): string {
+  const mins = Math.round(diffMs / 60_000);
+  if (mins < 60) return `In ${mins} min${mins === 1 ? "" : "s"}`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `In ${hours} hr${hours === 1 ? "" : "s"}`;
+  const days = Math.round(hours / 24);
+  return `In ${days} day${days === 1 ? "" : "s"}`;
+}
+
+/** Shows when the next automated send for this channel will actually go
+ * out — or why there isn't one. Deliberately doesn't show a literal date for
+ * the "due now" case: nextDue() returns epoch(0) for a never-sent step-0
+ * contact, which isn't a real scheduled time, just "eligible whenever the
+ * scheduler's next tick finds room under the daily cap and send window". */
+function NextSendCell({ due }: { due: ReturnType<typeof nextDue> | null }) {
+  if (!due) return <span className="text-muted-foreground">—</span>;
+  if (!due.valid) {
+    return <span className="text-xs font-medium text-rose-600">No valid {due.channel === "em" ? "email" : "number"}</span>;
+  }
+  const diffMs = new Date(due.at).getTime() - Date.now();
+  const overdue = diffMs <= 0;
+  return (
+    <div className="flex flex-col">
+      <span className={cn("text-xs font-semibold", overdue ? "text-amber-700" : "text-foreground")}>
+        {overdue ? "Due now" : relativeLabel(diffMs)}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {overdue ? "Waiting for the next scheduler run" : new Date(due.at).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+      </span>
+    </div>
+  );
+}
 
 // "all" isn't a real ContactChannelStatus — it means "don't filter by stage".
 // completed/replied/opted_out/bounced/failed leads only show up under "All",
@@ -238,11 +303,15 @@ function ViewTabs({ value, onChange, invalidCount }: { value: ViewTab; onChange:
   );
 }
 
-function sortValue(c: ContactRow, key: ColumnKey): string {
+type DueMaps = { emDue: Map<string, ReturnType<typeof nextDue>>; waDue: Map<string, ReturnType<typeof nextDue>> };
+
+function sortValue(c: ContactRow, key: ColumnKey, dueMaps?: DueMaps): string {
   if (key === "em_status") return statusLabel(c.em_status);
   if (key === "wa_status") return statusLabel(c.wa_status);
   if (key === "area") return c.area ?? "";
   if (key === "sentiment") return c.sentiment;
+  if (key === "next_email") return dueMaps?.emDue.get(c.id)?.at ?? NO_DUE_SENTINEL;
+  if (key === "next_whatsapp") return dueMaps?.waDue.get(c.id)?.at ?? NO_DUE_SENTINEL;
   return c.name;
 }
 
@@ -298,7 +367,7 @@ function ColumnHead({
 }
 
 export default function ContactsPage() {
-  const { pid, contacts, templates, statusLog, loadingProject, refreshProjectData } = useWorkspace();
+  const { pid, contacts, templates, statusLog, seq, loadingProject, refreshProjectData } = useWorkspace();
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
   const [name, setName] = useState("");
@@ -350,6 +419,23 @@ export default function ContactsPage() {
 
   const emStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.em_status)))).sort(), [contacts]);
   const waStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.wa_status)))).sort(), [contacts]);
+
+  // Next email/WhatsApp send columns — same packages/core nextDue() the
+  // scheduler itself uses, so "when will this actually go out" matches
+  // reality instead of being a separate, possibly-drifting estimate.
+  const coreSeq = useMemo(() => (seq ? toCoreSequence(seq) : null), [seq]);
+  const dueMaps = useMemo<DueMaps>(() => {
+    const emDue = new Map<string, ReturnType<typeof nextDue>>();
+    const waDue = new Map<string, ReturnType<typeof nextDue>>();
+    if (coreSeq) {
+      for (const c of contacts) {
+        const cc = toCoreContact(c);
+        emDue.set(c.id, nextDue(cc, "em", coreSeq));
+        waDue.set(c.id, nextDue(cc, "wa", coreSeq));
+      }
+    }
+    return { emDue, waDue };
+  }, [contacts, coreSeq]);
 
   // Per-stage counts shown as little badges on the StageTabs pills — the
   // sequence-progress states plus "invalid" get their own count; the
@@ -437,6 +523,8 @@ export default function ContactsPage() {
       if (columnFilters.em_status && statusLabel(c.em_status) !== columnFilters.em_status) return false;
       if (columnFilters.wa_status && statusLabel(c.wa_status) !== columnFilters.wa_status) return false;
       if (columnFilters.sentiment && c.sentiment !== columnFilters.sentiment) return false;
+      if (columnFilters.next_email && dueBucket(dueMaps.emDue.get(c.id) ?? null) !== columnFilters.next_email) return false;
+      if (columnFilters.next_whatsapp && dueBucket(dueMaps.waDue.get(c.id) ?? null) !== columnFilters.next_whatsapp) return false;
       // The Invalid leads tab is its own fixed definition (no valid email AND
       // no valid WhatsApp number) — the per-channel stage tabs don't apply
       // to it and aren't shown in its UI.
@@ -464,14 +552,14 @@ export default function ContactsPage() {
     if (sort.length) {
       rows = [...rows].sort((a, b) => {
         for (const { key, dir } of sort) {
-          const cmp = sortValue(a, key).localeCompare(sortValue(b, key));
+          const cmp = sortValue(a, key, dueMaps).localeCompare(sortValue(b, key, dueMaps));
           if (cmp !== 0) return dir === "asc" ? cmp : -cmp;
         }
         return 0;
       });
     }
     return rows;
-  }, [contacts, search, columnFilters, sort, emStageTab, waStageTab, activeTab]);
+  }, [contacts, search, columnFilters, sort, emStageTab, waStageTab, activeTab, dueMaps]);
 
   // Pagination keeps the table from ever mounting hundreds of fully-interactive
   // rows (each with a native <select>, two icon buttons, two badges) in one
@@ -832,6 +920,20 @@ export default function ContactsPage() {
                   onSortChange={setColumnSort}
                 />
               )}
+              {activeTab !== "whatsapp" && (
+                <ColumnHead
+                  columnKey="next_email"
+                  label="Next email"
+                  icon={CalendarClock}
+                  iconClassName="text-sky-600"
+                  dataType="select"
+                  options={[...DUE_BUCKET_OPTIONS]}
+                  sort={sort}
+                  filterValue={columnFilters.next_email}
+                  onFilterChange={setColumnFilter}
+                  onSortChange={setColumnSort}
+                />
+              )}
               {activeTab !== "email" && (
                 <ColumnHead
                   columnKey="wa_status"
@@ -842,6 +944,20 @@ export default function ContactsPage() {
                   options={waStatusOptions}
                   sort={sort}
                   filterValue={columnFilters.wa_status}
+                  onFilterChange={setColumnFilter}
+                  onSortChange={setColumnSort}
+                />
+              )}
+              {activeTab !== "email" && (
+                <ColumnHead
+                  columnKey="next_whatsapp"
+                  label="Next WhatsApp"
+                  icon={CalendarClock}
+                  iconClassName="text-teal-600"
+                  dataType="select"
+                  options={[...DUE_BUCKET_OPTIONS]}
+                  sort={sort}
+                  filterValue={columnFilters.next_whatsapp}
                   onFilterChange={setColumnFilter}
                   onSortChange={setColumnSort}
                 />
@@ -927,9 +1043,19 @@ export default function ContactsPage() {
                       <StatusBadge status={c.em_status} manual={c.em_manual_last} />
                     </TableCell>
                   )}
+                  {activeTab !== "whatsapp" && (
+                    <TableCell>
+                      <NextSendCell due={dueMaps.emDue.get(c.id) ?? null} />
+                    </TableCell>
+                  )}
                   {activeTab !== "email" && (
                     <TableCell>
                       <StatusBadge status={c.wa_status} manual={c.wa_manual_last} />
+                    </TableCell>
+                  )}
+                  {activeTab !== "email" && (
+                    <TableCell>
+                      <NextSendCell due={dueMaps.waDue.get(c.id) ?? null} />
                     </TableCell>
                   )}
                   <TableCell>
