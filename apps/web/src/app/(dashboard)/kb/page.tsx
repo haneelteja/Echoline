@@ -1,21 +1,39 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, File, FolderPlus, Home, Loader2, Trash2, Upload, X } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  File,
+  FolderPlus,
+  Home,
+  Info,
+  Loader2,
+  Megaphone,
+  MessageCircle,
+  Receipt,
+  Tag,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useKbAssets } from "@/lib/useKbAssets";
 import { UploadProgress } from "@/components/UploadProgress";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type { KbAssetRow, KbFolderRow } from "@/lib/types";
 
 const BRAND_FIELDS = [
-  { key: "about", label: "About" },
-  { key: "offer", label: "Offer / USP" },
-  { key: "pricing", label: "Pricing notes" },
-  { key: "tone", label: "Tone" },
-  { key: "cta", label: "Call to action" },
+  { key: "about", label: "About", icon: Info, rows: 4 },
+  { key: "offer", label: "Offer / USP", icon: Tag, rows: 4 },
+  { key: "pricing", label: "Pricing notes", icon: Receipt, rows: 4 },
+  { key: "tone", label: "Tone", icon: MessageCircle, rows: 2 },
+  { key: "cta", label: "Call to action", icon: Megaphone, rows: 2 },
 ] as const;
 type BrandFieldKey = (typeof BRAND_FIELDS)[number]["key"];
 
@@ -134,29 +152,44 @@ export default function KbPage() {
           <p>What the AI and your templates know about this project.</p>
         </div>
       </div>
-      <section className="panel" style={{ maxWidth: 680, marginBottom: 20 }}>
-        <h2 style={{ marginBottom: 12 }}>Brand facts</h2>
-        {BRAND_FIELDS.map(({ key, label }) => (
-          <div key={key} className="field">
-            <label htmlFor={`brand-${key}`}>{label}</label>
-            <textarea
-              id={`brand-${key}`}
-              style={{ minHeight: key === "tone" ? 44 : 70 }}
-              value={brandDraft[key]}
-              onChange={(e) => setBrandDraft({ ...brandDraft, [key]: e.target.value })}
-            />
+      <Card className="mb-5">
+        <CardHeader>
+          <CardTitle>Brand facts</CardTitle>
+          <CardDescription>Edit the facts your AI drafts and templates pull from.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {BRAND_FIELDS.map(({ key, label, icon: Icon, rows }) => (
+              <div key={key} className="flex flex-col gap-1.5">
+                <Label htmlFor={`brand-${key}`} className="inline-flex items-center gap-1.5 text-muted-foreground">
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </Label>
+                <Textarea
+                  id={`brand-${key}`}
+                  rows={rows}
+                  value={brandDraft[key]}
+                  onChange={(e) => setBrandDraft({ ...brandDraft, [key]: e.target.value })}
+                  className="resize-none"
+                />
+              </div>
+            ))}
           </div>
-        ))}
-        <button className="btn primary" onClick={saveBrand} disabled={savingBrand}>
-          {savingBrand ? "Saving…" : "Save brand facts"}
-        </button>
-        {brandSaved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
-        {brandError && (
-          <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-            {brandError}
-          </p>
-        )}
-      </section>
+          <div className="flex items-center gap-3">
+            <Button onClick={saveBrand} disabled={savingBrand}>
+              {savingBrand && <Loader2 className="h-4 w-4 animate-spin" />}
+              {savingBrand ? "Saving…" : "Save brand facts"}
+            </Button>
+            {brandSaved && (
+              <span className="inline-flex items-center gap-1 text-sm font-medium text-success">
+                <Check className="h-4 w-4" />
+                Saved
+              </span>
+            )}
+            {brandError && <p className="text-sm text-destructive">{brandError}</p>}
+          </div>
+        </CardContent>
+      </Card>
       <p className="hint" style={{ marginBottom: 16 }}>
         SKU management is on the backlog, planned alongside real pgvector retrieval for AI context (see
         docs/ROADMAP.md). AI template generation reads these brand facts as plain text.
