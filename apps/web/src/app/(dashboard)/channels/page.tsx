@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, Mail, MessageCircle, Plus, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Inbox, Mail, MessageCircle, Plus, Sparkles } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { createClient } from "@/lib/supabase/client";
@@ -29,6 +29,7 @@ const STATUS_VARIANT: Record<string, "success" | "destructive" | "secondary"> = 
 const KIND_META = {
   email: { title: "Email", icon: Mail },
   whatsapp: { title: "WhatsApp", icon: MessageCircle },
+  email_imap: { title: "Email replies (IMAP)", icon: Inbox },
   ai: { title: "AI (template generation & rewrite)", icon: Sparkles },
 } as const;
 
@@ -146,7 +147,9 @@ export default function ChannelsPage() {
   // dialog that actually sends something real, prefilled from this project's
   // settings (email/WhatsApp number) so there's nothing to type for a quick check.
   function openTestDialog(conn: ConnectionRow) {
-    if (conn.kind === "ai") {
+    // AI and the IMAP reply inbox have nothing meaningful to send a test
+    // message to — keep their Test button on the plain credential check.
+    if (conn.kind === "ai" || conn.kind === "email_imap") {
       testConnection(conn);
       return;
     }
@@ -251,9 +254,10 @@ export default function ChannelsPage() {
 
   const emailConns = connections.filter((c) => c.kind === "email");
   const waConns = connections.filter((c) => c.kind === "whatsapp");
+  const emailImapConns = connections.filter((c) => c.kind === "email_imap");
   const aiConns = connections.filter((c) => c.kind === "ai");
 
-  function section(kind: "email" | "whatsapp" | "ai", conns: ConnectionRow[]) {
+  function section(kind: "email" | "whatsapp" | "email_imap" | "ai", conns: ConnectionRow[]) {
     const { title, icon: Icon } = KIND_META[kind];
     return (
       <Card key={kind} className="overflow-hidden">
@@ -361,6 +365,7 @@ export default function ChannelsPage() {
       ) : (
         <div className="flex flex-col gap-5">
           {section("email", emailConns)}
+          {section("email_imap", emailImapConns)}
           {section("whatsapp", waConns)}
           {section("ai", aiConns)}
         </div>

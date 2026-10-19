@@ -6,6 +6,7 @@ import { testSendGrid, sendSendGrid } from "./email/sendgrid";
 import { testBrevo, sendBrevo } from "./email/brevo";
 import { testSmtp, sendSmtp } from "./email/smtp";
 import { testResend, sendResend } from "./email/resend";
+import { testImap } from "./email/imap";
 import { testMeta, sendMetaTemplate, sendMetaText } from "./whatsapp/meta";
 import { test360Dialog, send360DialogTemplate } from "./whatsapp/360dialog";
 import { testGupshup, sendGupshupTemplate } from "./whatsapp/gupshup";
@@ -37,6 +38,7 @@ export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   openai: testOpenAi,
   gemini: testGemini,
   openrouter: testOpenRouter,
+  imap: testImap,
 };
 
 export function getConnectionTester(providerId: string): ConnectionTester | undefined {

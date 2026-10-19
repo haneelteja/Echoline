@@ -12,7 +12,7 @@ export interface CredentialField {
 export interface ProviderInfo {
   id: string;
   label: string;
-  kind: "email" | "whatsapp" | "ai" | "onedrive" | "google_sheets";
+  kind: "email" | "whatsapp" | "ai" | "email_imap" | "onedrive" | "google_sheets";
   auth: "oauth" | "apikey";
   fields: CredentialField[];
 }
@@ -80,6 +80,19 @@ export const PROVIDERS: ProviderInfo[] = [
       { key: "pass", label: "Password", type: "password" },
       { key: "secure", label: "Secure (true/false)", placeholder: "false" },
       { key: "fromEmail", label: "Send from (optional, defaults to username)", placeholder: "you@yourdomain.com" },
+    ],
+  },
+  {
+    id: "imap",
+    label: "IMAP (reply detection)",
+    kind: "email_imap",
+    auth: "apikey",
+    fields: [
+      { key: "host", label: "Host", placeholder: "imap.yourdomain.com" },
+      { key: "port", label: "Port", placeholder: "993" },
+      { key: "user", label: "Username" },
+      { key: "pass", label: "Password", type: "password" },
+      { key: "secure", label: "Secure (true/false)", placeholder: "true" },
     ],
   },
   {

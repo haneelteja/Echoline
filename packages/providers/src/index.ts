@@ -5,6 +5,9 @@ export * from "./registry";
 // their own dashboards, not via an API call) — direct export rather than
 // adding a one-provider registry map, same as the OAuth helpers below.
 export { registerWebhook360Messenger } from "./whatsapp/360messenger";
+// Reading a reply inbox has no "sender"/"template" equivalent across other
+// email providers — direct export, same reasoning as above.
+export { fetchAndConsumeUnseenImapMessages, type ImapReply } from "./email/imap";
 export * from "./oauth/types";
 export * from "./oauth/google";
 export * from "./oauth/microsoft";

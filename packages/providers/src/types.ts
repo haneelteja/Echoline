@@ -17,7 +17,15 @@ export const TEXT_ONLY_WHATSAPP_PROVIDERS = new Set<WhatsAppProviderId>(["360mes
 export const AI_PROVIDER_IDS = ["anthropic", "openai", "gemini", "openrouter"] as const;
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number];
 
-export type ProviderId = EmailProviderId | WhatsAppProviderId | AiProviderId;
+// Reading a reply inbox (kind "email_imap") is a separate concern from
+// sending (kind "email") — a project needs both connected at once, so this
+// can't just be another EmailProviderId (that list is the sending-singleton
+// kind). Only one provider today; kept as its own small union rather than
+// folded into EmailProviderId so the two kinds can never be confused.
+export const IMAP_PROVIDER_IDS = ["imap"] as const;
+export type ImapProviderId = (typeof IMAP_PROVIDER_IDS)[number];
+
+export type ProviderId = EmailProviderId | WhatsAppProviderId | AiProviderId | ImapProviderId;
 
 export interface ConnectionTestResult {
   ok: boolean;

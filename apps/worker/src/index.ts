@@ -5,6 +5,7 @@ import { getRedisConnection } from "./redis.js";
 import { getSchedulerQueue, SCHEDULER_QUEUE } from "./queues.js";
 import { runSchedulerForProject, runSchedulerTick } from "./scheduler.js";
 import { runSourceSyncTick, syncSourceNow } from "./sourceSync.js";
+import { runImapReplyPollTick } from "./imapPoll.js";
 import { startEmailWorker } from "./workers/emailWorker.js";
 import { startWhatsAppWorker } from "./workers/whatsappWorker.js";
 import { startHealthServer } from "./healthServer.js";
@@ -46,10 +47,12 @@ async function main() {
         log.info({ projectId: job.data.projectId, ...result }, "manual run-due trigger processed");
       } else {
         await runSchedulerTick(log);
-        // Lead-source sync rides the same 5-minute tick; isDue() inside
-        // governs actual per-source cadence (15 min/Hourly/Daily), and a
-        // sync failure shouldn't fail the whole scheduler job.
+        // Lead-source sync and IMAP reply polling both ride the same
+        // 5-minute tick rather than their own repeatable job — isDue()
+        // inside sourceSync governs its own per-source cadence, and neither
+        // failing should fail the whole scheduler job.
         await runSourceSyncTick(log).catch((err) => log.error({ err }, "source sync tick failed"));
+        await runImapReplyPollTick(log).catch((err) => log.error({ err }, "imap reply poll tick failed"));
       }
     },
     { connection: getRedisConnection() }
@@ -62,7 +65,7 @@ async function main() {
   const emailWorker = startEmailWorker();
   const whatsappWorker = startWhatsAppWorker();
 
-  log.info("Echoline worker started: scheduler (every 5 min) + source sync + send-email + send-whatsapp");
+  log.info("Echoline worker started: scheduler (every 5 min) + source sync + imap reply poll + send-email + send-whatsapp");
 
   const shutdown = async () => {
     log.info("Shutting down...");

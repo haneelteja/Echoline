@@ -143,7 +143,7 @@ export type ConnectionStatus = "connected" | "needs_reconnect" | "disconnected";
 export interface ConnectionRow {
   id: string;
   project_id: string;
-  kind: "email" | "whatsapp" | "ai" | "onedrive" | "google_sheets";
+  kind: "email" | "whatsapp" | "ai" | "email_imap" | "onedrive" | "google_sheets";
   provider: string;
   account_label: string | null;
   scopes: string[];
