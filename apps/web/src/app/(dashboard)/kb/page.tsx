@@ -81,21 +81,33 @@ export default function KbPage() {
     setSavingBrand(true);
     setBrandError(null);
     setBrandSaved(false);
-    try {
-      await Promise.all([
-        apiFetch(`/v1/projects/${pid}/brand`, {
-          method: "PUT",
-          body: JSON.stringify({ ...brandDraft, skus: brand?.skus ?? [] }),
-        }),
-        apiFetch(`/v1/projects/${pid}`, { method: "PATCH", body: JSON.stringify({ website }) }),
-      ]);
+    // allSettled, not all — these hit two different tables (brand_kb,
+    // projects) via two separate requests, so one failing (a transient
+    // network blip, a cold-started API) must not hide that the other one
+    // actually landed. Always refresh afterward so whichever succeeded is
+    // reflected, and say which half failed rather than a generic "Couldn't
+    // save." that could describe either or both.
+    const [brandResult, websiteResult] = await Promise.allSettled([
+      apiFetch(`/v1/projects/${pid}/brand`, {
+        method: "PUT",
+        body: JSON.stringify({ ...brandDraft, skus: brand?.skus ?? [] }),
+      }),
+      apiFetch(`/v1/projects/${pid}`, { method: "PATCH", body: JSON.stringify({ website }) }),
+    ]);
+    await Promise.all([refreshProjectData(), refreshProjects()]);
+    const forbidden = [brandResult, websiteResult].some((r) => r.status === "rejected" && r.reason instanceof ApiError && r.reason.status === 403);
+    if (forbidden) {
+      setBrandError("You have view-only access and can't edit brand facts.");
+    } else if (brandResult.status === "rejected" && websiteResult.status === "rejected") {
+      setBrandError("Couldn't save.");
+    } else if (brandResult.status === "rejected") {
+      setBrandError("Website saved, but the other brand facts failed to save — try again.");
+    } else if (websiteResult.status === "rejected") {
+      setBrandError("Brand facts saved, but the website failed to save — try again.");
+    } else {
       setBrandSaved(true);
-      await Promise.all([refreshProjectData(), refreshProjects()]);
-    } catch (e) {
-      setBrandError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't edit brand facts." : "Couldn't save.");
-    } finally {
-      setSavingBrand(false);
     }
+    setSavingBrand(false);
   }
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
