@@ -32,6 +32,7 @@ export const sendSmtp: EmailSender = async (credentials, message) => {
     const info = await transport.sendMail({
       from: message.from,
       to: message.to,
+      cc: message.cc,
       subject: message.subject,
       html: message.html,
       text: message.text,

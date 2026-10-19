@@ -1,6 +1,7 @@
 export interface RawMimeInput {
   from: string;
   to: string;
+  cc?: string;
   subject: string;
   html: string;
   text: string;
@@ -20,6 +21,7 @@ export function buildRawMime(input: RawMimeInput): string {
   const headerLines = [
     `From: ${input.from}`,
     `To: ${input.to}`,
+    ...(input.cc ? [`Cc: ${input.cc}`] : []),
     `Subject: ${encodeMimeSubject(input.subject)}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,

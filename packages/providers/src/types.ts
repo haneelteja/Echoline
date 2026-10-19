@@ -40,6 +40,7 @@ export interface SendResult {
 export interface EmailMessage {
   from: string;
   to: string;
+  cc?: string;
   subject: string;
   html: string;
   text: string;

@@ -18,7 +18,7 @@ export const sendSendGrid: EmailSender = async (credentials, message) => {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      personalizations: [{ to: [{ email: message.to }], headers: message.headers }],
+      personalizations: [{ to: [{ email: message.to }], cc: message.cc ? [{ email: message.cc }] : undefined, headers: message.headers }],
       from: { email: message.from },
       subject: message.subject,
       content: [

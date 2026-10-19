@@ -26,7 +26,7 @@ export const sendSes: EmailSender = async (credentials, message) => {
   const result = await client.send(
     new SendEmailCommand({
       FromEmailAddress: message.from,
-      Destination: { ToAddresses: [message.to] },
+      Destination: { ToAddresses: [message.to], CcAddresses: message.cc ? [message.cc] : undefined },
       Content: { Raw: { Data: Buffer.from(raw, "utf8") } },
     })
   );

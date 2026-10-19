@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowRight, CheckCircle2, Mail, MessageCircle, Plus, Sparkles } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
+import { createClient } from "@/lib/supabase/client";
 import { PROVIDERS, providerInfo, type ProviderInfo } from "@/lib/providerCatalog";
 import type { ConnectionRow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 
 const STATUS_LABEL: Record<string, string> = {
   connected: "Connected",
@@ -31,7 +33,7 @@ const KIND_META = {
 } as const;
 
 export default function ChannelsPage() {
-  const { pid } = useWorkspace();
+  const { pid, project } = useWorkspace();
 
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +44,24 @@ export default function ChannelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [pendingProvider, setPendingProvider] = useState<Record<string, string>>({});
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  // Test-send dialog — lets the user actually exercise a connection (real
+  // email / real WhatsApp message to an address/number they choose) instead
+  // of just the credential-only /test check, since a valid API key doesn't
+  // guarantee delivery actually works end to end.
+  const [testing, setTesting] = useState<ConnectionRow | null>(null);
+  const [emailTestForm, setEmailTestForm] = useState({ to: "", cc: "", subject: "", body: "" });
+  const [waTestForm, setWaTestForm] = useState({ to: "", message: "" });
+  const [testBusy, setTestBusy] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [testSuccess, setTestSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => setUserEmail(data.user?.email ?? null));
+  }, []);
 
   async function refresh() {
     if (!pid) return;
@@ -121,6 +141,86 @@ export default function ChannelsPage() {
     }
   }
 
+  // AI connections have nothing meaningful to send a test message to — keep
+  // their Test button on the plain credential check. Email/WhatsApp open a
+  // dialog that actually sends something real, prefilled with this project's
+  // own brand name/signed-in email so there's nothing to type for a quick check.
+  function openTestDialog(conn: ConnectionRow) {
+    if (conn.kind === "ai") {
+      testConnection(conn);
+      return;
+    }
+    setError(null);
+    setTestError(null);
+    setTestSuccess(null);
+    const brandName = project?.brand || project?.name || "our team";
+    const providerLabel = providerInfo(conn.provider)?.label ?? conn.provider;
+    if (conn.kind === "email") {
+      setEmailTestForm({
+        to: userEmail ?? "",
+        cc: "",
+        subject: `Test email from ${brandName}`,
+        body: `This is a test email from ${brandName}, sent via ${providerLabel} to confirm the connection is working correctly.`,
+      });
+    } else {
+      setWaTestForm({
+        to: "",
+        message: `Hello! This is a test message from ${brandName}, sent via ${providerLabel} to confirm the WhatsApp connection is working correctly.`,
+      });
+    }
+    setTesting(conn);
+  }
+
+  function closeTestDialog() {
+    if (testBusy) return;
+    setTesting(null);
+    setTestError(null);
+    setTestSuccess(null);
+  }
+
+  async function submitEmailTest() {
+    if (!pid || !testing) return;
+    setTestBusy(true);
+    setTestError(null);
+    setTestSuccess(null);
+    try {
+      await apiFetch(`/v1/projects/${pid}/connections/${testing.id}/test-send-email`, {
+        method: "POST",
+        body: JSON.stringify({
+          to: emailTestForm.to,
+          cc: emailTestForm.cc || undefined,
+          subject: emailTestForm.subject,
+          body: emailTestForm.body,
+        }),
+      });
+      setTestSuccess(`Test email sent to ${emailTestForm.to}.`);
+      await refresh();
+    } catch (e) {
+      setTestError(e instanceof ApiError ? e.message : "Couldn't send test email.");
+    } finally {
+      setTestBusy(false);
+    }
+  }
+
+  async function submitWaTest() {
+    if (!pid || !testing) return;
+    setTestBusy(true);
+    setTestError(null);
+    setTestSuccess(null);
+    try {
+      await apiFetch(`/v1/projects/${pid}/connections/${testing.id}/test-send-whatsapp`, {
+        method: "POST",
+        body: JSON.stringify({ to: waTestForm.to, message: waTestForm.message }),
+      });
+      setTestSuccess(`Test message sent to ${waTestForm.to}.`);
+      await refresh();
+    } catch (e) {
+      setTestError(e instanceof ApiError ? e.message : "Couldn't send test message.");
+    } finally {
+      setTestBusy(false);
+    }
+  }
+
   async function disconnect(conn: ConnectionRow) {
     if (!pid) return;
     if (!confirm(`Disconnect ${providerInfo(conn.provider)?.label ?? conn.provider}?`)) return;
@@ -188,7 +288,7 @@ export default function ChannelsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1.5">
-                          <Button variant="outline" size="sm" disabled={busyId === c.id} onClick={() => testConnection(c)}>
+                          <Button variant="outline" size="sm" disabled={busyId === c.id} onClick={() => openTestDialog(c)}>
                             {busyId === c.id ? "…" : "Test"}
                           </Button>
                           <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={busyId === c.id} onClick={() => disconnect(c)}>
@@ -290,6 +390,115 @@ export default function ChannelsPage() {
                 </Button>
                 <Button onClick={createConnection} disabled={connecting}>
                   {connecting ? "Connecting…" : "Connect & test"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!testing} onOpenChange={(open) => !open && closeTestDialog()}>
+        <DialogContent>
+          {testing && testing.kind === "email" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Send a test email</DialogTitle>
+                <DialogDescription>
+                  Sends a real email through {providerInfo(testing.provider)?.label ?? testing.provider} so you can confirm it&apos;s
+                  actually working.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="test-to">To</Label>
+                    <Input
+                      id="test-to"
+                      type="email"
+                      value={emailTestForm.to}
+                      onChange={(e) => setEmailTestForm({ ...emailTestForm, to: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="test-cc">CC (optional)</Label>
+                    <Input
+                      id="test-cc"
+                      type="email"
+                      value={emailTestForm.cc}
+                      onChange={(e) => setEmailTestForm({ ...emailTestForm, cc: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="test-subject">Subject</Label>
+                  <Input
+                    id="test-subject"
+                    value={emailTestForm.subject}
+                    onChange={(e) => setEmailTestForm({ ...emailTestForm, subject: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="test-body">Email body</Label>
+                  <Textarea
+                    id="test-body"
+                    rows={4}
+                    value={emailTestForm.body}
+                    onChange={(e) => setEmailTestForm({ ...emailTestForm, body: e.target.value })}
+                  />
+                </div>
+              </div>
+              {testError && <p className="text-sm text-destructive">{testError}</p>}
+              {testSuccess && <p className="text-sm text-success">{testSuccess}</p>}
+              <DialogFooter>
+                <Button variant="outline" onClick={closeTestDialog} disabled={testBusy}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={submitEmailTest}
+                  disabled={testBusy || !emailTestForm.to.trim() || !emailTestForm.subject.trim() || !emailTestForm.body.trim()}
+                >
+                  {testBusy ? "Sending…" : "Send test email"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+          {testing && testing.kind === "whatsapp" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Send a test WhatsApp message</DialogTitle>
+                <DialogDescription>
+                  Sends a real WhatsApp message through {providerInfo(testing.provider)?.label ?? testing.provider} so you can confirm
+                  it&apos;s actually working.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="test-wa-to">WhatsApp number</Label>
+                  <Input
+                    id="test-wa-to"
+                    placeholder="e.g. 9876543210 or +91 98765 43210"
+                    value={waTestForm.to}
+                    onChange={(e) => setWaTestForm({ ...waTestForm, to: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="test-wa-msg">Message</Label>
+                  <Textarea
+                    id="test-wa-msg"
+                    rows={4}
+                    value={waTestForm.message}
+                    onChange={(e) => setWaTestForm({ ...waTestForm, message: e.target.value })}
+                  />
+                </div>
+              </div>
+              {testError && <p className="text-sm text-destructive">{testError}</p>}
+              {testSuccess && <p className="text-sm text-success">{testSuccess}</p>}
+              <DialogFooter>
+                <Button variant="outline" onClick={closeTestDialog} disabled={testBusy}>
+                  Cancel
+                </Button>
+                <Button onClick={submitWaTest} disabled={testBusy || !waTestForm.to.trim() || !waTestForm.message.trim()}>
+                  {testBusy ? "Sending…" : "Send test message"}
                 </Button>
               </DialogFooter>
             </>

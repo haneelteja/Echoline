@@ -36,6 +36,7 @@ export const sendOutlook: EmailSender = async (credentials, message) => {
       subject: message.subject,
       body: { contentType: "HTML", content: message.html },
       toRecipients: [{ emailAddress: { address: message.to } }],
+      ccRecipients: message.cc ? [{ emailAddress: { address: message.cc } }] : undefined,
       internetMessageHeaders: Object.entries(message.headers ?? {}).map(([name, value]) => ({ name, value })),
     }),
   });

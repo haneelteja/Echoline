@@ -20,6 +20,7 @@ export const sendBrevo: EmailSender = async (credentials, message) => {
     body: JSON.stringify({
       sender: { email: message.from },
       to: [{ email: message.to }],
+      cc: message.cc ? [{ email: message.cc }] : undefined,
       subject: message.subject,
       htmlContent: message.html,
       textContent: message.text,

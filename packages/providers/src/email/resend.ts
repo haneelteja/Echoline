@@ -21,6 +21,7 @@ export const sendResend: EmailSender = async (credentials, message) => {
     body: JSON.stringify({
       from: message.from,
       to: [message.to],
+      cc: message.cc ? [message.cc] : undefined,
       subject: message.subject,
       html: message.html,
       text: message.text,
