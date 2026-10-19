@@ -23,7 +23,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { nextDue, normPhone, SENTIMENT_VALUES, statusLabel, validEmail, type ContactChannelStatus } from "@echoline/core";
+import { isWithinSendWindow, nextDue, normPhone, SENTIMENT_VALUES, statusLabel, validEmail, type ContactChannelStatus } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { toCoreContact, toCoreSequence } from "@/lib/adapt";
@@ -163,14 +163,33 @@ function relativeLabel(diffMs: number): string {
  * out — or why there isn't one. Deliberately doesn't show a literal date for
  * the "due now" case: nextDue() returns epoch(0) for a never-sent step-0
  * contact, which isn't a real scheduled time, just "eligible whenever the
- * scheduler's next tick finds room under the daily cap and send window". */
-function NextSendCell({ due }: { due: ReturnType<typeof nextDue> | null }) {
+ * scheduler's next tick finds room under the daily cap and send window".
+ * `withinWindow`/`windowLabel` cover the one thing nextDue() itself doesn't
+ * know about — the project's send-window hours/days, checked separately by
+ * the worker before a due step actually gets enqueued. */
+function NextSendCell({
+  due,
+  withinWindow,
+  windowLabel,
+}: {
+  due: ReturnType<typeof nextDue> | null;
+  withinWindow: boolean;
+  windowLabel: string;
+}) {
   if (!due) return <span className="text-muted-foreground">—</span>;
   if (!due.valid) {
     return <span className="text-xs font-medium text-rose-600">No valid {due.channel === "em" ? "email" : "number"}</span>;
   }
   const diffMs = new Date(due.at).getTime() - Date.now();
   const overdue = diffMs <= 0;
+  if (overdue && !withinWindow) {
+    return (
+      <div className="flex flex-col">
+        <span className="text-xs font-semibold text-foreground">Outside send window</span>
+        <span className="text-xs text-muted-foreground">Sends {windowLabel}</span>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col">
       <span className={cn("text-xs font-semibold", overdue ? "text-amber-700" : "text-foreground")}>
@@ -367,7 +386,7 @@ function ColumnHead({
 }
 
 export default function ContactsPage() {
-  const { pid, contacts, templates, statusLog, seq, loadingProject, refreshProjectData } = useWorkspace();
+  const { pid, contacts, templates, statusLog, seq, project, loadingProject, refreshProjectData } = useWorkspace();
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
   const [name, setName] = useState("");
@@ -436,6 +455,17 @@ export default function ContactsPage() {
     }
     return { emDue, waDue };
   }, [contacts, coreSeq]);
+  // nextDue() alone only computes the per-contact step/delay — it doesn't
+  // know about the project's send window (business hours/days), which the
+  // worker checks separately before ever calling dueList(). Without this, a
+  // step due at 11pm Saturday would show "Due now" here even though it
+  // genuinely won't send until the window next opens — exactly the kind of
+  // thing this column exists to get right.
+  const withinSendWindow = useMemo(
+    () => (coreSeq && project ? isWithinSendWindow(new Date(), coreSeq.window, project.timezone) : true),
+    [coreSeq, project]
+  );
+  const windowLabel = coreSeq ? `${coreSeq.window.start}–${coreSeq.window.end}, business days` : "";
 
   // Per-stage counts shown as little badges on the StageTabs pills — the
   // sequence-progress states plus "invalid" get their own count; the
@@ -1045,7 +1075,7 @@ export default function ContactsPage() {
                   )}
                   {activeTab !== "whatsapp" && (
                     <TableCell>
-                      <NextSendCell due={dueMaps.emDue.get(c.id) ?? null} />
+                      <NextSendCell due={dueMaps.emDue.get(c.id) ?? null} withinWindow={withinSendWindow} windowLabel={windowLabel} />
                     </TableCell>
                   )}
                   {activeTab !== "email" && (
@@ -1055,7 +1085,7 @@ export default function ContactsPage() {
                   )}
                   {activeTab !== "email" && (
                     <TableCell>
-                      <NextSendCell due={dueMaps.waDue.get(c.id) ?? null} />
+                      <NextSendCell due={dueMaps.waDue.get(c.id) ?? null} withinWindow={withinSendWindow} windowLabel={windowLabel} />
                     </TableCell>
                   )}
                   <TableCell>
