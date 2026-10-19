@@ -9,6 +9,7 @@ export default function ProjectSettingsPage() {
   const [brand, setBrand] = useState("");
   const [senderName, setSenderName] = useState("");
   const [website, setWebsite] = useState("");
+  const [email, setEmail] = useState("");
   const [waNumber, setWaNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -24,6 +25,7 @@ export default function ProjectSettingsPage() {
     setBrand(project.brand ?? "");
     setSenderName(project.sender_name ?? "");
     setWebsite(project.website ?? "");
+    setEmail(project.email ?? "");
     setWaNumber(project.wa_number ?? "");
   }, [project]);
 
@@ -36,7 +38,7 @@ export default function ProjectSettingsPage() {
     try {
       await apiFetch(`/v1/projects/${pid}`, {
         method: "PATCH",
-        body: JSON.stringify({ name, brand, senderName, website, waNumber }),
+        body: JSON.stringify({ name, brand, senderName, website, email, waNumber }),
       });
       setSaved(true);
       await refreshProjects();
@@ -69,6 +71,11 @@ export default function ProjectSettingsPage() {
         <div className="field">
           <label htmlFor="website">Website</label>
           <input id="website" value={website ?? ""} onChange={(e) => setWebsite(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="email">Email</label>
+          <input id="email" type="email" value={email ?? ""} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourcompany.com" />
+          <p className="hint">Used to prefill the recipient when testing an email connection under Email &amp; WhatsApp.</p>
         </div>
         <div className="field">
           <label htmlFor="wa">WhatsApp number for click-to-chat</label>

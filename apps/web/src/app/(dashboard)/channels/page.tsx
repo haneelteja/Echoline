@@ -143,8 +143,8 @@ export default function ChannelsPage() {
 
   // AI connections have nothing meaningful to send a test message to — keep
   // their Test button on the plain credential check. Email/WhatsApp open a
-  // dialog that actually sends something real, prefilled with this project's
-  // own brand name/signed-in email so there's nothing to type for a quick check.
+  // dialog that actually sends something real, prefilled from this project's
+  // settings (email/WhatsApp number) so there's nothing to type for a quick check.
   function openTestDialog(conn: ConnectionRow) {
     if (conn.kind === "ai") {
       testConnection(conn);
@@ -157,14 +157,17 @@ export default function ChannelsPage() {
     const providerLabel = providerInfo(conn.provider)?.label ?? conn.provider;
     if (conn.kind === "email") {
       setEmailTestForm({
-        to: userEmail ?? "",
+        // Project settings' own Email field is the intended default — it's
+        // what the admin set up specifically for this — falling back to the
+        // signed-in user's email only when the project has none set yet.
+        to: project?.email || userEmail || "",
         cc: "",
         subject: `Test email from ${brandName}`,
         body: `This is a test email from ${brandName}, sent via ${providerLabel} to confirm the connection is working correctly.`,
       });
     } else {
       setWaTestForm({
-        to: "",
+        to: project?.wa_number || "",
         message: `Hello! This is a test message from ${brandName}, sent via ${providerLabel} to confirm the WhatsApp connection is working correctly.`,
       });
     }

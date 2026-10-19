@@ -8,6 +8,7 @@ const projectInput = z.object({
   brand: z.string().optional(),
   senderName: z.string().optional(),
   website: z.string().optional(),
+  email: z.string().optional(),
   waNumber: z.string().optional(),
   accent: z.string().optional(),
 });
@@ -41,6 +42,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         brand: body.brand ?? null,
         sender_name: body.senderName ?? null,
         website: body.website ?? null,
+        email: body.email ?? null,
         wa_number: body.waNumber ?? null,
         accent: body.accent ?? null,
       })
@@ -62,6 +64,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     if (body.brand !== undefined) update.brand = body.brand;
     if (body.senderName !== undefined) update.sender_name = body.senderName;
     if (body.website !== undefined) update.website = body.website;
+    if (body.email !== undefined) update.email = body.email;
     if (body.waNumber !== undefined) update.wa_number = body.waNumber;
     if (body.accent !== undefined) update.accent = body.accent;
     const { data, error } = await req.supabase.from("projects").update(update).eq("id", id).select().maybeSingle();

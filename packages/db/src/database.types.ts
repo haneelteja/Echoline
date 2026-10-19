@@ -38,6 +38,7 @@ export interface ProjectRow {
   brand: string | null;
   sender_name: string | null;
   website: string | null;
+  email: string | null;
   wa_number: string | null;
   accent: string | null;
   timezone: string;
