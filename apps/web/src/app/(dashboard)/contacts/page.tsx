@@ -34,7 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ColumnFilter, SortIndicator, type SortDirection } from "@/components/ui/column-filter";
@@ -304,6 +304,7 @@ export default function ContactsPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [area, setArea] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<ViewTab>("database");
@@ -479,11 +480,12 @@ export default function ContactsPage() {
     try {
       await apiFetch(`/v1/projects/${pid}/contacts`, {
         method: "POST",
-        body: JSON.stringify({ name, email, phone, em_status: "not_contacted", wa_status: "not_contacted" }),
+        body: JSON.stringify({ name, email, phone, area, em_status: "not_contacted", wa_status: "not_contacted" }),
       });
       setName("");
       setEmail("");
       setPhone("");
+      setArea("");
       setAdding(false);
       // Realtime picks up the new contacts row — see updateSentiment's comment.
     } catch (e) {
@@ -718,28 +720,62 @@ export default function ContactsPage() {
       )}
 
       {adding && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (open) return;
+            setAdding(false);
+            setName("");
+            setEmail("");
+            setPhone("");
+            setArea("");
+            setError(null);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add lead</DialogTitle>
+              <DialogDescription>Add a single lead to this project by hand.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
                 <Label htmlFor="n">Business name</Label>
-                <Input id="n" value={name} onChange={(e) => setName(e.target.value)} />
+                <Input id="n" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="e">Email</Label>
-                <Input id="e" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Label htmlFor="loc">Location</Label>
+                <Input id="loc" value={area} onChange={(e) => setArea(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="p">Phone</Label>
                 <Input id="p" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label htmlFor="e">Email</Label>
+                <Input id="e" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
             </div>
-            <Button className="mt-4" onClick={addLead} disabled={!name.trim()}>
-              Save lead
-            </Button>
-            {error && <p className="mt-2.5 text-sm text-destructive">{error}</p>}
-          </CardContent>
-        </Card>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAdding(false);
+                  setName("");
+                  setEmail("");
+                  setPhone("");
+                  setArea("");
+                  setError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={addLead} disabled={!name.trim()}>
+                Save lead
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {filtered.length ? (
