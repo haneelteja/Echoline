@@ -14,7 +14,7 @@ export type WhatsAppProviderId = (typeof WHATSAPP_PROVIDER_IDS)[number];
  */
 export const TEXT_ONLY_WHATSAPP_PROVIDERS = new Set<WhatsAppProviderId>(["360messenger"]);
 
-export const AI_PROVIDER_IDS = ["anthropic", "openai", "gemini"] as const;
+export const AI_PROVIDER_IDS = ["anthropic", "openai", "gemini", "openrouter"] as const;
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number];
 
 export type ProviderId = EmailProviderId | WhatsAppProviderId | AiProviderId;

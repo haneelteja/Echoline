@@ -116,10 +116,15 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     const envelope = encryptCredentials(JSON.stringify(body.credentials), masterKey());
     const row = envelopeToRow(envelope);
 
-    // Only one *connected* provider per (project, kind) — replace, don't stack.
+    // Only one *connected* provider per (project, kind) for email/whatsapp —
+    // those represent a single sending identity, so replace rather than
+    // stack. AI is different: multiple AI providers can usefully stay
+    // connected at once (e.g. Claude + GPT + a cheap OpenRouter model), so
+    // it's exempt — aiTemplates.ts's getAiCredentials() picks whichever one
+    // was connected/reconnected most recently when more than one qualifies.
     // Guarded on testResult.ok so a failed new attempt never disconnects a
     // working existing connection.
-    if (testResult.ok) {
+    if (testResult.ok && body.kind !== "ai") {
       await req.supabase
         .from("provider_connections")
         .update({ status: "disconnected" })

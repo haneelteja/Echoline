@@ -172,6 +172,16 @@ export const PROVIDERS: ProviderInfo[] = [
       { key: "model", label: "Model (optional)", placeholder: "gemini-2.0-flash" },
     ],
   },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    kind: "ai",
+    auth: "apikey",
+    fields: [
+      { key: "apiKey", label: "API key", type: "password" },
+      { key: "model", label: "Model (optional, provider-prefixed)", placeholder: "openai/gpt-4o-mini" },
+    ],
+  },
   { id: "onedrive", label: "OneDrive / Excel", kind: "onedrive", auth: "oauth", fields: [] },
   { id: "google_sheets", label: "Google Sheets", kind: "google_sheets", auth: "oauth", fields: [] },
 ];

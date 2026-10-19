@@ -89,14 +89,20 @@ OTHER NOTES: ${notes}
 LEAD CATEGORIES IN THIS PROJECT: ${categories.join(", ") || "Restaurant, Hotel, Banquet Hall, Car Dealer / Retail Showroom"}`;
 }
 
+// Multiple AI providers can be connected to one project at once (see
+// connections.ts) — when more than one qualifies, the most recently
+// connected/reconnected one wins, since that's the one the admin most
+// recently chose to use.
 async function getAiCredentials(supabase: any, projectId: string): Promise<{ provider: string; credentials: Record<string, string> } | null> {
-  const { data: conn } = await supabase
+  const { data: conns } = await supabase
     .from("provider_connections")
     .select("*")
     .eq("project_id", projectId)
     .eq("kind", "ai")
     .eq("status", "connected")
-    .maybeSingle();
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  const conn = conns?.[0];
   if (!conn) return null;
   const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey()));
   return { provider: (conn as any).provider, credentials };

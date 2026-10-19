@@ -16,6 +16,7 @@ import { test360Messenger, send360MessengerText } from "./whatsapp/360messenger"
 import { testAnthropic, completeAnthropic } from "./ai/anthropic";
 import { testOpenAi, completeOpenAi, embedOpenAi } from "./ai/openai";
 import { testGemini, completeGemini } from "./ai/gemini";
+import { testOpenRouter, completeOpenRouter } from "./ai/openrouter";
 
 export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   gmail: testGmail,
@@ -35,6 +36,7 @@ export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   anthropic: testAnthropic,
   openai: testOpenAi,
   gemini: testGemini,
+  openrouter: testOpenRouter,
 };
 
 export function getConnectionTester(providerId: string): ConnectionTester | undefined {
@@ -93,6 +95,7 @@ export const aiCompleters: Record<AiProviderId, AiCompleter> = {
   anthropic: completeAnthropic,
   openai: completeOpenAi,
   gemini: completeGemini,
+  openrouter: completeOpenRouter,
 };
 
 export function getAiCompleter(providerId: string): AiCompleter | undefined {
