@@ -337,11 +337,6 @@ export default function ContactsPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  function changeTab(v: ViewTab) {
-    setActiveTab(v);
-    if (v !== "invalidLeads") setSelected(new Set());
-  }
-
   const kpis = useMemo(() => {
     const total = contacts.length;
     const emailSent = contacts.filter((c) => c.em_stage > 0).length;
@@ -419,6 +414,19 @@ export default function ContactsPage() {
     setEmStageTabState("all");
     setWaStageTabState("all");
     setPage(1);
+  }
+
+  // Each view tab shows a different subset of columns/stage-tab rows (e.g.
+  // the Email status tab hides the WhatsApp stage tabs entirely) — a filter
+  // selected on one tab must not silently keep narrowing results after
+  // switching to a tab where that filter's UI isn't even visible anymore
+  // (that's exactly what produced "0 of 818 leads" with no visible cause:
+  // a WhatsApp stage filter picked on Database stayed applied after
+  // switching to Email status, where it has no on-screen representation).
+  function changeTab(v: ViewTab) {
+    setActiveTab(v);
+    clearFilters();
+    setSelected(new Set());
   }
 
   const filtered = useMemo(() => {
