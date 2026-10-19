@@ -26,6 +26,25 @@ export const test360Messenger: ConnectionTester = async (credentials) => {
   return { ok: true, accountLabel: data.phone ?? data.number ?? data.me ?? "360Messenger account" };
 };
 
+// Confirmed against the same n8n integration source as send360MessengerText
+// above (github.com/360messenger/n8n-nodes-360messenger's trigger node):
+// POST /v2/settings/webhook/set with { url }, Bearer-authed. There's no
+// per-webhook signing secret to hand back — unlike Meta/Twilio, a request to
+// our inbound endpoint can't be cryptographically verified as genuinely from
+// 360Messenger. Called on connect and on every manual "Test" so the webhook
+// stays pointed at us even if API_PUBLIC_URL ever changes.
+export async function registerWebhook360Messenger(apiKey: string, webhookUrl: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/v2/settings/webhook/set`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ url: webhookUrl }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`360Messenger webhook registration failed (${res.status}): ${body}`);
+  }
+}
+
 export const send360MessengerText: WhatsAppTextSender = async (credentials, message) => {
   const apiKey = credentials.apiKey;
   if (!apiKey) throw new Error("apiKey is required");

@@ -5,7 +5,7 @@ import { testGupshup, sendGupshupTemplate } from "./whatsapp/gupshup";
 import { testInterakt, sendInteraktTemplate } from "./whatsapp/interakt";
 import { testAiSensy, sendAiSensyTemplate } from "./whatsapp/aisensy";
 import { testTwilio, sendTwilioTemplate, sendTwilioText } from "./whatsapp/twilio";
-import { test360Messenger, send360MessengerText } from "./whatsapp/360messenger";
+import { test360Messenger, send360MessengerText, registerWebhook360Messenger } from "./whatsapp/360messenger";
 import type { WhatsAppTemplateMessage, WhatsAppTextMessage } from "./types";
 
 const templateMessage: WhatsAppTemplateMessage = {
@@ -345,5 +345,21 @@ describe("send360MessengerText", () => {
   it("throws on a failed send", async () => {
     mockFetchOnce(422, { error: "invalid phone number" });
     await expect(send360MessengerText({ apiKey: "key-abc" }, textMessage)).rejects.toThrow(/422/);
+  });
+});
+
+describe("registerWebhook360Messenger", () => {
+  it("posts the webhook URL to the settings endpoint", async () => {
+    const fetchSpy = mockFetchOnce(200, { ok: true });
+    await registerWebhook360Messenger("key-abc", "https://api.echoline.example/webhooks/whatsapp/360messenger");
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.360messenger.com/v2/settings/webhook/set");
+    expect(init.headers).toMatchObject({ Authorization: "Bearer key-abc" });
+    expect(JSON.parse(init.body as string)).toEqual({ url: "https://api.echoline.example/webhooks/whatsapp/360messenger" });
+  });
+
+  it("throws on a failed registration", async () => {
+    mockFetchOnce(401, { error: "invalid key" });
+    await expect(registerWebhook360Messenger("bad-key", "https://api.echoline.example/webhooks/whatsapp/360messenger")).rejects.toThrow(/401/);
   });
 });

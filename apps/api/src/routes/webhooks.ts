@@ -416,6 +416,71 @@ const body = req.body as {
     return reply.type("text/xml").code(200).send("<Response></Response>");
   });
 
+  // ---------- 360Messenger ----------
+  // Unofficial personal-number WhatsApp-Web-automation API — field names
+  // confirmed against their own n8n trigger node source (github.com/
+  // 360messenger/n8n-nodes-360messenger), same source already used for
+  // send360MessengerText. Unlike Meta/Twilio, 360Messenger hands back no
+  // signing secret to verify a webhook against; the only gate is matching
+  // the recipient number to a project that actually has this connection —
+  // an unsigned forged POST could at worst mark a contact replied/opted-out
+  // early, not read or send anything.
+  app.post("/webhooks/whatsapp/360messenger", async (req, reply) => {
+    const db = createAdminClient();
+    const body = req.body as { Type?: string; From?: string; To?: string; Chat?: string; GroupId?: string | null };
+    if (body.GroupId) return reply.code(200).send({ ok: true }); // group messages aren't lead replies
+
+    const toPhone = normPhone(body.To);
+    const fromPhone = normPhone(body.From);
+    if (!toPhone || !fromPhone) return reply.code(200).send({ ok: true });
+
+    const { data: candidates } = await db.from("projects").select("id, org_id, wa_number");
+    const project = (candidates as { id: string; org_id: string; wa_number: string | null }[] | null)?.find(
+      (p) => normPhone(p.wa_number) === toPhone
+    );
+    if (!project) return reply.code(200).send({ ok: true });
+
+    const { data: conn } = await db
+      .from("provider_connections")
+      .select("id")
+      .eq("project_id", project.id)
+      .eq("kind", "whatsapp")
+      .eq("provider", "360messenger")
+      .eq("status", "connected")
+      .maybeSingle();
+    if (!conn) return reply.code(200).send({ ok: true });
+
+    const { data: contact } = await db.from("contacts").select("id, org_id").eq("project_id", project.id).eq("phone", fromPhone).maybeSingle();
+    if (!contact) return reply.code(200).send({ ok: true });
+
+    const c = contact as { id: string; org_id: string };
+    const text = body.Chat ?? "";
+    if (isOptOutText(text)) {
+      await recordEvent(db, {
+        orgId: c.org_id,
+        projectId: project.id,
+        messageId: null,
+        contactId: c.id,
+        channel: "wa",
+        eventType: "opted_out",
+        payload: { body: text },
+        contactUpdate: { em_status: "opted_out", wa_status: "opted_out" },
+      });
+    } else {
+      await recordEvent(db, {
+        orgId: c.org_id,
+        projectId: project.id,
+        messageId: null,
+        contactId: c.id,
+        channel: "wa",
+        eventType: "replied",
+        payload: { body: text },
+        contactUpdate: { wa_status: "replied" },
+      });
+    }
+    return reply.code(200).send({ ok: true });
+  });
+
   // ---------- Amazon SES (via SNS) ----------
   // SES delivers bounce/complaint/delivery events through SNS, not a
   // provider-signed HMAC — see verifySnsSignature's own doc comment for why

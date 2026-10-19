@@ -12,6 +12,7 @@ import {
   buildMicrosoftAuthUrl,
   refreshGoogleToken,
   refreshMicrosoftToken,
+  registerWebhook360Messenger,
 } from "@echoline/providers";
 import { normPhone } from "@echoline/core";
 import { sendDbError } from "../errors.js";
@@ -133,6 +134,19 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
         .eq("status", "connected");
     }
 
+    // Unlike Meta/Twilio/360dialog (webhook URL configured in their own
+    // dashboard), 360Messenger exposes a settings API for this — register it
+    // now so inbound replies start flowing without the admin doing anything
+    // provider-side. Best-effort: a registration failure shouldn't block
+    // saving a credential that otherwise tested fine.
+    if (testResult.ok && body.provider === "360messenger" && process.env.API_PUBLIC_URL) {
+      try {
+        await registerWebhook360Messenger(body.credentials.apiKey, `${process.env.API_PUBLIC_URL}/webhooks/whatsapp/360messenger`);
+      } catch (err) {
+        req.log.warn({ err }, "360Messenger webhook registration failed on connect — retried on next manual Test");
+      }
+    }
+
     const { data, error } = await req.supabase
       .from("provider_connections")
       .insert({
@@ -176,6 +190,13 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const result = await tester(credentials);
+    if (result.ok && (conn as any).provider === "360messenger" && process.env.API_PUBLIC_URL) {
+      try {
+        await registerWebhook360Messenger(credentials.apiKey, `${process.env.API_PUBLIC_URL}/webhooks/whatsapp/360messenger`);
+      } catch (err) {
+        req.log.warn({ err }, "360Messenger webhook registration failed on manual Test");
+      }
+    }
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({
