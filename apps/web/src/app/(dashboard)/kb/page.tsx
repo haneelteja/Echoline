@@ -5,6 +5,7 @@ import {
   ChevronRight,
   File,
   FolderPlus,
+  Globe,
   Home,
   Info,
   Loader2,
@@ -44,17 +45,21 @@ function formatSize(bytes: number): string {
 }
 
 export default function KbPage() {
-  const { pid, brand, refreshProjectData } = useWorkspace();
+  const { pid, project, brand, refreshProjectData, refreshProjects } = useWorkspace();
   const { folders, assets, loading, uploading, uploadQueue, error, uploadFiles, createFolder, deleteFolder, deleteAsset, deleteAssets, moveAssets } = useKbAssets(pid);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
 
   const [brandDraft, setBrandDraft] = useState<Record<BrandFieldKey, string>>({ about: "", offer: "", pricing: "", tone: "", cta: "" });
+  // Website lives on `projects` (project.website), not the brand_kb row —
+  // shown here anyway since it's a brand fact AI templates read, same as the
+  // rest of this card, but saved via /v1/projects/:id instead of /brand.
+  const [website, setWebsite] = useState("");
   const [savingBrand, setSavingBrand] = useState(false);
   const [brandSaved, setBrandSaved] = useState(false);
   const [brandError, setBrandError] = useState<string | null>(null);
 
-  // brand loads async (null on first render) — re-sync whenever it changes,
-  // same pattern as project/page.tsx's name/brand/sender fields.
+  // brand/project load async (null on first render) — re-sync whenever they
+  // change, same pattern as project/page.tsx's name/brand/sender fields.
   useEffect(() => {
     if (!brand) return;
     setBrandDraft({
@@ -66,18 +71,26 @@ export default function KbPage() {
     });
   }, [brand]);
 
+  useEffect(() => {
+    if (!project) return;
+    setWebsite(project.website ?? "");
+  }, [project]);
+
   async function saveBrand() {
     if (!pid) return;
     setSavingBrand(true);
     setBrandError(null);
     setBrandSaved(false);
     try {
-      await apiFetch(`/v1/projects/${pid}/brand`, {
-        method: "PUT",
-        body: JSON.stringify({ ...brandDraft, skus: brand?.skus ?? [] }),
-      });
+      await Promise.all([
+        apiFetch(`/v1/projects/${pid}/brand`, {
+          method: "PUT",
+          body: JSON.stringify({ ...brandDraft, skus: brand?.skus ?? [] }),
+        }),
+        apiFetch(`/v1/projects/${pid}`, { method: "PATCH", body: JSON.stringify({ website }) }),
+      ]);
       setBrandSaved(true);
-      await refreshProjectData();
+      await Promise.all([refreshProjectData(), refreshProjects()]);
     } catch (e) {
       setBrandError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't edit brand facts." : "Couldn't save.");
     } finally {
@@ -158,6 +171,13 @@ export default function KbPage() {
           <CardDescription>Edit the facts your AI drafts and templates pull from.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5 sm:max-w-sm">
+            <Label htmlFor="brand-website" className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <Globe className="h-3.5 w-3.5" />
+              Website
+            </Label>
+            <Input id="brand-website" placeholder="https://yourcompany.com" value={website} onChange={(e) => setWebsite(e.target.value)} />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {BRAND_FIELDS.map(({ key, label, icon: Icon, rows }) => (
               <div key={key} className="flex flex-col gap-1.5">
