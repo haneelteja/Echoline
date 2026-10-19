@@ -588,10 +588,10 @@
   "Sync now" button on the Sources page enqueues `syncSourceNow` onto the same scheduler queue the
   existing "Run due steps now" button uses. **Not live-verified** — impossible without real
   `GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID` credentials, which don't exist yet.
-- Email reply detection: no inbound-email infrastructure exists (Resend has no inbound-parse product;
-  would need SendGrid Inbound Parse or a dedicated mailbox; spec also called for Gmail history
-  API/watch, Microsoft Graph delta/subscriptions, and IMAP polling for SMTP) — WhatsApp replies are
-  covered, email replies are not yet. This also means "stop on reply" only works for WhatsApp today.
+- Email reply detection and 360Messenger WhatsApp reply detection — **done, see the dedicated "Backlog
+  progress" entry below (`## Backlog progress`)**. Both need live verification (a real reply sent
+  through each channel, confirmed to flip the contact's status and stop follow-ups) — tracked there,
+  not done yet as of this writing.
 - Zoho CRM and HubSpot sync — named in the original spec, not built.
 - Per-provider rate limiting (beyond the existing daily cap) — not implemented.
 - Meta/Twilio's `sendText()` for session-window free-form replies (distinct from 360Messenger's
@@ -647,6 +647,41 @@
   `TEXT_ONLY_WHATSAPP_PROVIDERS`; Meta/360dialog/etc. template sends are untouched. Template editor's
   "Additional images / files" field (same `AssetPicker`, multi-select, images+documents) now shows for
   WhatsApp templates too, previously email-only.
+
+- **Reply detection, closing the "stop on reply" gap for WhatsApp (360Messenger) and email — done,
+  not yet live-verified, user-requested.** Previously, inbound-reply detection existed only for Meta
+  Cloud API/Twilio/360dialog (Phase 4) — 360Messenger (the WhatsApp provider actually connected on
+  the Elma project) had no webhook at all, and no email provider has ever had reply detection, since
+  none of them (Resend, SendGrid, SES, Gmail, Outlook, Brevo, SMTP) expose a "someone replied to this
+  email" signal — a reply just lands in whatever inbox was used to send.
+  - **WhatsApp**: `registerWebhook360Messenger()` (confirmed against 360Messenger's own n8n trigger
+    node source, same source already trusted for `send360MessengerText`) calls their
+    `POST /v2/settings/webhook/set` on connect and on every manual "Test," pointing it at a new
+    `POST /webhooks/whatsapp/360messenger`. Resolves the project by matching the recipient number
+    against `projects.wa_number` (360Messenger has no per-webhook signing secret, unlike Meta/Twilio —
+    an unsigned forged request could at worst mark a contact replied/opted-out early, not read or
+    send anything), checks the same opt-out keyword set as the other WhatsApp webhooks, otherwise
+    marks `wa_status: "replied"`.
+  - **Email**: new `email_imap` connection kind (separate from `email`, the sending singleton — a
+    project needs both at once) backed by a new `imap` provider using `imapflow` (exact method
+    signatures confirmed against its published `.d.ts`, not guessed). `apps/worker/src/imapPoll.ts`'s
+    `runImapReplyPollTick` rides the same 5-minute scheduler tick as lead-source sync, polls every
+    project's connected IMAP inbox for unseen messages, matches the sender address against that
+    project's contacts, marks `em_status: "replied"` (or both channels `"opted_out"` if the *subject*
+    matches an opt-out keyword — body text isn't parsed, a deliberate scope cut to avoid pulling in a
+    MIME-parsing dependency for comparatively little gain), and marks every unseen message `\Seen`
+    regardless of match so an unrelated inbox message doesn't get re-evaluated on every poll forever.
+  - `packages/core`'s `nextDue()`/`dueList()` needed zero changes — `replied`/`opted_out` were already
+    terminal statuses honoring `stopOnReply` on either channel, same as Phase 4's note.
+  - Migration `0019_email_imap_connection_kind.sql` (applied) adds the enum value.
+  - **Not yet live-verified — this is the actual next step, not a formality:** the Elma project's
+    360Messenger connection needs a manual "Test" click (one-time, to register the webhook retroactively
+    for a connection made before this shipped) and a real WhatsApp reply sent to confirm `wa_status`
+    actually flips and a scheduled follow-up actually stops. The IMAP connection is mid-setup against a
+    GoDaddy-hosted Microsoft 365 mailbox (`outlook.office365.com:993`) — not yet confirmed whether
+    basic-auth IMAP is even enabled on that tenant (Microsoft 365's "Security Defaults"/Modern Auth
+    commonly blocks it, which would require an app password or admin-side config change, not a code
+    fix); needs a real reply sent to that mailbox, confirmed to flip `em_status` to `"replied"`.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
