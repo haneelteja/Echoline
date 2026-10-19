@@ -283,11 +283,25 @@ function SetPasswordDialog({ open, onClose, onSet }: { open: boolean; onClose: (
   );
 }
 
+// The "server waking up" caveat only earns its place on screen once the load
+// has actually run long enough to need explaining — on a warm server (the
+// common case) this resolves in well under a second, and showing a "may take
+// up to a minute" warning on every single page load regardless would read as
+// alarming and unpolished for something that's normally instant.
+const SLOW_LOAD_THRESHOLD_MS = 4000;
+
 function WorkspaceLoading() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_LOAD_THRESHOLD_MS);
+    return () => clearTimeout(t);
+  }, []);
   return (
     <div className="flex flex-col items-center gap-3 p-12 text-center">
       <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">Loading your workspace… the server can take up to a minute to wake up if it&apos;s been idle.</p>
+      <p className="text-sm text-muted-foreground">
+        {slow ? "Still loading… the server is waking up after being idle, this can take up to a minute." : "Loading your workspace…"}
+      </p>
     </div>
   );
 }
