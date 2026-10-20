@@ -683,6 +683,37 @@
     commonly blocks it, which would require an app password or admin-side config change, not a code
     fix); needs a real reply sent to that mailbox, confirmed to flip `em_status` to `"replied"`.
 
+- **Multi-org self-serve project creation and team invites — done, not yet live-verified, built
+  after an explicit audit request ("have you built this for multiple clients, not just one?").**
+  The audit found the DB/RLS layer was genuinely multi-tenant already, but two real gaps existed:
+  no UI/API ever created a new organization or project (only a one-off seed script did), and no
+  invite/member-management existed despite the role model and RLS being fully ready for it.
+  - `POST /orgs` bootstraps a brand-new organization + owner membership via the admin client —
+    `organizations` deliberately has no RLS insert policy (can't satisfy `can_admin_org` before an
+    owner exists), so this is the one legitimate place that writes outside the caller's own RLS
+    context to solve that chicken-and-egg problem.
+  - `invites` table (migration `0020_invites.sql`, applied) — token-hash-based, same convention as
+    `lead_sources`' webhook tokens. Inviting someone sets a role of admin/operator/viewer/
+    client_viewer, never owner — confirmed before building: "co-owner" maps to the existing admin
+    role (full `can_admin_org` rights) rather than a new role, since adding one would need its own
+    RLS semantics for comparatively little practical difference.
+  - The platform's own invite email needs `PLATFORM_RESEND_API_KEY`/`PLATFORM_EMAIL_FROM`
+    (documented in `render.yaml`, not yet set) — distinct from any project's own
+    `provider_connections` row, since those send to leads, not teammates. **Invites will 502 until
+    these are set.**
+  - Fixed while building this: `middleware.ts` already set `?next=` on its redirect-to-login and
+    `/auth/callback/route.ts` already read it, but `/login`'s own client-side code never forwarded
+    it anywhere, always hardcoding `/dashboard` — dead plumbing since whenever it was built. Now
+    wired through (validated as same-origin-relative only, never an open redirect), which is what
+    makes "sign in, then land back on the invite you were trying to accept" actually work.
+  - **Not yet live-verified**: needs the Resend credential above set, then a real invite sent end
+    to end (new-signup case and already-has-an-account case) to confirm the email arrives, the
+    accept flow lands the right role, and the owner-protection guards (can't change/remove the
+    owner's row) actually hold.
+  - Deliberately left as-is, not a gap: `TEST_SEND_MODE`'s redirect target stays one global env var
+    per deployment rather than becoming per-project/per-org — explicit decision, revisit once a
+    second real client actually needs independent test/live state.
+
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
 - Configure SPF, DKIM and DMARC and warm up sending domains before volume email.
