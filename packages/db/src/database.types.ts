@@ -31,6 +31,21 @@ export interface MembershipRow {
   created_at: string;
 }
 
+export type InviteStatus = "pending" | "accepted" | "revoked" | "expired";
+
+export interface InviteRow {
+  id: string;
+  org_id: string;
+  email: string;
+  role: MembershipRole;
+  invited_by: string;
+  token_hash: string;
+  status: InviteStatus;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
 export interface ProjectRow {
   id: string;
   org_id: string;

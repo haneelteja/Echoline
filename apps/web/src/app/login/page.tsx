@@ -6,9 +6,20 @@ import { LogoMark } from "@/components/LogoMark";
 
 type Step = "email" | "sent" | "otp" | "completing";
 
+// The server-side /auth/callback route already reads/forwards `?next=`
+// correctly (it was already built, just never fed a value) — this page
+// never used it at all, always hardcoding "/dashboard". Only a same-origin
+// relative path is accepted (must start with "/", not "//") so this can
+// never become an open redirect via a crafted `?next=` value.
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
+  return raw;
+}
+
 export default function LoginPage() {
   const supabase = createClient();
   const [step, setStep] = useState<Step>("email");
+  const [next, setNext] = useState("/dashboard");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,7 +38,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) return setError(error.message);
-    window.location.href = "/dashboard";
+    window.location.href = next;
   }
 
   // Supabase's Site URL / Redirect URL allow-list controls where the email link
@@ -36,6 +47,7 @@ export default function LoginPage() {
   // /auth/callback. Handle both so sign-in completes either way.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    setNext(safeNext(params.get("next")));
     const code = params.get("code");
     const tokenHash = params.get("token_hash");
     const type = params.get("type") as EmailOtpType | null;
@@ -51,7 +63,7 @@ export default function LoginPage() {
         setStep("email");
         return;
       }
-      window.location.href = "/dashboard";
+      window.location.href = safeNext(params.get("next"));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -61,7 +73,7 @@ export default function LoginPage() {
     setError(null);
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     });
     setBusy(false);
     if (error) return setError(error.message);
@@ -74,7 +86,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
     setBusy(false);
     if (error) return setError(error.message);
-    window.location.href = "/dashboard";
+    window.location.href = next;
   }
 
   async function signInWithGoogle() {
@@ -82,7 +94,7 @@ export default function LoginPage() {
     setError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     });
     if (error) {
       setBusy(false);

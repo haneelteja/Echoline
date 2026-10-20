@@ -3,6 +3,27 @@
 
 export type MembershipRole = "owner" | "admin" | "operator" | "viewer" | "client_viewer";
 
+export interface MemberRow {
+  id: string;
+  org_id: string;
+  user_id: string;
+  role: MembershipRole;
+  created_at: string;
+  email: string | null;
+}
+
+export type InviteStatus = "pending" | "accepted" | "revoked" | "expired";
+
+export interface InviteRow {
+  id: string;
+  org_id: string;
+  email: string;
+  role: MembershipRole;
+  status: InviteStatus;
+  expires_at: string;
+  created_at: string;
+}
+
 export type ContactChannelStatus =
   | "not_contacted" | "initial_sent" | "fu1_sent" | "fu2_sent" | "completed"
   | "replied" | "opted_out" | "invalid_email" | "invalid_whatsapp" | "bounced" | "failed";

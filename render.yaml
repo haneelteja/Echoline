@@ -36,6 +36,15 @@ services:
         value: https://echoline-api.onrender.com
       - key: WEB_PUBLIC_URL
         value: https://echoline-omega.vercel.app
+      # Platform's own transactional email for team invites — distinct from
+      # every per-project provider_connections row (those send to leads, not
+      # teammates); no org has a platform-wide email credential of its own.
+      # Invites respond 502 until both are set. Needs its own Resend account
+      # + verified sending domain, separate from any client's own Resend connection.
+      - key: PLATFORM_RESEND_API_KEY
+        sync: false
+      - key: PLATFORM_EMAIL_FROM
+        sync: false # e.g. "Echoline <invites@yourdomain.com>" — domain must be verified in that Resend account
       # OAuth (Phase 2) - unset until real Google Cloud / Azure App Registration
       # credentials exist; gmail/outlook connections respond 503 until then.
       - key: GOOGLE_OAUTH_CLIENT_ID

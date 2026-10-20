@@ -17,11 +17,13 @@ import {
   Settings,
   LogOut,
   Menu,
+  Plus,
   RefreshCw,
   X,
 } from "lucide-react";
 import { WorkspaceProvider, useWorkspace } from "@/components/WorkspaceProvider";
 import { LogoMark } from "@/components/LogoMark";
+import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,8 +43,10 @@ const NAV = [
   { href: "/project", label: "Project settings", icon: Settings },
 ] as const;
 
+const NEW_PROJECT_OPTION = "__new_project__";
+
 function Shell({ children }: { children: React.ReactNode }) {
-  const { projects, pid, setPid, loadingProjects, projectsError, projectDataError, refreshProjects, refreshProjectData } = useWorkspace();
+  const { projects, pid, setPid, project, loadingProjects, projectsError, projectDataError, refreshProjects, refreshProjectData } = useWorkspace();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -50,7 +54,13 @@ function Shell({ children }: { children: React.ReactNode }) {
   const [hasPassword, setHasPassword] = useState(true); // assume set until we know otherwise, avoids a flash of the prompt
   const [promptDismissed, setPromptDismissed] = useState(false);
   const [settingPassword, setSettingPassword] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
   const supabase = useMemo(() => createClient(), []);
+
+  async function onProjectCreated(created: { id: string }) {
+    await refreshProjects();
+    setPid(created.id);
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -99,12 +109,26 @@ function Shell({ children }: { children: React.ReactNode }) {
           <label htmlFor="projSel" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Project
           </label>
-          <Select id="projSel" value={pid ?? ""} onChange={(e) => setPid(e.target.value)} disabled={loadingProjects || projects.length === 0}>
+          <Select
+            id="projSel"
+            value={pid ?? ""}
+            onChange={(e) => {
+              if (e.target.value === NEW_PROJECT_OPTION) setCreatingProject(true);
+              else setPid(e.target.value);
+            }}
+            disabled={loadingProjects}
+          >
+            {projects.length === 0 && (
+              <option value="" disabled>
+                No projects yet
+              </option>
+            )}
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
+            <option value={NEW_PROJECT_OPTION}>+ New project…</option>
           </Select>
         </div>
 
@@ -154,7 +178,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         ) : projectsError ? (
           <ProjectsLoadError message={projectsError} onRetry={refreshProjects} />
         ) : projects.length === 0 ? (
-          <NoProjects />
+          <NoProjects onCreateProject={() => setCreatingProject(true)} />
         ) : (
           <>
             {!hasPassword && !promptDismissed && (
@@ -173,6 +197,13 @@ function Shell({ children }: { children: React.ReactNode }) {
           setHasPassword(true);
           setSettingPassword(false);
         }}
+      />
+
+      <CreateProjectDialog
+        open={creatingProject}
+        onOpenChange={setCreatingProject}
+        currentOrgId={project?.org_id ?? null}
+        onCreated={onProjectCreated}
       />
     </div>
   );
@@ -306,11 +337,15 @@ function WorkspaceLoading() {
   );
 }
 
-function NoProjects() {
+function NoProjects({ onCreateProject }: { onCreateProject: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border bg-background p-12 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-background p-12 text-center">
       <h1 className="font-display text-2xl font-bold text-foreground">No projects yet</h1>
-      <p className="text-sm text-muted-foreground">Ask an admin to add you to an organization, or create your first project.</p>
+      <p className="text-sm text-muted-foreground">Ask an admin to add you to an organization, or create your first project to get started.</p>
+      <Button onClick={onCreateProject}>
+        <Plus className="h-4 w-4" />
+        Create a project
+      </Button>
     </div>
   );
 }

@@ -1,10 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
+import { TeamSettings } from "@/components/TeamSettings";
+import { CreateProjectDialog } from "@/components/CreateProjectDialog";
+import { Button } from "@/components/ui/button";
 
 export default function ProjectSettingsPage() {
-  const { pid, project, refreshProjects } = useWorkspace();
+  const { pid, project, setPid, refreshProjects } = useWorkspace();
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [senderName, setSenderName] = useState("");
@@ -13,6 +17,7 @@ export default function ProjectSettingsPage() {
   const [waNumber, setWaNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
 
   // project loads async (null on first render if this page loads directly,
   // e.g. a refresh) — useState's initial value only applies on the very
@@ -54,7 +59,21 @@ export default function ProjectSettingsPage() {
           <h1>Project settings</h1>
           <p>Identity used in templates and email branding.</p>
         </div>
+        <Button variant="secondary" onClick={() => setCreatingProject(true)}>
+          <Plus className="h-4 w-4" />
+          New project
+        </Button>
       </div>
+
+      <CreateProjectDialog
+        open={creatingProject}
+        onOpenChange={setCreatingProject}
+        currentOrgId={project.org_id}
+        onCreated={async (created) => {
+          await refreshProjects();
+          setPid(created.id);
+        }}
+      />
       <section className="panel" style={{ maxWidth: 680 }}>
         <div className="field">
           <label htmlFor="name">Project name</label>
@@ -91,6 +110,8 @@ export default function ProjectSettingsPage() {
           </p>
         )}
       </section>
+
+      <TeamSettings orgId={project.org_id} />
     </>
   );
 }

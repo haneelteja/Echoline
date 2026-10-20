@@ -5,6 +5,7 @@ declare module "fastify" {
   interface FastifyRequest {
     supabase: ReturnType<typeof createAnonClient>;
     userId: string;
+    userEmail: string;
   }
 }
 
@@ -31,4 +32,5 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
   }
   req.supabase = createAnonClient(token);
   req.userId = data.user.id;
+  req.userEmail = data.user.email ?? "";
 }

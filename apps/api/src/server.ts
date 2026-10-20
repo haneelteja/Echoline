@@ -19,6 +19,8 @@ import { statusLogRoutes } from "./routes/statusLog.js";
 import { sendNowRoutes } from "./routes/sendNow.js";
 import { templateTestSendRoutes } from "./routes/templateTestSend.js";
 import { kbAssetsRoutes } from "./routes/kbAssets.js";
+import { orgRoutes } from "./routes/orgs.js";
+import { inviteRoutes, publicInviteRoutes } from "./routes/invites.js";
 
 initSentry();
 
@@ -74,6 +76,7 @@ await app.register(oauthCallbackRoutes);
 await app.register(trackingRoutes);
 await app.register(webhookRoutes);
 await app.register(intakeRoutes);
+await app.register(publicInviteRoutes);
 
 await app.register(
   async (api) => {
@@ -91,6 +94,8 @@ await app.register(
     await api.register(sendNowRoutes);
     await api.register(templateTestSendRoutes);
     await api.register(kbAssetsRoutes);
+    await api.register(orgRoutes);
+    await api.register(inviteRoutes);
   },
   { prefix: "/v1" }
 );
