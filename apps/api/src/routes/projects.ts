@@ -14,8 +14,8 @@ const projectInput = z.object({
 });
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
-  // List projects visible to the caller. For owner/admin/operator/viewer this is
-  // every project in their orgs; for client_viewer, RLS narrows it to
+  // List projects visible to the caller. For owner/admin/viewer this is
+  // every project in their orgs; for project_viewer, RLS narrows it to
   // project_client_access. Powers the project switcher.
   app.get("/projects", async (req, reply) => {
     const { data, error } = await req.supabase.from("projects").select("*").order("created_at");
@@ -73,7 +73,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     return data;
   });
 
-  // Manual "Run due steps now" — operator and above. Enqueues onto the same
+  // Manual "Run due steps now" — admin and above (same tier as
+  // can_write_project now that 'operator' is gone). Enqueues onto the same
   // scheduler queue apps/worker's repeatable 5-minute tick uses; the worker
   // does the actual work, this just triggers it immediately instead of
   // waiting for the next tick.
@@ -90,8 +91,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       .eq("user_id", req.userId)
       .maybeSingle();
     if (memErr) return sendDbError(reply, memErr);
-    if (!membership || !["owner", "admin", "operator"].includes((membership as any).role)) {
-      return reply.code(403).send({ error: "forbidden", message: "Operator access or above is required to run due steps." });
+    if (!membership || !["owner", "admin"].includes((membership as any).role)) {
+      return reply.code(403).send({ error: "forbidden", message: "Admin access or above is required to run due steps." });
     }
 
     await getSchedulerQueue().add("manual-run-due", { projectId: id }, { removeOnComplete: 100, removeOnFail: 100 });

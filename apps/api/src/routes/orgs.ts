@@ -6,10 +6,12 @@ import { sendDbError } from "../errors.js";
 const createOrgInput = z.object({ name: z.string().min(1) });
 
 // Everyone except 'owner' — the org/project creator stays owner, unchanged;
-// everyone invited in afterward is admin/operator/viewer/client_viewer. Admin
-// is the practical "co-owner" (full org-management rights via can_admin_org),
-// not a separate role — see docs/ROADMAP.md for why no new role was added.
-const INVITABLE_ROLES = ["admin", "operator", "viewer", "client_viewer"] as const;
+// everyone invited in afterward is admin/viewer/project_viewer. Admin is the
+// practical "co-owner" (full org-management rights via can_admin_org), not a
+// separate role — see docs/ROADMAP.md for why no new role was added. The
+// former 'operator' tier was removed entirely (see docs/ROADMAP.md) —
+// write access and admin access are no longer distinct tiers.
+const INVITABLE_ROLES = ["admin", "viewer", "project_viewer"] as const;
 const updateMemberInput = z.object({ role: z.enum(INVITABLE_ROLES) });
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {

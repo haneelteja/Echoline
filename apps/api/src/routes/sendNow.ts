@@ -207,7 +207,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
     const body = sendNowInput.parse(req.body);
 
     // Runs through the caller's own RLS for the read-side lookups (so a
-    // viewer/client_viewer gets the right 403 from can_write_project via the
+    // viewer/project_viewer gets the right 403 from can_write_project via the
     // templates/contacts policies), then an admin client for the actual send
     // + credential decrypt, same split emailWorker.ts/whatsappWorker.ts use.
     const [{ data: contact, error: contactErr }, { data: project, error: projErr }, { data: template, error: tmplErr }] = await Promise.all([

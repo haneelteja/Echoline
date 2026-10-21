@@ -123,7 +123,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Realtime: any change to project-scoped tables triggers a refetch of that
   // slice. Simpler and more robust than hand-merging postgres_changes payloads,
-  // and RLS still applies to the refetch so a client_viewer only ever sees what
+  // and RLS still applies to the refetch so a project_viewer only ever sees what
   // they're scoped to.
   //
   // Debounced per table: the scheduler can update many individual contacts

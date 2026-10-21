@@ -16,8 +16,8 @@ const submitInput = z.object({
 });
 
 /**
- * Submits a WhatsApp template to Meta for approval. Gated to org-admins, not
- * just operators — same justification as connections.ts: this reads the
+ * Submits a WhatsApp template to Meta for approval. Gated to org-admins —
+ * same justification as connections.ts: this reads the
  * project's connected Meta credentials, and provider_connections is
  * admin-only via RLS (migration 0002). Runs entirely through the caller's
  * own req.supabase/RLS context rather than an admin-client bypass, so an

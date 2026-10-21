@@ -15,9 +15,8 @@ interface InvitePreview {
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
-  operator: "Operator",
   viewer: "Viewer",
-  client_viewer: "Client viewer",
+  project_viewer: "Project viewer",
 };
 
 type State = "loading" | "invalid" | "needs_login" | "email_mismatch" | "accepting" | "accepted" | "error";

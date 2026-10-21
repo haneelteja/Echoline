@@ -713,6 +713,27 @@
   - Deliberately left as-is, not a gap: `TEST_SEND_MODE`'s redirect target stays one global env var
     per deployment rather than becoming per-project/per-org — explicit decision, revisit once a
     second real client actually needs independent test/live state.
+- **Role model simplified — `operator` removed, `client_viewer` renamed to `project_viewer`.**
+  User-requested after reviewing what each role actually unlocked: `operator` sat between `admin`
+  and `viewer` (write access without connection/billing visibility) but had never been used in
+  practice, and `client_viewer` was a confusing name for what it actually does (read-only, scoped
+  to specific assigned projects via `project_client_access`) — "project viewer" says that directly.
+  Role model is now 4 tiers: `owner`, `admin`, `viewer`, `project_viewer`.
+  `packages/db/supabase/migrations/0021_simplify_membership_roles.sql`: Postgres has no
+  `ALTER TYPE ... DROP VALUE`, so removing `operator` for real (not just leaving it unused forever)
+  meant the full rename-old/create-new/remap-columns/drop-old enum swap, done in the same migration
+  as the `client_viewer`→`project_viewer` rename since both touch the same enum. Any pre-existing
+  `operator` membership row is folded up to `admin` rather than down to `viewer` (losing write access
+  outright seemed like the bigger surprise) — almost certainly a no-op since the invite system had
+  seen no real use yet. Also dropped `membership_role_for()`, a SQL function with zero call sites
+  anywhere in the codebase. `can_write_project` and `can_admin_org` are now behaviorally identical
+  (both mean owner/admin) but kept as two separate functions since every call site already names the
+  one it means, and a future role could reintroduce the distinction without touching call sites again.
+  Updated everywhere the role literals appeared: `MembershipRole` type (db + web), `INVITABLE_ROLES`
+  arrays, the `run-due` 403 check (now gated on admin-and-above, same tier as `can_write_project`),
+  `platformEmail.ts`'s invite-email role labels/blurbs, `TeamSettings.tsx`, `accept-invite/page.tsx`,
+  and the standalone `verify-phase1.ts` acceptance script. Migration pushed live via
+  `supabase db push`; full monorepo typecheck/lint clean afterward.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.

@@ -80,9 +80,9 @@ const testSendWhatsAppInput = z.object({
 });
 
 // Every route here runs through req.supabase (the caller's own RLS context,
-// not a service-role bypass). provider_connections' RLS is admin-only — an
-// operator calling GET gets an empty list, not an error; writes get a 403.
-// That's intentional: connections management is an org-admin concern.
+// not a service-role bypass). provider_connections' RLS is admin-only — a
+// non-admin member calling GET gets an empty list, not an error; writes get
+// a 403. That's intentional: connections management is an org-admin concern.
 export const connectionRoutes: FastifyPluginAsync = async (app) => {
   app.get("/projects/:id/connections", async (req, reply) => {
     const { id } = req.params as { id: string };

@@ -2,7 +2,7 @@
 // TODO(Phase 1 follow-up): replace with `supabase gen types typescript` output once
 // a Docker-enabled environment is available (gen types requires local postgres-meta).
 
-export type MembershipRole = "owner" | "admin" | "operator" | "viewer" | "client_viewer";
+export type MembershipRole = "owner" | "admin" | "viewer" | "project_viewer";
 
 export type ContactChannelStatus =
   | "not_contacted"

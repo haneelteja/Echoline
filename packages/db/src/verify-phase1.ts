@@ -1,8 +1,8 @@
-// One-off Phase 1 acceptance check: creates a viewer and a client_viewer test
+// One-off Phase 1 acceptance check: creates a viewer and a project_viewer test
 // user, signs them in programmatically (via generateLink + verifyOtp, no email
 // needed), and asserts against the live API that:
 //   - a viewer can read but cannot write
-//   - a client_viewer only sees projects they're explicitly assigned to
+//   - a project_viewer only sees projects they're explicitly assigned to
 // Run: pnpm --filter @echoline/db exec tsx src/verify-phase1.ts
 
 import { createAdminClient, createAnonClient } from "./client.js";
@@ -45,7 +45,7 @@ async function main() {
   const { data: elma } = await admin.from("projects").select("id").eq("org_id", orgId).eq("name", "Elma Industries").single();
   const elmaId = elma!.id as string;
 
-  // second project, NOT assigned to the client_viewer, to prove scoping
+  // second project, NOT assigned to the project_viewer, to prove scoping
   const { data: otherProject } = await admin
     .from("projects")
     .insert({ org_id: orgId, name: "Other Co (not assigned)" })
@@ -62,9 +62,9 @@ async function main() {
   }
 
   const viewerEmail = "phase1-viewer@echoline.test";
-  const clientViewerEmail = "phase1-client-viewer@echoline.test";
+  const projectViewerEmail = "phase1-project-viewer@echoline.test";
   const viewerId = await ensureUser(viewerEmail);
-  const clientViewerId = await ensureUser(clientViewerEmail);
+  const projectViewerId = await ensureUser(projectViewerEmail);
 
   async function upsertMembership(userId: string, role: string) {
     const { data: existing } = await admin.from("memberships").select("id").eq("org_id", orgId).eq("user_id", userId).maybeSingle();
@@ -77,11 +77,11 @@ async function main() {
   }
 
   const viewerMembershipId = await upsertMembership(viewerId, "viewer");
-  const clientViewerMembershipId = await upsertMembership(clientViewerId, "client_viewer");
+  const projectViewerMembershipId = await upsertMembership(projectViewerId, "project_viewer");
 
-  // scope the client_viewer to Elma only
-  await admin.from("project_client_access").delete().eq("membership_id", clientViewerMembershipId);
-  await admin.from("project_client_access").insert({ membership_id: clientViewerMembershipId, project_id: elmaId });
+  // scope the project_viewer to Elma only
+  await admin.from("project_client_access").delete().eq("membership_id", projectViewerMembershipId);
+  await admin.from("project_client_access").insert({ membership_id: projectViewerMembershipId, project_id: elmaId });
 
   const ownerEmail = process.env.SEED_OWNER_EMAIL;
   if (ownerEmail) {
@@ -92,7 +92,7 @@ async function main() {
   }
 
   const viewerToken = await sessionFor(viewerEmail);
-  const clientViewerToken = await sessionFor(clientViewerEmail);
+  const projectViewerToken = await sessionFor(projectViewerEmail);
 
   console.log("\n--- viewer ---");
   const viewerList = await api("/v1/projects", viewerToken);
@@ -104,13 +104,13 @@ async function main() {
   const viewerWrite = await api(`/v1/projects/${elmaId}`, viewerToken, { method: "PATCH", body: JSON.stringify({ name: "Hacked" }) });
   assert([403, 404].includes(viewerWrite.status), `viewer write is blocked by RLS (got ${viewerWrite.status})`);
 
-  console.log("\n--- client_viewer ---");
-  const cvList = await api("/v1/projects", clientViewerToken);
+  console.log("\n--- project_viewer ---");
+  const cvList = await api("/v1/projects", projectViewerToken);
   const cvIds = Array.isArray(cvList.body) ? cvList.body.map((p: any) => p.id) : [];
-  assert(cvList.status === 200 && cvIds.includes(elmaId) && !cvIds.includes(otherProject!.id), "client_viewer sees only the assigned project (Elma), not Other Co");
+  assert(cvList.status === 200 && cvIds.includes(elmaId) && !cvIds.includes(otherProject!.id), "project_viewer sees only the assigned project (Elma), not Other Co");
 
-  const cvWrite = await api(`/v1/projects/${elmaId}`, clientViewerToken, { method: "PATCH", body: JSON.stringify({ name: "Hacked" }) });
-  assert([403, 404].includes(cvWrite.status), `client_viewer write is blocked by RLS (got ${cvWrite.status})`);
+  const cvWrite = await api(`/v1/projects/${elmaId}`, projectViewerToken, { method: "PATCH", body: JSON.stringify({ name: "Hacked" }) });
+  assert([403, 404].includes(cvWrite.status), `project_viewer write is blocked by RLS (got ${cvWrite.status})`);
 
   const { data: finalElma } = await admin.from("projects").select("name").eq("id", elmaId).single();
   assert(finalElma?.name === "Elma Industries", `neither blocked write actually changed the row (name is "${finalElma?.name}")`);

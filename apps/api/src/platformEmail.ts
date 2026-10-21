@@ -2,16 +2,14 @@ import { getEmailSender } from "@echoline/providers";
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
-  operator: "Operator",
   viewer: "Viewer",
-  client_viewer: "Client viewer",
+  project_viewer: "Project viewer",
 };
 
 const ROLE_BLURB: Record<string, string> = {
   admin: "Full access — manage connections, invite others, and edit everything in this organization.",
-  operator: "Can send campaigns, edit sequences and templates, and manage leads.",
   viewer: "Can view everything in this organization, read-only.",
-  client_viewer: "Can view the specific projects they're given access to.",
+  project_viewer: "Can view the specific projects they're given access to, read-only.",
 };
 
 /**

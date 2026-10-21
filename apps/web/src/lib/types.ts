@@ -1,7 +1,7 @@
 // Mirrors packages/db/src/database.types.ts — duplicated (not imported) so apps/web
 // never pulls in the service-role-capable @echoline/db client into the browser bundle.
 
-export type MembershipRole = "owner" | "admin" | "operator" | "viewer" | "client_viewer";
+export type MembershipRole = "owner" | "admin" | "viewer" | "project_viewer";
 
 export interface MemberRow {
   id: string;

@@ -9,7 +9,7 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-const INVITABLE_ROLES = ["admin", "operator", "viewer", "client_viewer"] as const;
+const INVITABLE_ROLES = ["admin", "viewer", "project_viewer"] as const;
 const createInviteInput = z.object({ email: z.string().email(), role: z.enum(INVITABLE_ROLES) });
 
 /** Authenticated routes — registered inside the /v1 group, same as everything else. */

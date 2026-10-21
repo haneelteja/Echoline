@@ -14,17 +14,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 const INVITABLE_ROLES: { value: MembershipRole; label: string; blurb: string }[] = [
   { value: "admin", label: "Admin", blurb: "Full access — manage connections, invite others, edit everything." },
-  { value: "operator", label: "Operator", blurb: "Can send campaigns, edit sequences/templates, manage leads." },
   { value: "viewer", label: "Viewer", blurb: "Read-only access to everything." },
-  { value: "client_viewer", label: "Client viewer", blurb: "Read-only, scoped to specific projects only." },
+  { value: "project_viewer", label: "Project viewer", blurb: "Read-only, scoped to specific projects only." },
 ];
 
 const ROLE_VARIANT: Record<MembershipRole, "default" | "secondary" | "success"> = {
   owner: "success",
   admin: "default",
-  operator: "default",
   viewer: "secondary",
-  client_viewer: "secondary",
+  project_viewer: "secondary",
 };
 
 function roleLabel(role: MembershipRole): string {

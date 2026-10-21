@@ -40,7 +40,7 @@ export default function DashboardPage() {
       setTimeout(() => refreshProjectData(), 5000);
     } catch (e) {
       setRunMessage(
-        e instanceof ApiError && e.status === 403 ? "You need operator access or above to run due steps." : "Couldn't trigger the run."
+        e instanceof ApiError && e.status === 403 ? "You need admin access or above to run due steps." : "Couldn't trigger the run."
       );
     } finally {
       setRunning(false);
