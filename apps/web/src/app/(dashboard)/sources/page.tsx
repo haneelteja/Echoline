@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Archive, ArchiveRestore, Clock, Loader2, Pause, Pencil, Play, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
@@ -24,6 +24,13 @@ const TYPE_LABEL: Record<SourceType, string> = {
 type ColumnKey = "name" | "type" | "mode" | "last_sync" | "rows_added" | "rows_skipped" | "rows_failed";
 const EMPTY_FILTERS: Record<ColumnKey, string> = { name: "", type: "", mode: "", last_sync: "", rows_added: "", rows_skipped: "", rows_failed: "" };
 const NUMERIC_COLUMNS = new Set<ColumnKey>(["rows_added", "rows_skipped", "rows_failed"]);
+
+function describeSourceConfig(s: LeadSourceRow): string {
+  if (s.detail) return s.detail;
+  if (s.type === "onedrive") return `${s.config?.path ?? "—"} · ${s.config?.table ?? "—"}`;
+  if (s.type === "google_sheets") return `Sheet: ${s.config?.spreadsheetId ?? "—"} · Range: ${s.config?.range ?? "—"}`;
+  return "—";
+}
 
 function sortValue(s: LeadSourceRow, key: ColumnKey): string | number {
   if (key === "name") return s.name;
@@ -177,6 +184,7 @@ export default function SourcesPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [viewingArchivedId, setViewingArchivedId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, string>>(EMPTY_FILTERS);
@@ -673,17 +681,55 @@ export default function SourcesPage() {
               </TableHeader>
               <TableBody>
                 {archivedSources.map((s) => (
-                  <TableRow key={s.id} className="opacity-60">
-                    <TableCell className="font-semibold text-foreground">{s.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{TYPE_LABEL[s.type as SourceType] ?? s.type}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{s.archived_at ? new Date(s.archived_at).toLocaleString() : "—"}</TableCell>
-                    <TableCell>
-                      <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => toggleArchived(s)}>
-                        <ArchiveRestore className="h-3.5 w-3.5" />
-                        Restore
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                  <Fragment key={s.id}>
+                    <TableRow className="opacity-60">
+                      <TableCell className="font-semibold text-foreground">{s.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{TYPE_LABEL[s.type as SourceType] ?? s.type}</TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground">{s.archived_at ? new Date(s.archived_at).toLocaleString() : "—"}</TableCell>
+                      <TableCell>
+                        <Button variant="outline" size="sm" onClick={() => setViewingArchivedId((v) => (v === s.id ? null : s.id))}>
+                          {viewingArchivedId === s.id ? "Hide details" : "View"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                    {viewingArchivedId === s.id && (
+                      <TableRow key={`${s.id}-detail`}>
+                        <TableCell colSpan={4} className="bg-muted/30">
+                          <div className="flex flex-col gap-2 py-1 text-sm">
+                            <p>
+                              <span className="font-semibold text-foreground">Config: </span>
+                              <span className="text-muted-foreground">{describeSourceConfig(s)}</span>
+                            </p>
+                            {(s.type === "onedrive" || s.type === "google_sheets") && (
+                              <p>
+                                <span className="font-semibold text-foreground">Sync frequency: </span>
+                                <span className="text-muted-foreground">{s.paused ? "Paused" : s.mode || "Manual"}</span>
+                              </p>
+                            )}
+                            <p>
+                              <span className="font-semibold text-foreground">Last sync: </span>
+                              <span className="text-muted-foreground">{s.last_sync ? new Date(s.last_sync).toLocaleString() : "Never"}</span>
+                            </p>
+                            <p>
+                              <span className="font-semibold text-foreground">Leads imported: </span>
+                              <span className="text-muted-foreground">
+                                {s.rows_added} added · {s.rows_skipped} skipped · {s.rows_failed} failed
+                              </span>
+                            </p>
+                            <div className="flex gap-2 pt-1">
+                              <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => toggleArchived(s)}>
+                                <ArchiveRestore className="h-3.5 w-3.5" />
+                                Restore
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => setViewingArchivedId(null)}>
+                                Close
+                              </Button>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
