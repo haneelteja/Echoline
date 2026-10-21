@@ -1,6 +1,6 @@
 "use client";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Archive, ArchiveRestore, Clock, Loader2, Pause, Pencil, Play, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Archive, ArchiveRestore, Clock, Loader2, Pause, Pencil, Play, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import type { ConnectionRow, LeadSourceRow } from "@/lib/types";
@@ -362,6 +362,21 @@ export default function SourcesPage() {
     }
   }
 
+  async function deleteSourcePermanently(s: LeadSourceRow) {
+    if (!confirm(`Permanently delete "${s.name}"? This can't be undone — its config and import history will be gone for good.`)) return;
+    setError(null);
+    setBusyId(s.id);
+    try {
+      await apiFetch(`/v1/projects/${pid}/sources/${s.id}`, { method: "DELETE" });
+      setViewingArchivedId(null);
+      await refreshProjectData();
+    } catch {
+      setError("Couldn't delete that source");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const activeSources = useMemo(() => sources.filter((s) => !s.archived_at), [sources]);
   const archivedSources = useMemo(() => sources.filter((s) => s.archived_at), [sources]);
 
@@ -664,7 +679,8 @@ export default function SourcesPage() {
           </div>
 
           {archivedSources.length > 0 && (
-            <Button variant="ghost" size="sm" className="self-start" onClick={() => setShowArchived((v) => !v)}>
+            <Button variant="secondary" size="sm" className="self-start border-2 border-amber-400/60 bg-amber-100/60 text-amber-900 hover:bg-amber-100 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-400/20" onClick={() => setShowArchived((v) => !v)}>
+              <Archive className="h-3.5 w-3.5" />
               {showArchived ? "Hide" : "Show"} archived ({archivedSources.length})
             </Button>
           )}
@@ -720,6 +736,10 @@ export default function SourcesPage() {
                               <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => toggleArchived(s)}>
                                 <ArchiveRestore className="h-3.5 w-3.5" />
                                 Restore
+                              </Button>
+                              <Button variant="destructive" size="sm" disabled={busyId === s.id} onClick={() => deleteSourcePermanently(s)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete permanently
                               </Button>
                               <Button variant="ghost" size="sm" onClick={() => setViewingArchivedId(null)}>
                                 Close
