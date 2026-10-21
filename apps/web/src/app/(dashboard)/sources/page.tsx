@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Loader2, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Archive, ArchiveRestore, Clock, Loader2, Pause, Pencil, Play, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import type { ConnectionRow, LeadSourceRow } from "@/lib/types";
@@ -28,7 +28,7 @@ const NUMERIC_COLUMNS = new Set<ColumnKey>(["rows_added", "rows_skipped", "rows_
 function sortValue(s: LeadSourceRow, key: ColumnKey): string | number {
   if (key === "name") return s.name;
   if (key === "type") return TYPE_LABEL[s.type as SourceType] ?? s.type;
-  if (key === "mode") return s.mode || "Manual";
+  if (key === "mode") return s.paused ? "Paused" : s.mode || "Manual";
   if (key === "last_sync") return s.last_sync ?? "";
   if (key === "rows_added") return s.rows_added;
   if (key === "rows_skipped") return s.rows_skipped;
@@ -175,6 +175,8 @@ export default function SourcesPage() {
   const [issued, setIssued] = useState<{ sourceId: string; token: string } | null>(null);
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, string>>(EMPTY_FILTERS);
@@ -323,8 +325,40 @@ export default function SourcesPage() {
     }
   }
 
-  const typeOptions = useMemo(() => Array.from(new Set(sources.map((s) => TYPE_LABEL[s.type as SourceType] ?? s.type))).sort(), [sources]);
-  const modeOptions = useMemo(() => Array.from(new Set(sources.map((s) => s.mode || "Manual"))).sort(), [sources]);
+  async function togglePaused(s: LeadSourceRow) {
+    setError(null);
+    setBusyId(s.id);
+    try {
+      await apiFetch(`/v1/projects/${pid}/sources/${s.id}`, { method: "PATCH", body: JSON.stringify({ paused: !s.paused }) });
+      await refreshProjectData();
+    } catch {
+      setError(s.paused ? "Couldn't resume that source" : "Couldn't pause that source");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function toggleArchived(s: LeadSourceRow) {
+    setError(null);
+    setBusyId(s.id);
+    try {
+      await apiFetch(`/v1/projects/${pid}/sources/${s.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ archived_at: s.archived_at ? null : new Date().toISOString() }),
+      });
+      await refreshProjectData();
+    } catch {
+      setError(s.archived_at ? "Couldn't restore that source" : "Couldn't archive that source");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const activeSources = useMemo(() => sources.filter((s) => !s.archived_at), [sources]);
+  const archivedSources = useMemo(() => sources.filter((s) => s.archived_at), [sources]);
+
+  const typeOptions = useMemo(() => Array.from(new Set(activeSources.map((s) => TYPE_LABEL[s.type as SourceType] ?? s.type))).sort(), [activeSources]);
+  const modeOptions = useMemo(() => Array.from(new Set(activeSources.map((s) => (s.paused ? "Paused" : s.mode || "Manual")))).sort(), [activeSources]);
 
   function setColumnFilter(key: ColumnKey, value: string) {
     setColumnFilters((f) => ({ ...f, [key]: value }));
@@ -349,10 +383,10 @@ export default function SourcesPage() {
 
   const filteredSources = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let rows = sources.filter((s) => {
+    let rows = activeSources.filter((s) => {
       if (columnFilters.name && !s.name.toLowerCase().includes(columnFilters.name.toLowerCase())) return false;
       if (columnFilters.type && (TYPE_LABEL[s.type as SourceType] ?? s.type) !== columnFilters.type) return false;
-      if (columnFilters.mode && (s.mode || "Manual") !== columnFilters.mode) return false;
+      if (columnFilters.mode && (s.paused ? "Paused" : s.mode || "Manual") !== columnFilters.mode) return false;
       if (!q) return true;
       return s.name.toLowerCase().includes(q) || (s.detail ?? "").toLowerCase().includes(q);
     });
@@ -368,7 +402,7 @@ export default function SourcesPage() {
       });
     }
     return rows;
-  }, [sources, search, columnFilters, sort]);
+  }, [activeSources, search, columnFilters, sort]);
 
   return (
     <>
@@ -430,7 +464,6 @@ export default function SourcesPage() {
                   <option value="15 min">Every 15 minutes</option>
                   <option value="Hourly">Hourly</option>
                   <option value="Daily">Daily</option>
-                  <option value="Paused">Paused (on hold)</option>
                 </select>
               </div>
             )}
@@ -516,7 +549,6 @@ export default function SourcesPage() {
                   <option value="15 min">Every 15 minutes</option>
                   <option value="Hourly">Hourly</option>
                   <option value="Daily">Daily</option>
-                  <option value="Paused">Paused (on hold)</option>
                 </select>
               </div>
             )}
@@ -619,9 +651,43 @@ export default function SourcesPage() {
               Clear filters
             </Button>
             <p className="text-xs text-muted-foreground sm:ml-auto sm:text-right">
-              {filteredSources.length} of {sources.length} sources — use the ⋮ menu on a column to sort or filter it.
+              {filteredSources.length} of {activeSources.length} sources — use the ⋮ menu on a column to sort or filter it.
             </p>
           </div>
+
+          {archivedSources.length > 0 && (
+            <Button variant="ghost" size="sm" className="self-start" onClick={() => setShowArchived((v) => !v)}>
+              {showArchived ? "Hide" : "Show"} archived ({archivedSources.length})
+            </Button>
+          )}
+
+          {showArchived && archivedSources.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Archived</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {archivedSources.map((s) => (
+                  <TableRow key={s.id} className="opacity-60">
+                    <TableCell className="font-semibold text-foreground">{s.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{TYPE_LABEL[s.type as SourceType] ?? s.type}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{s.archived_at ? new Date(s.archived_at).toLocaleString() : "—"}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => toggleArchived(s)}>
+                        <ArchiveRestore className="h-3.5 w-3.5" />
+                        Restore
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
 
           <Table>
             <TableHeader>
@@ -662,7 +728,9 @@ export default function SourcesPage() {
                     {s.detail && <div className="text-xs font-normal text-muted-foreground">{s.detail}</div>}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{TYPE_LABEL[s.type as SourceType] ?? s.type}</TableCell>
-                  <TableCell className="text-muted-foreground">{s.mode || "Manual"}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {s.paused ? <span className="pill warn">Paused</span> : s.mode || "Manual"}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {s.last_sync ? (
                       <span className="inline-flex items-center gap-1.5">
@@ -688,11 +756,21 @@ export default function SourcesPage() {
                         </Button>
                       )}
                       {(s.type === "onedrive" || s.type === "google_sheets") && (
-                        <Button variant="outline" size="sm" disabled={syncingId === s.id} onClick={() => syncNow(s.id)}>
-                          {syncingId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                          {syncingId === s.id ? "Syncing…" : "Sync now"}
-                        </Button>
+                        <>
+                          <Button variant="outline" size="sm" disabled={syncingId === s.id} onClick={() => syncNow(s.id)}>
+                            {syncingId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                            {syncingId === s.id ? "Syncing…" : "Sync now"}
+                          </Button>
+                          <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => togglePaused(s)}>
+                            {s.paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                            {s.paused ? "Resume" : "Pause"}
+                          </Button>
+                        </>
                       )}
+                      <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => toggleArchived(s)}>
+                        <Archive className="h-3.5 w-3.5" />
+                        Archive
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>

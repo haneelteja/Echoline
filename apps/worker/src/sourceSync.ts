@@ -21,7 +21,6 @@ const SYNC_INTERVAL_MS: Record<string, number> = {
 };
 
 function isDue(lastSync: string | null, mode: string | null): boolean {
-  if (mode === "Paused") return false;
   const interval = SYNC_INTERVAL_MS[mode ?? "Hourly"] ?? SYNC_INTERVAL_MS.Hourly;
   if (!lastSync) return true;
   return Date.now() - new Date(lastSync).getTime() >= interval;
@@ -169,7 +168,12 @@ async function syncOneSource(db: ReturnType<typeof createAdminClient>, source: a
  * email or phone as an existing contact is skipped, status never overwritten. */
 export async function runSourceSyncTick(log: Logger): Promise<void> {
   const db = createAdminClient();
-  const { data: sources, error } = await db.from("lead_sources").select("*").in("type", ["onedrive", "google_sheets"]);
+  const { data: sources, error } = await db
+    .from("lead_sources")
+    .select("*")
+    .in("type", ["onedrive", "google_sheets"])
+    .eq("paused", false)
+    .is("archived_at", null);
   if (error) {
     log.error({ error }, "source sync: failed to list sources");
     return;
