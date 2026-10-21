@@ -35,28 +35,49 @@ function sortValue(s: LeadSourceRow, key: ColumnKey): string | number {
   return s.rows_failed;
 }
 
+/** Splits a stored "Sheet name!A1:Z"-style range into its two parts; a bare
+ * "Sheet name" (no "!") means the whole sheet, no cell sub-range. */
+function splitSheetRange(raw: string): { sheetName: string; cellRange: string } {
+  const i = raw.indexOf("!");
+  return i === -1 ? { sheetName: raw, cellRange: "" } : { sheetName: raw.slice(0, i), cellRange: raw.slice(i + 1) };
+}
+
+/** Joins sheet name + optional cell sub-range back into the Sheets API's A1
+ * notation; an empty cellRange means "whole sheet" (bare tab name is valid
+ * A1 notation on its own — no "!A1:Z" suffix required). */
+function joinSheetRange(sheetName: string, cellRange: string): string {
+  return cellRange.trim() ? `${sheetName}!${cellRange.trim()}` : sheetName;
+}
+
 /** Same reasoning as contacts/page.tsx's ColumnHead — module scope so its
  * dropdown isn't torn down and rebuilt on every render. */
 /** Shared by the add and edit panels — Spreadsheet ID stays free-text (no
- * Drive-browsing scope granted), but Range becomes a real tab-name dropdown
- * once fetched, instead of guessable free-text like "Sheet1!A1:Z". */
+ * Drive-browsing scope granted). Sheet name and the optional cell
+ * sub-range are two separate fields rather than one combined "Sheet1!A1:Z"
+ * string, so pasting a sheet name (including spaces/emoji) never needs
+ * manual A1-notation assembly — leaving the cell range blank means the
+ * whole sheet. */
 function GoogleSheetsFields({
   spreadsheetId,
-  range,
+  sheetName,
+  cellRange,
   sheetTabs,
   fetchingTabs,
   idPrefix,
   onSpreadsheetIdChange,
-  onRangeChange,
+  onSheetNameChange,
+  onCellRangeChange,
   onFetchTabs,
 }: {
   spreadsheetId: string;
-  range: string;
+  sheetName: string;
+  cellRange: string;
   sheetTabs: string[];
   fetchingTabs: boolean;
   idPrefix: string;
   onSpreadsheetIdChange: (v: string) => void;
-  onRangeChange: (v: string) => void;
+  onSheetNameChange: (v: string) => void;
+  onCellRangeChange: (v: string) => void;
   onFetchTabs: () => void;
 }) {
   return (
@@ -71,9 +92,9 @@ function GoogleSheetsFields({
         </div>
       </div>
       <div className="field">
-        <label htmlFor={`${idPrefix}gsrange`}>Range</label>
+        <label htmlFor={`${idPrefix}gssheet`}>Sheet (tab) name</label>
         {sheetTabs.length > 0 ? (
-          <select id={`${idPrefix}gsrange`} value={range} onChange={(e) => onRangeChange(e.target.value)}>
+          <select id={`${idPrefix}gssheet`} value={sheetName} onChange={(e) => onSheetNameChange(e.target.value)}>
             {sheetTabs.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -81,11 +102,15 @@ function GoogleSheetsFields({
             ))}
           </select>
         ) : (
-          <input id={`${idPrefix}gsrange`} value={range} onChange={(e) => onRangeChange(e.target.value)} placeholder="Sheet1!A1:Z" />
+          <input id={`${idPrefix}gssheet`} value={sheetName} onChange={(e) => onSheetNameChange(e.target.value)} placeholder="Sheet1" />
         )}
         <p className="small muted" style={{ marginTop: 4 }}>
           {sheetTabs.length > 0 ? "Picked from the real tabs in this spreadsheet." : "Click \"Fetch tabs\" to pick from the real tab names instead of typing one."}
         </p>
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}gscells`}>Cell range (optional)</label>
+        <input id={`${idPrefix}gscells`} value={cellRange} onChange={(e) => onCellRangeChange(e.target.value)} placeholder="e.g. A1:Z — leave blank for the whole sheet" />
       </div>
     </div>
   );
@@ -140,7 +165,8 @@ export default function SourcesPage() {
   const [path, setPath] = useState("");
   const [table, setTable] = useState("");
   const [spreadsheetId, setSpreadsheetId] = useState("");
-  const [range, setRange] = useState("Sheet1!A1:Z");
+  const [sheetName, setSheetName] = useState("Sheet1");
+  const [cellRange, setCellRange] = useState("");
   const [mode, setMode] = useState("Hourly");
   const [saving, setSaving] = useState(false);
   const [sheetTabs, setSheetTabs] = useState<string[]>([]);
@@ -189,7 +215,7 @@ export default function SourcesPage() {
     if (!pid || !name.trim()) return;
     setError(null);
     const config: Record<string, unknown> =
-      type === "onedrive" ? { path, table } : type === "google_sheets" ? { spreadsheetId, range } : {};
+      type === "onedrive" ? { path, table } : type === "google_sheets" ? { spreadsheetId, range: joinSheetRange(sheetName, cellRange) } : {};
     setSaving(true);
     try {
       await apiFetch(`/v1/projects/${pid}/sources`, {
@@ -220,7 +246,9 @@ export default function SourcesPage() {
     setPath(s.config?.path ?? "");
     setTable(s.config?.table ?? "");
     setSpreadsheetId(s.config?.spreadsheetId ?? "");
-    setRange(s.config?.range ?? "Sheet1!A1:Z");
+    const { sheetName: sn, cellRange: cr } = splitSheetRange(s.config?.range ?? "Sheet1");
+    setSheetName(sn);
+    setCellRange(cr);
     setSheetTabs([]);
   }
 
@@ -233,7 +261,7 @@ export default function SourcesPage() {
         `/v1/projects/${pid}/sources/google-sheets/tabs?spreadsheetId=${encodeURIComponent(spreadsheetId.trim())}`
       );
       setSheetTabs(tabs);
-      if (tabs.length) setRange(tabs[0]);
+      if (tabs.length) setSheetName(tabs[0]);
       else setError("That spreadsheet has no tabs, or isn't accessible from the connected Google Sheets account.");
     } catch (e) {
       setSheetTabs([]);
@@ -253,7 +281,7 @@ export default function SourcesPage() {
     if (!pid || !editingId || !name.trim()) return;
     setError(null);
     const config: Record<string, unknown> | undefined =
-      type === "onedrive" ? { path, table } : type === "google_sheets" ? { spreadsheetId, range } : undefined;
+      type === "onedrive" ? { path, table } : type === "google_sheets" ? { spreadsheetId, range: joinSheetRange(sheetName, cellRange) } : undefined;
     setSaving(true);
     try {
       await apiFetch(`/v1/projects/${pid}/sources/${editingId}`, {
@@ -424,14 +452,16 @@ export default function SourcesPage() {
             <GoogleSheetsFields
               idPrefix=""
               spreadsheetId={spreadsheetId}
-              range={range}
+              sheetName={sheetName}
+              cellRange={cellRange}
               sheetTabs={sheetTabs}
               fetchingTabs={fetchingTabs}
               onSpreadsheetIdChange={(v) => {
                 setSpreadsheetId(v);
                 setSheetTabs([]);
               }}
-              onRangeChange={setRange}
+              onSheetNameChange={setSheetName}
+              onCellRangeChange={setCellRange}
               onFetchTabs={fetchTabs}
             />
           )}
@@ -454,7 +484,7 @@ export default function SourcesPage() {
               saving ||
               !name.trim() ||
               (type === "onedrive" && (!onedriveConn || !path.trim() || !table.trim())) ||
-              (type === "google_sheets" && (!sheetsConn || !spreadsheetId.trim() || !range.trim()))
+              (type === "google_sheets" && (!sheetsConn || !spreadsheetId.trim() || !sheetName.trim()))
             }
           >
             Save source
@@ -508,14 +538,16 @@ export default function SourcesPage() {
             <GoogleSheetsFields
               idPrefix="e"
               spreadsheetId={spreadsheetId}
-              range={range}
+              sheetName={sheetName}
+              cellRange={cellRange}
               sheetTabs={sheetTabs}
               fetchingTabs={fetchingTabs}
               onSpreadsheetIdChange={(v) => {
                 setSpreadsheetId(v);
                 setSheetTabs([]);
               }}
-              onRangeChange={setRange}
+              onSheetNameChange={setSheetName}
+              onCellRangeChange={setCellRange}
               onFetchTabs={fetchTabs}
             />
           )}
@@ -528,7 +560,7 @@ export default function SourcesPage() {
                 saving ||
                 !name.trim() ||
                 (type === "onedrive" && (!path.trim() || !table.trim())) ||
-                (type === "google_sheets" && (!spreadsheetId.trim() || !range.trim()))
+                (type === "google_sheets" && (!spreadsheetId.trim() || !sheetName.trim()))
               }
             >
               Save changes
