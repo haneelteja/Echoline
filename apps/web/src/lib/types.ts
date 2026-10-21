@@ -152,6 +152,7 @@ export interface LeadSourceRow {
   type: string;
   name: string;
   detail: string | null;
+  config: { path?: string; table?: string; spreadsheetId?: string; range?: string; columnMap?: Record<string, string> } | null;
   mode: string | null;
   last_sync: string | null;
   rows_added: number;

@@ -21,6 +21,7 @@ const SYNC_INTERVAL_MS: Record<string, number> = {
 };
 
 function isDue(lastSync: string | null, mode: string | null): boolean {
+  if (mode === "Paused") return false;
   const interval = SYNC_INTERVAL_MS[mode ?? "Hourly"] ?? SYNC_INTERVAL_MS.Hourly;
   if (!lastSync) return true;
   return Date.now() - new Date(lastSync).getTime() >= interval;

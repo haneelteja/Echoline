@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Loader2, Plus, RefreshCw, Search, X } from "lucide-react";
+import { Clock, Loader2, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import type { ConnectionRow, LeadSourceRow } from "@/lib/types";
@@ -80,6 +80,7 @@ function ColumnHead({
 export default function SourcesPage() {
   const { pid, sources, loadingProject, refreshProjectData } = useWorkspace();
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [type, setType] = useState<SourceType>("webhook");
   const [path, setPath] = useState("");
@@ -87,6 +88,7 @@ export default function SourcesPage() {
   const [spreadsheetId, setSpreadsheetId] = useState("");
   const [range, setRange] = useState("Sheet1!A1:Z");
   const [mode, setMode] = useState("Hourly");
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<{ sourceId: string; token: string } | null>(null);
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
@@ -132,6 +134,7 @@ export default function SourcesPage() {
     setError(null);
     const config: Record<string, unknown> =
       type === "onedrive" ? { path, table } : type === "google_sheets" ? { spreadsheetId, range } : {};
+    setSaving(true);
     try {
       await apiFetch(`/v1/projects/${pid}/sources`, {
         method: "POST",
@@ -145,6 +148,50 @@ export default function SourcesPage() {
       await refreshProjectData();
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't add sources." : "Couldn't add source");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEdit(s: LeadSourceRow) {
+    setAdding(false);
+    setError(null);
+    setEditingId(s.id);
+    setName(s.name);
+    setType(s.type as SourceType);
+    setMode(s.mode || "Hourly");
+    setPath(s.config?.path ?? "");
+    setTable(s.config?.table ?? "");
+    setSpreadsheetId(s.config?.spreadsheetId ?? "");
+    setRange(s.config?.range ?? "Sheet1!A1:Z");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setError(null);
+  }
+
+  async function saveEdit() {
+    if (!pid || !editingId || !name.trim()) return;
+    setError(null);
+    const config: Record<string, unknown> | undefined =
+      type === "onedrive" ? { path, table } : type === "google_sheets" ? { spreadsheetId, range } : undefined;
+    setSaving(true);
+    try {
+      await apiFetch(`/v1/projects/${pid}/sources/${editingId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name,
+          mode: type === "onedrive" || type === "google_sheets" ? mode : null,
+          ...(config ? { config } : {}),
+        }),
+      });
+      setEditingId(null);
+      await refreshProjectData();
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't edit sources." : "Couldn't save changes");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -270,6 +317,7 @@ export default function SourcesPage() {
                   <option value="15 min">Every 15 minutes</option>
                   <option value="Hourly">Hourly</option>
                   <option value="Daily">Daily</option>
+                  <option value="Paused">Paused (on hold)</option>
                 </select>
               </div>
             )}
@@ -315,6 +363,7 @@ export default function SourcesPage() {
             style={{ marginTop: 10 }}
             onClick={addSource}
             disabled={
+              saving ||
               !name.trim() ||
               (type === "onedrive" && (!onedriveConn || !path.trim() || !table.trim())) ||
               (type === "google_sheets" && (!sheetsConn || !spreadsheetId.trim() || !range.trim()))
@@ -322,6 +371,81 @@ export default function SourcesPage() {
           >
             Save source
           </button>
+          {error && (
+            <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+
+      {editingId && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <h3>Edit source</h3>
+          <div className="grid g3">
+            <div className="field">
+              <label htmlFor="esn">Name</label>
+              <input id="esn" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Type</label>
+              <input value={TYPE_LABEL[type] ?? type} disabled />
+            </div>
+            {(type === "onedrive" || type === "google_sheets") && (
+              <div className="field">
+                <label htmlFor="esmode">Sync frequency</label>
+                <select id="esmode" value={mode} onChange={(e) => setMode(e.target.value)}>
+                  <option value="15 min">Every 15 minutes</option>
+                  <option value="Hourly">Hourly</option>
+                  <option value="Daily">Daily</option>
+                  <option value="Paused">Paused (on hold)</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {type === "onedrive" && (
+            <div className="grid g3" style={{ marginTop: 10 }}>
+              <div className="field">
+                <label htmlFor="eodpath">Workbook path</label>
+                <input id="eodpath" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Leads/Master_Leads.xlsx" />
+              </div>
+              <div className="field">
+                <label htmlFor="eodtable">Table name</label>
+                <input id="eodtable" value={table} onChange={(e) => setTable(e.target.value)} placeholder="Table1" />
+              </div>
+            </div>
+          )}
+          {type === "google_sheets" && (
+            <div className="grid g3" style={{ marginTop: 10 }}>
+              <div className="field">
+                <label htmlFor="egsid">Spreadsheet ID</label>
+                <input id="egsid" value={spreadsheetId} onChange={(e) => setSpreadsheetId(e.target.value)} placeholder="From the sheet's URL" />
+              </div>
+              <div className="field">
+                <label htmlFor="egsrange">Range</label>
+                <input id="egsrange" value={range} onChange={(e) => setRange(e.target.value)} placeholder="Sheet1!A1:Z" />
+              </div>
+            </div>
+          )}
+
+          <div className="row" style={{ marginTop: 10, gap: 10 }}>
+            <button
+              className="btn primary"
+              onClick={saveEdit}
+              disabled={
+                saving ||
+                !name.trim() ||
+                (type === "onedrive" && (!path.trim() || !table.trim())) ||
+                (type === "google_sheets" && (!spreadsheetId.trim() || !range.trim()))
+              }
+            >
+              Save changes
+            </button>
+            <button className="btn" onClick={cancelEdit} disabled={saving}>
+              Cancel
+            </button>
+          </div>
           {error && (
             <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
               {error}
@@ -430,17 +554,23 @@ export default function SourcesPage() {
                   <TableCell className="tabular-nums text-muted-foreground">{s.rows_skipped}</TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">{s.rows_failed}</TableCell>
                   <TableCell>
-                    {(s.type === "webhook" || s.type === "form") && (
-                      <Button variant="outline" size="sm" onClick={() => generateToken(s.id)}>
-                        {s.last_sync ? "Rotate token" : "Generate token"}
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => startEdit(s)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
                       </Button>
-                    )}
-                    {(s.type === "onedrive" || s.type === "google_sheets") && (
-                      <Button variant="outline" size="sm" disabled={syncingId === s.id} onClick={() => syncNow(s.id)}>
-                        {syncingId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                        {syncingId === s.id ? "Syncing…" : "Sync now"}
-                      </Button>
-                    )}
+                      {(s.type === "webhook" || s.type === "form") && (
+                        <Button variant="outline" size="sm" onClick={() => generateToken(s.id)}>
+                          {s.last_sync ? "Rotate token" : "Generate token"}
+                        </Button>
+                      )}
+                      {(s.type === "onedrive" || s.type === "google_sheets") && (
+                        <Button variant="outline" size="sm" disabled={syncingId === s.id} onClick={() => syncNow(s.id)}>
+                          {syncingId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          {syncingId === s.id ? "Syncing…" : "Sync now"}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
