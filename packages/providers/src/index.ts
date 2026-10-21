@@ -15,4 +15,4 @@ export * from "./tracking";
 export * from "./webhooks/verify";
 export { submitMetaTemplate, uploadMetaMedia, type MetaTemplateSubmission, type MetaTemplateSubmissionResult, type MetaMediaUpload } from "./whatsapp/meta";
 export { readOneDriveTable, type SheetData } from "./sources/onedrive";
-export { readGoogleSheet } from "./sources/googleSheets";
+export { readGoogleSheet, listGoogleSheetTabs } from "./sources/googleSheets";

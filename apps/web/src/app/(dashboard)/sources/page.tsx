@@ -37,6 +37,60 @@ function sortValue(s: LeadSourceRow, key: ColumnKey): string | number {
 
 /** Same reasoning as contacts/page.tsx's ColumnHead — module scope so its
  * dropdown isn't torn down and rebuilt on every render. */
+/** Shared by the add and edit panels — Spreadsheet ID stays free-text (no
+ * Drive-browsing scope granted), but Range becomes a real tab-name dropdown
+ * once fetched, instead of guessable free-text like "Sheet1!A1:Z". */
+function GoogleSheetsFields({
+  spreadsheetId,
+  range,
+  sheetTabs,
+  fetchingTabs,
+  idPrefix,
+  onSpreadsheetIdChange,
+  onRangeChange,
+  onFetchTabs,
+}: {
+  spreadsheetId: string;
+  range: string;
+  sheetTabs: string[];
+  fetchingTabs: boolean;
+  idPrefix: string;
+  onSpreadsheetIdChange: (v: string) => void;
+  onRangeChange: (v: string) => void;
+  onFetchTabs: () => void;
+}) {
+  return (
+    <div className="grid g3" style={{ marginTop: 10 }}>
+      <div className="field">
+        <label htmlFor={`${idPrefix}gsid`}>Spreadsheet ID</label>
+        <div className="row" style={{ gap: 6 }}>
+          <input id={`${idPrefix}gsid`} value={spreadsheetId} onChange={(e) => onSpreadsheetIdChange(e.target.value)} placeholder="From the sheet's URL" />
+          <button type="button" className="btn" disabled={fetchingTabs || !spreadsheetId.trim()} onClick={onFetchTabs}>
+            {fetchingTabs ? "Fetching…" : "Fetch tabs"}
+          </button>
+        </div>
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}gsrange`}>Range</label>
+        {sheetTabs.length > 0 ? (
+          <select id={`${idPrefix}gsrange`} value={range} onChange={(e) => onRangeChange(e.target.value)}>
+            {sheetTabs.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input id={`${idPrefix}gsrange`} value={range} onChange={(e) => onRangeChange(e.target.value)} placeholder="Sheet1!A1:Z" />
+        )}
+        <p className="small muted" style={{ marginTop: 4 }}>
+          {sheetTabs.length > 0 ? "Picked from the real tabs in this spreadsheet." : "Click \"Fetch tabs\" to pick from the real tab names instead of typing one."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ColumnHead({
   columnKey,
   label,
@@ -89,6 +143,8 @@ export default function SourcesPage() {
   const [range, setRange] = useState("Sheet1!A1:Z");
   const [mode, setMode] = useState("Hourly");
   const [saving, setSaving] = useState(false);
+  const [sheetTabs, setSheetTabs] = useState<string[]>([]);
+  const [fetchingTabs, setFetchingTabs] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<{ sourceId: string; token: string } | null>(null);
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
@@ -144,6 +200,7 @@ export default function SourcesPage() {
       setPath("");
       setTable("");
       setSpreadsheetId("");
+      setSheetTabs([]);
       setAdding(false);
       await refreshProjectData();
     } catch (e) {
@@ -164,10 +221,31 @@ export default function SourcesPage() {
     setTable(s.config?.table ?? "");
     setSpreadsheetId(s.config?.spreadsheetId ?? "");
     setRange(s.config?.range ?? "Sheet1!A1:Z");
+    setSheetTabs([]);
+  }
+
+  async function fetchTabs() {
+    if (!pid || !spreadsheetId.trim()) return;
+    setFetchingTabs(true);
+    setError(null);
+    try {
+      const { tabs } = await apiFetch<{ tabs: string[] }>(
+        `/v1/projects/${pid}/sources/google-sheets/tabs?spreadsheetId=${encodeURIComponent(spreadsheetId.trim())}`
+      );
+      setSheetTabs(tabs);
+      if (tabs.length) setRange(tabs[0]);
+      else setError("That spreadsheet has no tabs, or isn't accessible from the connected Google Sheets account.");
+    } catch (e) {
+      setSheetTabs([]);
+      setError(e instanceof ApiError ? e.message : "Couldn't read that spreadsheet's tabs.");
+    } finally {
+      setFetchingTabs(false);
+    }
   }
 
   function cancelEdit() {
     setEditingId(null);
+    setSheetTabs([]);
     setError(null);
   }
 
@@ -272,7 +350,14 @@ export default function SourcesPage() {
           <p>Webhook, website-form, OneDrive, and Google Sheets intake are live. CRM sync (Zoho/HubSpot) isn&apos;t built yet.</p>
         </div>
         <div className="row">
-          <Button onClick={() => setAdding((v) => !v)}>
+          <Button
+            onClick={() => {
+              setAdding((v) => !v);
+              setEditingId(null);
+              setSheetTabs([]);
+              setError(null);
+            }}
+          >
             <Plus className="h-4 w-4" />
             Add source
           </Button>
@@ -336,16 +421,19 @@ export default function SourcesPage() {
             </div>
           )}
           {type === "google_sheets" && (
-            <div className="grid g3" style={{ marginTop: 10 }}>
-              <div className="field">
-                <label htmlFor="gsid">Spreadsheet ID</label>
-                <input id="gsid" value={spreadsheetId} onChange={(e) => setSpreadsheetId(e.target.value)} placeholder="From the sheet's URL" />
-              </div>
-              <div className="field">
-                <label htmlFor="gsrange">Range</label>
-                <input id="gsrange" value={range} onChange={(e) => setRange(e.target.value)} placeholder="Sheet1!A1:Z" />
-              </div>
-            </div>
+            <GoogleSheetsFields
+              idPrefix=""
+              spreadsheetId={spreadsheetId}
+              range={range}
+              sheetTabs={sheetTabs}
+              fetchingTabs={fetchingTabs}
+              onSpreadsheetIdChange={(v) => {
+                setSpreadsheetId(v);
+                setSheetTabs([]);
+              }}
+              onRangeChange={setRange}
+              onFetchTabs={fetchTabs}
+            />
           )}
           {type === "onedrive" && !onedriveConn && (
             <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
@@ -417,16 +505,19 @@ export default function SourcesPage() {
             </div>
           )}
           {type === "google_sheets" && (
-            <div className="grid g3" style={{ marginTop: 10 }}>
-              <div className="field">
-                <label htmlFor="egsid">Spreadsheet ID</label>
-                <input id="egsid" value={spreadsheetId} onChange={(e) => setSpreadsheetId(e.target.value)} placeholder="From the sheet's URL" />
-              </div>
-              <div className="field">
-                <label htmlFor="egsrange">Range</label>
-                <input id="egsrange" value={range} onChange={(e) => setRange(e.target.value)} placeholder="Sheet1!A1:Z" />
-              </div>
-            </div>
+            <GoogleSheetsFields
+              idPrefix="e"
+              spreadsheetId={spreadsheetId}
+              range={range}
+              sheetTabs={sheetTabs}
+              fetchingTabs={fetchingTabs}
+              onSpreadsheetIdChange={(v) => {
+                setSpreadsheetId(v);
+                setSheetTabs([]);
+              }}
+              onRangeChange={setRange}
+              onFetchTabs={fetchTabs}
+            />
           )}
 
           <div className="row" style={{ marginTop: 10, gap: 10 }}>
