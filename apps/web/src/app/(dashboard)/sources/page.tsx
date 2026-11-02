@@ -551,15 +551,25 @@ export default function SourcesPage() {
           </button>
           {onedriveConn && <span className="pill ok">OneDrive connected</span>}
         </div>
-        <div className="row" style={{ marginTop: 10, gap: 10, flexWrap: "wrap" }}>
-          <button className="btn" onClick={() => startOAuth("google_sheets")}>
+        <div style={{ marginTop: 14 }}>
+          <p className="small muted" style={{ marginBottom: 6, fontWeight: 600 }}>Connected Google accounts</p>
+          {googleConnections.length ? (
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              {googleConnections.map((c) => (
+                <span key={c.id} className="pill ok">
+                  {c.account_label ?? "Connected account (reconnect to show its email)"}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="small muted">No Google accounts connected yet.</p>
+          )}
+          <button className="btn" style={{ marginTop: 10 }} onClick={() => startOAuth("google_sheets")}>
             {googleConnections.length ? "Connect another Google account" : "Connect a Google account"}
           </button>
-          {googleConnections.map((c) => (
-            <span key={c.id} className="pill ok">
-              {c.account_label ?? "Connected account"}
-            </span>
-          ))}
+          <p className="small muted" style={{ marginTop: 4 }}>
+            Reconnecting an account you&apos;ve already added refreshes it in place — it never creates a duplicate entry.
+          </p>
         </div>
       </div>
 

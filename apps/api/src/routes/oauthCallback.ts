@@ -98,7 +98,11 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
           .eq("kind", kind)
           .eq("status", "connected");
         if (provider === "google_sheets" && accountLabel) {
-          disconnectQuery = disconnectQuery.eq("account_label", accountLabel);
+          // ilike (no wildcards) rather than eq — Google accounts are
+          // case-insensitive, and comparing case-exactly here would let a
+          // mixed-case reconnect of the same account mint a second row
+          // instead of replacing the first.
+          disconnectQuery = disconnectQuery.ilike("account_label", accountLabel);
         }
         await disconnectQuery;
       }
