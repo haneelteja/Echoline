@@ -718,10 +718,16 @@
     it anywhere, always hardcoding `/dashboard` — dead plumbing since whenever it was built. Now
     wired through (validated as same-origin-relative only, never an open redirect), which is what
     makes "sign in, then land back on the invite you were trying to accept" actually work.
-  - **Not yet live-verified**: needs the Resend credential above set, then a real invite sent end
-    to end (new-signup case and already-has-an-account case) to confirm the email arrives, the
-    accept flow lands the right role, and the owner-protection guards (can't change/remove the
-    owner's row) actually hold.
+  - **Now live-verified (2026-11-02).** Email delivery was already confirmed earlier (Resend
+    `sent → delivered`, see the corrected Render env vars above). The accept flow and its edge
+    cases were verified directly against the live API/DB (same technique as the Google Sheets sync
+    verification — a real Supabase session minted server-side via `generateLink`/`verifyOtp`, no
+    browser needed): a fresh invite accepted by a brand-new signup correctly creates the membership
+    with the invited role and flips the invite to `accepted`; re-accepting an already-accepted
+    invite gets `410 already_accepted`; accepting with the wrong signed-in email gets
+    `403 email_mismatch`; accepting a revoked invite gets `410 revoked`; and the owner-protection
+    guards both hold — `PATCH`/`DELETE` on the owner's own membership row both correctly `400`.
+    All test invites/memberships/users cleaned up after.
   - Deliberately left as-is, not a gap: `TEST_SEND_MODE`'s redirect target stays one global env var
     per deployment rather than becoming per-project/per-org — explicit decision, revisit once a
     second real client actually needs independent test/live state.
