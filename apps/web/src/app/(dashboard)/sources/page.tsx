@@ -220,7 +220,7 @@ export default function SourcesPage() {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [type, setType] = useState<SourceType>("webhook");
+  const [type, setType] = useState<SourceType>("google_sheets");
   const [path, setPath] = useState("");
   const [table, setTable] = useState("");
   const [googleConnectionId, setGoogleConnectionId] = useState("");
