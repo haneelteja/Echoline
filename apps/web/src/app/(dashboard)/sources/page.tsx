@@ -579,10 +579,10 @@ export default function SourcesPage() {
             <div className="field">
               <label htmlFor="st">Type</label>
               <select id="st" value={type} onChange={(e) => setType(e.target.value as SourceType)}>
+                <option value="google_sheets">Google Sheets</option>
+                <option value="onedrive">OneDrive (Excel table)</option>
                 <option value="webhook">Webhook</option>
                 <option value="form">Website form</option>
-                <option value="onedrive">OneDrive (Excel table)</option>
-                <option value="google_sheets">Google Sheets</option>
               </select>
             </div>
             <div className="field">
