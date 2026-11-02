@@ -5,7 +5,17 @@ import type { OAuthConfig, OAuthTokens } from "./types";
 export const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"];
 // Read-only is deliberate — this is a lead *source*, we only ever read rows
 // from a sheet the user already owns, never write back to it.
-export const GOOGLE_SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
+// drive.metadata.readonly lets the Sources UI list the account's actual
+// spreadsheets (name + id) for a real picker instead of a pasted ID — it
+// only exposes file metadata (name/id/mimeType), never file contents, which
+// still comes solely through spreadsheets.readonly. userinfo.email
+// identifies *which* Google account this connection is, so a project can
+// have more than one Google Sheets connection without them colliding.
+export const GOOGLE_SHEETS_SCOPES = [
+  "https://www.googleapis.com/auth/spreadsheets.readonly",
+  "https://www.googleapis.com/auth/drive.metadata.readonly",
+  "https://www.googleapis.com/auth/userinfo.email",
+];
 
 export function buildGoogleAuthUrl(config: OAuthConfig, state: string, scopes: string[] = GMAIL_SCOPES): string {
   const params = new URLSearchParams({
@@ -69,4 +79,17 @@ export async function refreshGoogleToken(
     })
   );
   return { accessToken: data.access_token, refreshToken, expiresIn: data.expires_in, scope: data.scope };
+}
+
+/** Identifies which Google account a connection belongs to — used as
+ * provider_connections.account_label so a project can have multiple Google
+ * Sheets connections (one per Google account) without them overwriting
+ * each other. Requires the userinfo.email scope. */
+export async function getGoogleAccountEmail(accessToken: string): Promise<string | null> {
+  const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { email?: string };
+  return data.email ?? null;
 }

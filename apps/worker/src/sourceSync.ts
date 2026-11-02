@@ -84,13 +84,16 @@ async function refreshSourceToken(
 }
 
 async function syncOneSource(db: ReturnType<typeof createAdminClient>, source: any, log: Logger): Promise<void> {
-  const { data: conn } = await db
-    .from("provider_connections")
-    .select("*")
-    .eq("project_id", source.project_id)
-    .eq("kind", source.type)
-    .eq("status", "connected")
-    .maybeSingle();
+  // A project can have more than one connected google_sheets account now
+  // (one per Google account), so a source pins the exact connection it uses
+  // via provider_connection_id. Sources created before that column existed
+  // fall back to "the" connected provider of this kind — .limit(1) keeps
+  // that fallback from erroring if a second account has since been
+  // connected (maybeSingle() alone throws on more than one match).
+  const connQuery = source.provider_connection_id
+    ? db.from("provider_connections").select("*").eq("id", source.provider_connection_id).eq("status", "connected")
+    : db.from("provider_connections").select("*").eq("project_id", source.project_id).eq("kind", source.type).eq("status", "connected").limit(1);
+  const { data: conn } = await connQuery.maybeSingle();
   if (!conn) {
     log.warn({ sourceId: source.id }, "source sync: no connected provider for this project/kind, skipping");
     return;

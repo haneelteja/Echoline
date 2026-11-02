@@ -8,7 +8,7 @@ import {
   loadMasterKey,
   rowToEnvelope,
 } from "@echoline/db";
-import { listGoogleSheetTabs, refreshGoogleToken } from "@echoline/providers";
+import { listGoogleSheetFiles, listGoogleSheetTabs, refreshGoogleToken } from "@echoline/providers";
 import { sendDbError } from "../errors.js";
 import { getSchedulerQueue } from "../schedulerQueue.js";
 
@@ -97,37 +97,82 @@ export const sourcesRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
-  // Lists the real tab names in a spreadsheet, so the UI can offer a picker
-  // instead of free-text ("Sheet1" doesn't exist if the user renamed their
-  // only tab — the exact failure this replaces). Uses an admin client for the
-  // connection read since the OAuth-connected account belongs to whoever
-  // clicked "Connect Google Sheets", not necessarily the caller.
-  app.get("/projects/:projectId/sources/google-sheets/tabs", async (req, reply) => {
-    const { projectId } = req.params as { projectId: string };
-    const { spreadsheetId } = req.query as { spreadsheetId?: string };
-    if (!spreadsheetId) return reply.code(400).send({ error: "validation_error", message: "spreadsheetId is required" });
-
-    const db = createAdminClient();
+  // Shared by the tabs/files routes below — resolves one specific connected
+  // Google account's fresh access token. connectionId is required (not just
+  // "the one connected google_sheets row") because a project can now have
+  // more than one Google account connected at once.
+  async function freshGoogleSheetsAccessToken(
+    db: ReturnType<typeof createAdminClient>,
+    projectId: string,
+    connectionId: string
+  ): Promise<{ accessToken: string } | { error: "no_connection" | "decrypt_failed" | "google_sheets_failed"; message?: string }> {
     const { data: conn, error: connErr } = await db
       .from("provider_connections")
       .select("*")
+      .eq("id", connectionId)
       .eq("project_id", projectId)
       .eq("kind", "google_sheets")
       .eq("status", "connected")
       .maybeSingle();
-    if (connErr) return sendDbError(reply, connErr);
-    if (!conn) return reply.code(400).send({ error: "no_connection", message: "Connect a Google Sheets account for this project first" });
+    if (connErr || !conn) return { error: "no_connection" };
 
     let credentials: Record<string, string>;
     try {
       credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
     } catch {
-      return reply.code(500).send({ error: "decrypt_failed" });
+      return { error: "decrypt_failed" };
     }
 
     try {
       await refreshGoogleSheetsToken(db, conn as any, credentials);
-      const tabs = await listGoogleSheetTabs(credentials.accessToken, spreadsheetId);
+      return { accessToken: credentials.accessToken };
+    } catch (err) {
+      return { error: "google_sheets_failed", message: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  // Lists the Google Sheets files visible to one connected Google account,
+  // so the UI can offer a real picker instead of a pasted spreadsheet ID
+  // (which also meant no way to catch a wrong ID, or an unconverted .xlsx,
+  // before syncing actually failed).
+  app.get("/projects/:projectId/sources/google-sheets/files", async (req, reply) => {
+    const { projectId } = req.params as { projectId: string };
+    const { connectionId } = req.query as { connectionId?: string };
+    if (!connectionId) return reply.code(400).send({ error: "validation_error", message: "connectionId is required" });
+
+    const db = createAdminClient();
+    const resolved = await freshGoogleSheetsAccessToken(db, projectId, connectionId);
+    if ("error" in resolved) {
+      const status = resolved.error === "no_connection" ? 400 : resolved.error === "decrypt_failed" ? 500 : 502;
+      return reply.code(status).send({ error: resolved.error, message: resolved.message ?? "Connect a Google account for this project first" });
+    }
+
+    try {
+      const files = await listGoogleSheetFiles(resolved.accessToken);
+      return { files };
+    } catch (err) {
+      return reply.code(502).send({ error: "google_sheets_failed", message: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // Lists the real tab names in a spreadsheet, so the UI can offer a picker
+  // instead of free-text ("Sheet1" doesn't exist if the user renamed their
+  // only tab — the exact failure this replaces).
+  app.get("/projects/:projectId/sources/google-sheets/tabs", async (req, reply) => {
+    const { projectId } = req.params as { projectId: string };
+    const { spreadsheetId, connectionId } = req.query as { spreadsheetId?: string; connectionId?: string };
+    if (!spreadsheetId) return reply.code(400).send({ error: "validation_error", message: "spreadsheetId is required" });
+    if (!connectionId) return reply.code(400).send({ error: "validation_error", message: "connectionId is required" });
+
+    const db = createAdminClient();
+    const resolved = await freshGoogleSheetsAccessToken(db, projectId, connectionId);
+    if ("error" in resolved) {
+      const status = resolved.error === "no_connection" ? 400 : resolved.error === "decrypt_failed" ? 500 : 502;
+      return reply.code(status).send({ error: resolved.error, message: resolved.message ?? "Connect a Google account for this project first" });
+    }
+
+    try {
+      const tabs = await listGoogleSheetTabs(resolved.accessToken, spreadsheetId);
       return { tabs };
     } catch (err) {
       return reply.code(502).send({ error: "google_sheets_failed", message: err instanceof Error ? err.message : String(err) });

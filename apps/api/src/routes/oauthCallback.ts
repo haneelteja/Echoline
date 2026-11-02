@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { createAnonClient, encryptCredentials, envelopeToRow, loadMasterKey } from "@echoline/db";
-import { exchangeGoogleCode, exchangeMicrosoftCode, getConnectionTester } from "@echoline/providers";
+import { exchangeGoogleCode, exchangeMicrosoftCode, getConnectionTester, getGoogleAccountEmail } from "@echoline/providers";
 import { decodeOAuthState } from "../oauthState.js";
 import { getOAuthConfig, isOAuthableProvider, oauthProviderMeta, webPublicUrl } from "../oauthProviders.js";
 
@@ -64,6 +64,15 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
       const tester = getConnectionTester(provider);
       const testResult = tester ? await tester(credentials) : { ok: true as const };
 
+      // google_sheets has no tester (above) and is the one provider that
+      // supports multiple simultaneous connections per project (one per
+      // Google account) — resolving the account's email is what lets those
+      // coexist instead of each new connect silently replacing the last.
+      let accountLabel = (testResult as { accountLabel?: string }).accountLabel ?? null;
+      if (provider === "google_sheets" && !accountLabel) {
+        accountLabel = await getGoogleAccountEmail(tokens.accessToken);
+      }
+
       const envelope = encryptCredentials(JSON.stringify(credentials), masterKey());
       const row = envelopeToRow(envelope);
 
@@ -77,14 +86,21 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
 
       // Only one *connected* provider per (project, kind) — replace, don't
       // stack (e.g. re-running the Gmail OAuth flow shouldn't leave two
-      // "connected" email providers for the worker to trip over).
+      // "connected" email providers for the worker to trip over). The one
+      // exception: google_sheets with a resolved account email only replaces
+      // a previous connection for that *same* email, so a second Google
+      // account can be connected alongside the first instead of evicting it.
       if (testResult.ok) {
-        await supabase
+        let disconnectQuery = supabase
           .from("provider_connections")
           .update({ status: "disconnected" })
           .eq("project_id", statePayload.projectId)
           .eq("kind", kind)
           .eq("status", "connected");
+        if (provider === "google_sheets" && accountLabel) {
+          disconnectQuery = disconnectQuery.eq("account_label", accountLabel);
+        }
+        await disconnectQuery;
       }
 
       const { error: insertErr } = await supabase.from("provider_connections").insert({
@@ -92,7 +108,7 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
         project_id: statePayload.projectId,
         kind,
         provider,
-        account_label: testResult.accountLabel ?? null,
+        account_label: accountLabel,
         scopes: tokens.scope ? tokens.scope.split(" ") : [],
         status: testResult.ok ? "connected" : "needs_reconnect",
         needs_reconnect_reason: testResult.ok ? null : testResult.error ?? null,

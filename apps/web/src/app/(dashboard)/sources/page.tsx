@@ -58,30 +58,45 @@ function joinSheetRange(sheetName: string, cellRange: string): string {
 
 /** Same reasoning as contacts/page.tsx's ColumnHead — module scope so its
  * dropdown isn't torn down and rebuilt on every render. */
-/** Shared by the add and edit panels — Spreadsheet ID stays free-text (no
- * Drive-browsing scope granted). Sheet name and the optional cell
- * sub-range are two separate fields rather than one combined "Sheet1!A1:Z"
- * string, so pasting a sheet name (including spaces/emoji) never needs
+/** Shared by the add and edit panels. A project can have more than one
+ * connected Google account (one per Google account, see the "Connect a
+ * sheet/workbook account" panel), so a source first picks *which* account
+ * to sync through, then picks a real spreadsheet from that account's own
+ * Drive — no pasted ID, no way to enter a wrong one. Sheet name and the
+ * optional cell sub-range stay two separate fields rather than one combined
+ * "Sheet1!A1:Z" string, so a sheet name with spaces/emoji never needs
  * manual A1-notation assembly — leaving the cell range blank means the
  * whole sheet. */
 function GoogleSheetsFields({
+  googleConnections,
+  googleConnectionId,
   spreadsheetId,
+  sheetFiles,
+  fetchingFiles,
   sheetName,
   cellRange,
   sheetTabs,
   fetchingTabs,
   idPrefix,
+  onGoogleConnectionChange,
+  onFetchFiles,
   onSpreadsheetIdChange,
   onSheetNameChange,
   onCellRangeChange,
   onFetchTabs,
 }: {
+  googleConnections: ConnectionRow[];
+  googleConnectionId: string;
   spreadsheetId: string;
+  sheetFiles: { id: string; name: string }[];
+  fetchingFiles: boolean;
   sheetName: string;
   cellRange: string;
   sheetTabs: string[];
   fetchingTabs: boolean;
   idPrefix: string;
+  onGoogleConnectionChange: (v: string) => void;
+  onFetchFiles: () => void;
   onSpreadsheetIdChange: (v: string) => void;
   onSheetNameChange: (v: string) => void;
   onCellRangeChange: (v: string) => void;
@@ -90,27 +105,64 @@ function GoogleSheetsFields({
   return (
     <div className="grid g3" style={{ marginTop: 10 }}>
       <div className="field">
-        <label htmlFor={`${idPrefix}gsid`}>Spreadsheet ID</label>
+        <label htmlFor={`${idPrefix}gsacct`}>Google account</label>
+        <select id={`${idPrefix}gsacct`} value={googleConnectionId} onChange={(e) => onGoogleConnectionChange(e.target.value)}>
+          <option value="">Select a connected account…</option>
+          {googleConnections.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.account_label ?? "Connected account"}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor={`${idPrefix}gsfile`}>Spreadsheet</label>
         <div className="row" style={{ gap: 6 }}>
-          <input id={`${idPrefix}gsid`} value={spreadsheetId} onChange={(e) => onSpreadsheetIdChange(e.target.value)} placeholder="From the sheet's URL" />
-          <button type="button" className="btn" disabled={fetchingTabs || !spreadsheetId.trim()} onClick={onFetchTabs}>
-            {fetchingTabs ? "Fetching…" : "Fetch tabs"}
+          {sheetFiles.length > 0 ? (
+            <select id={`${idPrefix}gsfile`} value={spreadsheetId} onChange={(e) => onSpreadsheetIdChange(e.target.value)} style={{ flex: 1 }}>
+              {sheetFiles.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="small muted" style={{ flex: 1 }}>
+              {spreadsheetId ? "Click \"Fetch sheets\" to refresh the list." : "No spreadsheet selected yet."}
+            </span>
+          )}
+          <button type="button" className="btn" disabled={fetchingFiles || !googleConnectionId} onClick={onFetchFiles}>
+            {fetchingFiles ? "Fetching…" : "Fetch sheets"}
           </button>
         </div>
+        <p className="small muted" style={{ marginTop: 4 }}>
+          Lists the real spreadsheets in that Google account&apos;s Drive — only native Google Sheets, never an unconverted Excel file.
+        </p>
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}gssheet`}>Sheet (tab) name</label>
-        {sheetTabs.length > 0 ? (
-          <select id={`${idPrefix}gssheet`} value={sheetName} onChange={(e) => onSheetNameChange(e.target.value)}>
-            {sheetTabs.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input id={`${idPrefix}gssheet`} value={sheetName} onChange={(e) => onSheetNameChange(e.target.value)} placeholder="Sheet1" />
-        )}
+        <div className="row" style={{ gap: 6 }}>
+          {sheetTabs.length > 0 ? (
+            <select id={`${idPrefix}gssheet`} value={sheetName} onChange={(e) => onSheetNameChange(e.target.value)} style={{ flex: 1 }}>
+              {sheetTabs.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id={`${idPrefix}gssheet`}
+              value={sheetName}
+              onChange={(e) => onSheetNameChange(e.target.value)}
+              placeholder="Sheet1"
+              style={{ flex: 1 }}
+            />
+          )}
+          <button type="button" className="btn" disabled={fetchingTabs || !spreadsheetId} onClick={onFetchTabs}>
+            {fetchingTabs ? "Fetching…" : "Fetch tabs"}
+          </button>
+        </div>
         <p className="small muted" style={{ marginTop: 4 }}>
           {sheetTabs.length > 0 ? "Picked from the real tabs in this spreadsheet." : "Click \"Fetch tabs\" to pick from the real tab names instead of typing one."}
         </p>
@@ -171,7 +223,10 @@ export default function SourcesPage() {
   const [type, setType] = useState<SourceType>("webhook");
   const [path, setPath] = useState("");
   const [table, setTable] = useState("");
+  const [googleConnectionId, setGoogleConnectionId] = useState("");
   const [spreadsheetId, setSpreadsheetId] = useState("");
+  const [sheetFiles, setSheetFiles] = useState<{ id: string; name: string }[]>([]);
+  const [fetchingFiles, setFetchingFiles] = useState(false);
   const [sheetName, setSheetName] = useState("Sheet1");
   const [cellRange, setCellRange] = useState("");
   const [mode, setMode] = useState("Hourly");
@@ -208,7 +263,9 @@ export default function SourcesPage() {
   }, [pid]);
 
   const onedriveConn = connections.find((c) => c.kind === "onedrive" && c.status === "connected");
-  const sheetsConn = connections.find((c) => c.kind === "google_sheets" && c.status === "connected");
+  // A project can have several connected Google accounts (one per Google
+  // account) — unlike every other connection kind, which stays single.
+  const googleConnections = connections.filter((c) => c.kind === "google_sheets" && c.status === "connected");
 
   async function startOAuth(provider: "onedrive" | "google_sheets") {
     if (!pid) return;
@@ -230,12 +287,20 @@ export default function SourcesPage() {
     try {
       await apiFetch(`/v1/projects/${pid}/sources`, {
         method: "POST",
-        body: JSON.stringify({ name, type, config, mode: type === "onedrive" || type === "google_sheets" ? mode : null }),
+        body: JSON.stringify({
+          name,
+          type,
+          config,
+          mode: type === "onedrive" || type === "google_sheets" ? mode : null,
+          provider_connection_id: type === "google_sheets" ? googleConnectionId : null,
+        }),
       });
       setName("");
       setPath("");
       setTable("");
+      setGoogleConnectionId("");
       setSpreadsheetId("");
+      setSheetFiles([]);
       setSheetTabs([]);
       setAdding(false);
       await refreshProjectData();
@@ -255,20 +320,41 @@ export default function SourcesPage() {
     setMode(s.mode || "Hourly");
     setPath(s.config?.path ?? "");
     setTable(s.config?.table ?? "");
+    setGoogleConnectionId(s.provider_connection_id ?? "");
     setSpreadsheetId(s.config?.spreadsheetId ?? "");
+    setSheetFiles([]);
     const { sheetName: sn, cellRange: cr } = splitSheetRange(s.config?.range ?? "Sheet1");
     setSheetName(sn);
     setCellRange(cr);
     setSheetTabs([]);
   }
 
+  async function fetchSheetFiles() {
+    if (!pid || !googleConnectionId) return;
+    setFetchingFiles(true);
+    setError(null);
+    try {
+      const { files } = await apiFetch<{ files: { id: string; name: string }[] }>(
+        `/v1/projects/${pid}/sources/google-sheets/files?connectionId=${encodeURIComponent(googleConnectionId)}`
+      );
+      setSheetFiles(files);
+      if (files.length) setSpreadsheetId(files[0].id);
+      else setError("No Google Sheets found in that account's Drive.");
+    } catch (e) {
+      setSheetFiles([]);
+      setError(e instanceof ApiError ? e.message : "Couldn't list that account's spreadsheets.");
+    } finally {
+      setFetchingFiles(false);
+    }
+  }
+
   async function fetchTabs() {
-    if (!pid || !spreadsheetId.trim()) return;
+    if (!pid || !googleConnectionId || !spreadsheetId.trim()) return;
     setFetchingTabs(true);
     setError(null);
     try {
       const { tabs } = await apiFetch<{ tabs: string[] }>(
-        `/v1/projects/${pid}/sources/google-sheets/tabs?spreadsheetId=${encodeURIComponent(spreadsheetId.trim())}`
+        `/v1/projects/${pid}/sources/google-sheets/tabs?spreadsheetId=${encodeURIComponent(spreadsheetId.trim())}&connectionId=${encodeURIComponent(googleConnectionId)}`
       );
       setSheetTabs(tabs);
       if (tabs.length) setSheetName(tabs[0]);
@@ -283,6 +369,7 @@ export default function SourcesPage() {
 
   function cancelEdit() {
     setEditingId(null);
+    setSheetFiles([]);
     setSheetTabs([]);
     setError(null);
   }
@@ -299,6 +386,7 @@ export default function SourcesPage() {
         body: JSON.stringify({
           name,
           mode: type === "onedrive" || type === "google_sheets" ? mode : null,
+          provider_connection_id: type === "google_sheets" ? googleConnectionId : undefined,
           ...(config ? { config } : {}),
         }),
       });
@@ -439,6 +527,8 @@ export default function SourcesPage() {
             onClick={() => {
               setAdding((v) => !v);
               setEditingId(null);
+              setGoogleConnectionId("");
+              setSheetFiles([]);
               setSheetTabs([]);
               setError(null);
             }}
@@ -451,16 +541,25 @@ export default function SourcesPage() {
 
       <div className="panel" style={{ marginBottom: 16 }}>
         <h3>Connect a sheet/workbook account</h3>
-        <p className="small muted">Required once per project before adding a OneDrive or Google Sheets source.</p>
-        <div className="row" style={{ marginTop: 10, gap: 10 }}>
+        <p className="small muted">
+          Required once per project before adding a OneDrive or Google Sheets source. Connect more than one Google account if your
+          sheets live in different Drives — each source then picks which account to sync through.
+        </p>
+        <div className="row" style={{ marginTop: 10, gap: 10, flexWrap: "wrap" }}>
           <button className="btn" onClick={() => startOAuth("onedrive")}>
             {onedriveConn ? "Reconnect OneDrive" : "Connect OneDrive"}
           </button>
-          <button className="btn" onClick={() => startOAuth("google_sheets")}>
-            {sheetsConn ? "Reconnect Google Sheets" : "Connect Google Sheets"}
-          </button>
           {onedriveConn && <span className="pill ok">OneDrive connected</span>}
-          {sheetsConn && <span className="pill ok">Google Sheets connected</span>}
+        </div>
+        <div className="row" style={{ marginTop: 10, gap: 10, flexWrap: "wrap" }}>
+          <button className="btn" onClick={() => startOAuth("google_sheets")}>
+            {googleConnections.length ? "Connect another Google account" : "Connect a Google account"}
+          </button>
+          {googleConnections.map((c) => (
+            <span key={c.id} className="pill ok">
+              {c.account_label ?? "Connected account"}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -507,11 +606,22 @@ export default function SourcesPage() {
           {type === "google_sheets" && (
             <GoogleSheetsFields
               idPrefix=""
+              googleConnections={googleConnections}
+              googleConnectionId={googleConnectionId}
               spreadsheetId={spreadsheetId}
+              sheetFiles={sheetFiles}
+              fetchingFiles={fetchingFiles}
               sheetName={sheetName}
               cellRange={cellRange}
               sheetTabs={sheetTabs}
               fetchingTabs={fetchingTabs}
+              onGoogleConnectionChange={(v) => {
+                setGoogleConnectionId(v);
+                setSpreadsheetId("");
+                setSheetFiles([]);
+                setSheetTabs([]);
+              }}
+              onFetchFiles={fetchSheetFiles}
               onSpreadsheetIdChange={(v) => {
                 setSpreadsheetId(v);
                 setSheetTabs([]);
@@ -526,9 +636,9 @@ export default function SourcesPage() {
               Connect a OneDrive account above first.
             </p>
           )}
-          {type === "google_sheets" && !sheetsConn && (
+          {type === "google_sheets" && !googleConnections.length && (
             <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-              Connect a Google Sheets account above first.
+              Connect a Google account above first.
             </p>
           )}
 
@@ -540,7 +650,7 @@ export default function SourcesPage() {
               saving ||
               !name.trim() ||
               (type === "onedrive" && (!onedriveConn || !path.trim() || !table.trim())) ||
-              (type === "google_sheets" && (!sheetsConn || !spreadsheetId.trim() || !sheetName.trim()))
+              (type === "google_sheets" && (!googleConnectionId || !spreadsheetId.trim() || !sheetName.trim()))
             }
           >
             Save source
@@ -592,11 +702,22 @@ export default function SourcesPage() {
           {type === "google_sheets" && (
             <GoogleSheetsFields
               idPrefix="e"
+              googleConnections={googleConnections}
+              googleConnectionId={googleConnectionId}
               spreadsheetId={spreadsheetId}
+              sheetFiles={sheetFiles}
+              fetchingFiles={fetchingFiles}
               sheetName={sheetName}
               cellRange={cellRange}
               sheetTabs={sheetTabs}
               fetchingTabs={fetchingTabs}
+              onGoogleConnectionChange={(v) => {
+                setGoogleConnectionId(v);
+                setSpreadsheetId("");
+                setSheetFiles([]);
+                setSheetTabs([]);
+              }}
+              onFetchFiles={fetchSheetFiles}
               onSpreadsheetIdChange={(v) => {
                 setSpreadsheetId(v);
                 setSheetTabs([]);
@@ -615,7 +736,7 @@ export default function SourcesPage() {
                 saving ||
                 !name.trim() ||
                 (type === "onedrive" && (!path.trim() || !table.trim())) ||
-                (type === "google_sheets" && (!spreadsheetId.trim() || !sheetName.trim()))
+                (type === "google_sheets" && (!googleConnectionId || !spreadsheetId.trim() || !sheetName.trim()))
               }
             >
               Save changes
