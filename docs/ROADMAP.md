@@ -586,8 +586,20 @@
   header spellings like "Name"/"Business Name"/"Company"), and de-dupes against existing contacts using
   the exact same rule as `intake.ts` (same email or phone skips, status never overwritten). A manual
   "Sync now" button on the Sources page enqueues `syncSourceNow` onto the same scheduler queue the
-  existing "Run due steps now" button uses. **Not live-verified** — impossible without real
-  `GOOGLE_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_ID` credentials, which don't exist yet.
+  existing "Run due steps now" button uses.
+  - **Google Sheets — now live-verified (2026-11-02).** Full round trip confirmed against a real
+    OAuth connection and a real sheet: connect → `GET .../sources/google-sheets/tabs` (added later,
+    see the Sources-editing entry below) → manual sync → a genuinely new row landed in `contacts`
+    with `source` set to the lead source's name, while 4 rows with already-known phone numbers
+    correctly skipped as duplicates. One real gotcha hit along the way, worth remembering: the Google
+    Cloud OAuth app is in "Testing" publishing status, and Google caps refresh-token lifetime at 7
+    days for unverified apps left unused — this connection's token had expired (`invalid_grant`) after
+    sitting idle during the Render/Supabase outage below, and needed a manual "Reconnect" click to
+    get a fresh one. Expect to hit this again on any Google-connected source that goes unused for a
+    week+ while the app stays unverified.
+  - **OneDrive — still not live-verified.** `MICROSOFT_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_SECRET`
+    were never set up (Google was done first); the Azure App Registration walkthrough was never
+    started.
 - Email reply detection and 360Messenger WhatsApp reply detection — **done, see the dedicated "Backlog
   progress" entry below (`## Backlog progress`)**. Both need live verification (a real reply sent
   through each channel, confirmed to flip the contact's status and stop follow-ups) — tracked there,
@@ -734,6 +746,23 @@
   `platformEmail.ts`'s invite-email role labels/blurbs, `TeamSettings.tsx`, `accept-invite/page.tsx`,
   and the standalone `verify-phase1.ts` acceptance script. Migration pushed live via
   `supabase db push`; full monorepo typecheck/lint clean afterward.
+- **Render free-tier outage (2026-10-20 → 2026-11-01) and its root cause.** Both `echoline-api` and
+  `echoline-worker` were suspended by Render ("Suspended by Render", not a crash) for exhausting the
+  workspace's 750 free-instance-hour monthly pool with no card on file — confirmed via Render's own
+  "Approaching monthly free usage limit" email and the Billing page (807.73/750 hours). Root cause:
+  the keep-alive cron (pings every 10 min to dodge Render's 15-min idle spin-down, see
+  [[project_echoline_keepalive]]) keeps the services running continuously, so two services never
+  idling is ~1,500 hours/month against a 750-hour shared pool — reducing ping *frequency* doesn't
+  help at all, since a spun-down service costs zero hours regardless of how often it's pinged; only
+  *not pinging during some window* (letting it actually spin down) reduces consumption. Services
+  resume automatically at the start of the next calendar month (confirmed in Render's own docs and
+  email) — no card or manual action needed for that part. Knock-on effect: with both services down for
+  12 days straight, nothing ever queried Supabase, which separately auto-paused after its own ~7-day
+  inactivity threshold (free-tier Supabase projects auto-pause, data stays intact and resumable).
+  Decided mitigation (as of this writing, not yet confirmed implemented): restrict the cron-job.org
+  pings to an active-hours window (e.g. 7am–11pm IST) instead of 24/7 — lets both services spin down
+  overnight, which both caps monthly Render hours *and* guarantees the worker's own 5-minute DB-query
+  tick runs at least once a day, keeping Supabase's 7-day inactivity clock from ever expiring again.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
