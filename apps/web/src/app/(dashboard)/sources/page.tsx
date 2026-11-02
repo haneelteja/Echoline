@@ -567,10 +567,6 @@ export default function SourcesPage() {
         <div className="panel" style={{ marginBottom: 16 }}>
           <div className="grid g3">
             <div className="field">
-              <label htmlFor="sn">Name</label>
-              <input id="sn" value={name} onChange={(e) => setName(e.target.value)} placeholder="Website contact form" />
-            </div>
-            <div className="field">
               <label htmlFor="st">Type</label>
               <select id="st" value={type} onChange={(e) => setType(e.target.value as SourceType)}>
                 <option value="webhook">Webhook</option>
@@ -578,6 +574,10 @@ export default function SourcesPage() {
                 <option value="onedrive">OneDrive (Excel table)</option>
                 <option value="google_sheets">Google Sheets</option>
               </select>
+            </div>
+            <div className="field">
+              <label htmlFor="sn">Name</label>
+              <input id="sn" value={name} onChange={(e) => setName(e.target.value)} placeholder="Website contact form" />
             </div>
             {(type === "onedrive" || type === "google_sheets") && (
               <div className="field">
@@ -668,12 +668,12 @@ export default function SourcesPage() {
           <h3>Edit source</h3>
           <div className="grid g3">
             <div className="field">
-              <label htmlFor="esn">Name</label>
-              <input id="esn" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="field">
               <label>Type</label>
               <input value={TYPE_LABEL[type] ?? type} disabled />
+            </div>
+            <div className="field">
+              <label htmlFor="esn">Name</label>
+              <input id="esn" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             {(type === "onedrive" || type === "google_sheets") && (
               <div className="field">
