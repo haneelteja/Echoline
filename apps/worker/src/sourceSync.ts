@@ -96,20 +96,26 @@ async function syncOneSource(db: ReturnType<typeof createAdminClient>, source: a
   const { data: conn } = await connQuery.maybeSingle();
   if (!conn) {
     log.warn({ sourceId: source.id }, "source sync: no connected provider for this project/kind, skipping");
+    await db.from("lead_sources").update({ last_sync: new Date().toISOString() }).eq("id", source.id);
     return;
   }
 
-  const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
-  await refreshSourceToken(db, conn as any, credentials);
-
+  // Everything from decrypting credentials through reading the sheet/table is
+  // one try/catch — a token-refresh failure used to throw past this function
+  // entirely, leaving last_sync untouched forever (the manual "Sync now"
+  // button looked like it silently did nothing). Any failure in here now
+  // still records last_sync, so a stuck sync is at least visible as "ran but
+  // found nothing new" rather than indistinguishable from "never ran."
   let sheet: SheetData;
   try {
+    const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
+    await refreshSourceToken(db, conn as any, credentials);
     sheet =
       source.type === "onedrive"
         ? await readOneDriveTable(credentials.accessToken, source.config.path, source.config.table)
         : await readGoogleSheet(credentials.accessToken, source.config.spreadsheetId, source.config.range ?? "Sheet1");
   } catch (err) {
-    log.error({ sourceId: source.id, err }, "source sync: failed to read sheet/table");
+    log.error({ sourceId: source.id, err }, "source sync: failed to prepare/read sheet/table");
     await db.from("lead_sources").update({ last_sync: new Date().toISOString() }).eq("id", source.id);
     return;
   }
