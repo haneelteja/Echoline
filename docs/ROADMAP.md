@@ -615,15 +615,21 @@
       unique phone numbers landed in `contacts` with `source` set to the lead source's name; a prior
       attempt using a duplicate phone number correctly skipped instead, same de-dup rule as Sheets/
       intake. Test source and contacts deleted after.
-    - **New gotcha found, not yet fixed — worth tracking**: `echoline-worker` is a Render free-tier
-      service and spins down after ~15 min idle same as `echoline-api`, but the existing keep-alive
-      cron (cron-job.org, pings `echoline-api`'s `/health`) doesn't cover it. A BullMQ job enqueued
-      while the worker is asleep just sits in the Redis queue — unprocessed, no error, `last_sync`
-      stays stale — until something hits the worker's own URL and wakes it. Hit this twice live: a
-      "Sync now" click looked like it silently did nothing for 5+ minutes each time, until pinging
+    - **New gotcha found and resolved (2026-11-03)**: `echoline-worker` is a Render free-tier service
+      and spins down after ~15 min idle same as `echoline-api`. A BullMQ job enqueued while the worker
+      is asleep just sits in the Redis queue — unprocessed, no error, `last_sync` stays stale — until
+      something hits the worker's own URL and wakes it. Hit this twice live: a "Sync now" click looked
+      like it silently did nothing for 5+ minutes each time, until pinging
       `https://echoline-worker.onrender.com/` directly woke it and the queued job immediately
-      processed. Scheduled syncs (not just manual ones) would hit the same stall. Needs its own
-      keep-alive ping alongside the API's.
+      processed. Root cause turned out to be separate from the above: two cron-job.org keep-alive jobs
+      (`echoline-api`'s `/health` and `echoline-worker`'s `/`, both pinging every 10 min) already
+      existed from 2026-10-19, but both got auto-disabled after a correlated failure on 2026-10-23
+      (lines up with the Render/Supabase outage noted above) and nobody noticed for 11 days since
+      cron-job.org's failure notifications weren't configured. Re-enabled both jobs and turned on the
+      "job will be disabled due to too many failures" notification so a future silent gap gets caught
+      immediately instead of sitting undetected. Also deleted a stale third duplicate job
+      ("Echoline Active", same worker URL, disabled since 10/05). Verified both endpoints respond in
+      <1s after re-enabling.
 - Email reply detection and 360Messenger WhatsApp reply detection — **done, see the dedicated "Backlog
   progress" entry below (`## Backlog progress`)**. Both need live verification (a real reply sent
   through each channel, confirmed to flip the contact's status and stop follow-ups) — tracked there,
