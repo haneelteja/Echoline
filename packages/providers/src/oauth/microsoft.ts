@@ -55,6 +55,22 @@ export async function exchangeMicrosoftCode(config: OAuthConfig, code: string, s
   return { accessToken: data.access_token, refreshToken: data.refresh_token, expiresIn: data.expires_in, scope: data.scope };
 }
 
+/** Resolves which Microsoft account a connection belongs to, for display and
+ * disconnect-matching — mirrors getGoogleAccountEmail. Personal Microsoft
+ * accounts (MSA) often come back prefixed like "live.com#user@example.com";
+ * that prefix is stripped. */
+export async function getMicrosoftAccountEmail(accessToken: string): Promise<string | null> {
+  const res = await fetch("https://graph.microsoft.com/v1.0/me", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { mail?: string; userPrincipalName?: string };
+  const raw = data.mail ?? data.userPrincipalName ?? null;
+  if (!raw) return null;
+  const hashIdx = raw.indexOf("#");
+  return hashIdx >= 0 ? raw.slice(hashIdx + 1) : raw;
+}
+
 /** Microsoft rotates the refresh token on every refresh — callers must persist the new one. */
 export async function refreshMicrosoftToken(
   config: Pick<OAuthConfig, "clientId" | "clientSecret">,

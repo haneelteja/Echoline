@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { createAnonClient, encryptCredentials, envelopeToRow, loadMasterKey } from "@echoline/db";
-import { exchangeGoogleCode, exchangeMicrosoftCode, getConnectionTester, getGoogleAccountEmail } from "@echoline/providers";
+import { exchangeGoogleCode, exchangeMicrosoftCode, getConnectionTester, getGoogleAccountEmail, getMicrosoftAccountEmail } from "@echoline/providers";
 import { decodeOAuthState } from "../oauthState.js";
 import { getOAuthConfig, isOAuthableProvider, oauthProviderMeta, webPublicUrl } from "../oauthProviders.js";
 
@@ -71,6 +71,10 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
       let accountLabel = (testResult as { accountLabel?: string }).accountLabel ?? null;
       if (provider === "google_sheets" && !accountLabel) {
         accountLabel = await getGoogleAccountEmail(tokens.accessToken);
+      } else if (provider === "onedrive" && !accountLabel) {
+        // onedrive stays single-connection per project (unlike google_sheets)
+        // — this is purely for display on the Sources page, not disconnect-matching.
+        accountLabel = await getMicrosoftAccountEmail(tokens.accessToken);
       }
 
       const envelope = encryptCredentials(JSON.stringify(credentials), masterKey());
