@@ -267,6 +267,17 @@ export default function SourcesPage() {
   // account) — unlike every other connection kind, which stays single.
   const googleConnections = connections.filter((c) => c.kind === "google_sheets" && c.status === "connected");
 
+  function sourceAccountLabel(s: LeadSourceRow): string {
+    if (s.type === "google_sheets") {
+      const conn = connections.find((c) => c.id === s.provider_connection_id);
+      return conn?.account_label ?? "—";
+    }
+    if (s.type === "onedrive") {
+      return onedriveConn?.account_label ?? "—";
+    }
+    return "—";
+  }
+
   async function startOAuth(provider: "onedrive" | "google_sheets") {
     if (!pid) return;
     setError(null);
@@ -835,6 +846,7 @@ export default function SourcesPage() {
                 <TableRow>
                   <TableHead>Source</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Account</TableHead>
                   <TableHead>Archived</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -845,6 +857,7 @@ export default function SourcesPage() {
                     <TableRow className="opacity-60">
                       <TableCell className="font-semibold text-foreground">{s.name}</TableCell>
                       <TableCell className="text-muted-foreground">{TYPE_LABEL[s.type as SourceType] ?? s.type}</TableCell>
+                      <TableCell className="text-muted-foreground">{sourceAccountLabel(s)}</TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">{s.archived_at ? new Date(s.archived_at).toLocaleString() : "—"}</TableCell>
                       <TableCell>
                         <Button variant="outline" size="sm" onClick={() => setViewingArchivedId((v) => (v === s.id ? null : s.id))}>
@@ -854,7 +867,7 @@ export default function SourcesPage() {
                     </TableRow>
                     {viewingArchivedId === s.id && (
                       <TableRow key={`${s.id}-detail`}>
-                        <TableCell colSpan={4} className="bg-muted/30">
+                        <TableCell colSpan={5} className="bg-muted/30">
                           <div className="flex flex-col gap-2 py-1 text-sm">
                             <p>
                               <span className="font-semibold text-foreground">Config: </span>
@@ -913,6 +926,7 @@ export default function SourcesPage() {
                   onFilterChange={setColumnFilter}
                   onSortChange={setColumnSort}
                 />
+                <TableHead>Account</TableHead>
                 <ColumnHead
                   columnKey="mode"
                   label="Sync"
@@ -938,6 +952,7 @@ export default function SourcesPage() {
                     {s.detail && <div className="text-xs font-normal text-muted-foreground">{s.detail}</div>}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{TYPE_LABEL[s.type as SourceType] ?? s.type}</TableCell>
+                  <TableCell className="text-muted-foreground">{sourceAccountLabel(s)}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {s.paused ? <span className="pill warn">Paused</span> : s.mode || "Manual"}
                   </TableCell>
