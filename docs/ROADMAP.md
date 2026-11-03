@@ -597,9 +597,33 @@
     sitting idle during the Render/Supabase outage below, and needed a manual "Reconnect" click to
     get a fresh one. Expect to hit this again on any Google-connected source that goes unused for a
     week+ while the app stays unverified.
-  - **OneDrive — still not live-verified.** `MICROSOFT_OAUTH_CLIENT_ID`/`MICROSOFT_OAUTH_CLIENT_SECRET`
-    were never set up (Google was done first); the Azure App Registration walkthrough was never
-    started.
+  - **OneDrive — now live-verified (2026-11-03).** Azure App Registration done from scratch (personal
+    Microsoft account had no Entra ID tenant; signing up for an Azure free account auto-provisioned a
+    "Default Directory" tenant). App registered with "Any Entra ID Tenant + Personal Microsoft
+    accounts" (required — the code calls the `/common/` multitenant+personal authorize endpoint),
+    `Files.Read` + `offline_access` Graph scopes, `MICROSOFT_OAUTH_CLIENT_ID`/`_SECRET` set on both
+    Render services. Added `getMicrosoftAccountEmail` (`packages/providers/src/oauth/microsoft.ts`,
+    mirrors the existing Google one) so the Sources page's "Account" column also shows which
+    Microsoft account a OneDrive source syncs through.
+    - Found and fixed a real bug along the way: `syncOneSource` (`apps/worker/src/sourceSync.ts`) only
+      wrapped the sheet/table read in a try/catch, not the preceding credential-decrypt + token-refresh
+      step — a failure there threw straight past the function, leaving `last_sync` `null` forever and
+      making a failed "Sync now" indistinguishable from "never ran." Widened the try/catch to cover
+      everything from decrypt through read; any failure now still records `last_sync`.
+    - Full round trip confirmed against a real OAuth connection and a real OneDrive Excel Table (Graph
+      reads by named Table, not a cell range — `/workbook/tables/{table}/rows`): two new rows with
+      unique phone numbers landed in `contacts` with `source` set to the lead source's name; a prior
+      attempt using a duplicate phone number correctly skipped instead, same de-dup rule as Sheets/
+      intake. Test source and contacts deleted after.
+    - **New gotcha found, not yet fixed — worth tracking**: `echoline-worker` is a Render free-tier
+      service and spins down after ~15 min idle same as `echoline-api`, but the existing keep-alive
+      cron (cron-job.org, pings `echoline-api`'s `/health`) doesn't cover it. A BullMQ job enqueued
+      while the worker is asleep just sits in the Redis queue — unprocessed, no error, `last_sync`
+      stays stale — until something hits the worker's own URL and wakes it. Hit this twice live: a
+      "Sync now" click looked like it silently did nothing for 5+ minutes each time, until pinging
+      `https://echoline-worker.onrender.com/` directly woke it and the queued job immediately
+      processed. Scheduled syncs (not just manual ones) would hit the same stall. Needs its own
+      keep-alive ping alongside the API's.
 - Email reply detection and 360Messenger WhatsApp reply detection — **done, see the dedicated "Backlog
   progress" entry below (`## Backlog progress`)**. Both need live verification (a real reply sent
   through each channel, confirmed to flip the contact's status and stop follow-ups) — tracked there,
