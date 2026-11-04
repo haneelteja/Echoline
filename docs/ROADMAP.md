@@ -644,9 +644,27 @@
   would be for replying within the 24h window after an inbound message, not the main send flow.
   **Explicitly deferred to a future release (2026-11-04 decision)**, alongside Turnstile and
   Zoho/HubSpot sync.
-- Daily status poll (webhook-only currently), and phone number quality-rating/messaging-tier tracking
-  (a different webhook event, `phone_number_quality_update`, never handled) + display on the Channels
-  screen — not built.
+- **Phone number quality-rating/messaging-tier tracking (Meta only) — done, not yet live-verified
+  (2026-11-04).** `quality_rating` (GREEN/YELLOW/RED/NA/UNKNOWN) and `messaging_limit_tier`
+  (TIER_50.."TIER_UNLIMITED) both come from the phone-number Graph API node itself
+  (`fetchMetaPhoneQuality`, `packages/providers/src/whatsapp/meta.ts`), confirmed against Meta's
+  current field reference — deliberately NOT parsed from the `phone_number_quality_update` webhook's
+  own payload, since that event's tier fields (`current_limit`/`old_limit`) are deprecated in favor of
+  `max_daily_conversations_per_business` and it never carries `quality_rating` at all. The webhook is
+  used only as a trigger to fetch both fresh; a new daily poll (`apps/worker/src/waQualityPoll.ts`)
+  backstops it on the existing 5-minute scheduler tick (same `isDue()`-per-connection style as source
+  sync), in case a webhook is ever missed. Also populated on initial connect and manual "Test".
+  Migration `0026_wa_quality_tracking.sql` (applied) adds `wa_quality_rating`/`wa_messaging_tier`/
+  `wa_quality_checked_at` to `provider_connections`. Displayed as a quality badge + tier on the
+  Channels page, Meta connections only — 360dialog/Twilio don't expose a confirmed, documented
+  equivalent. Code-reviewed and fixed before considering done: the webhook resolver originally matched
+  on WABA ID alone, which would silently update the wrong project's connection for an agency running
+  two phone numbers off the same WABA across two projects — now disambiguates using the event's
+  `display_phone_number` against `account_label` when more than one WABA match exists.
+  **Not yet live-verified**: no project in this environment has a connected Meta Cloud API WhatsApp
+  number (Elma's WhatsApp connection is 360messenger) — needs a real Meta connection to confirm the
+  end-to-end fetch/display, and ideally a real `phone_number_quality_update` webhook event to confirm
+  the trigger path.
 - Per-org monthly AI usage limit — not enforced.
 - Billing and plans (if sold as a product)
 - **Knowledge base file assets + Meta template header-image/document attachment — done.** New
