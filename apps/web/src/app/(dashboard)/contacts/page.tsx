@@ -66,8 +66,9 @@ function statusIcon(status: ContactChannelStatus) {
  * recent send for this channel was a one-off "Send now" rather than the
  * automated sequence — they now advance stage/status identically, so this
  * is purely informational, not a different status. */
-function StatusBadge({ status, manual }: { status: ContactChannelStatus; manual?: boolean }) {
+function StatusBadge({ status, manual, onMarkReplied }: { status: ContactChannelStatus; manual?: boolean; onMarkReplied?: () => void }) {
   const Icon = statusIcon(status);
+  const isTerminal = TERMINAL_GOOD.includes(status) || TERMINAL_BAD.includes(status);
   return (
     <div className="flex items-center gap-1.5">
       <Badge variant={statusVariant(status)} className="gap-1 font-semibold">
@@ -79,6 +80,15 @@ function StatusBadge({ status, manual }: { status: ContactChannelStatus; manual?
           <Hand className="h-3 w-3" />
           Manual
         </Badge>
+      )}
+      {!isTerminal && onMarkReplied && (
+        <button
+          className="rounded-full border border-dashed border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-success hover:text-success"
+          title="Mark as replied by hand — stops further follow-ups on this channel. Stand-in until automated reply detection is live for this provider."
+          onClick={onMarkReplied}
+        >
+          Mark replied
+        </button>
       )}
     </div>
   );
@@ -637,6 +647,22 @@ export default function ContactsPage() {
     }
   }
 
+  // Stand-in for automated reply detection (WhatsApp/email webhooks aren't
+  // live yet for every provider — see docs/ROADMAP.md). Setting status to
+  // "replied" is all nextDue()/dueList() need to treat this channel as
+  // terminal and stop scheduling further follow-ups — same effect an
+  // incoming webhook would have, just triggered by hand in the meantime.
+  async function markReplied(contactId: string, channel: "email" | "whatsapp") {
+    if (!pid) return;
+    setError(null);
+    const field = channel === "email" ? "em_status" : "wa_status";
+    try {
+      await apiFetch(`/v1/projects/${pid}/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify({ [field]: "replied" }) });
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't update status." : "Couldn't mark as replied.");
+    }
+  }
+
   function toggleSelected(id: string) {
     setSelected((s) => {
       const next = new Set(s);
@@ -1070,7 +1096,7 @@ export default function ContactsPage() {
                   )}
                   {activeTab !== "whatsapp" && (
                     <TableCell>
-                      <StatusBadge status={c.em_status} manual={c.em_manual_last} />
+                      <StatusBadge status={c.em_status} manual={c.em_manual_last} onMarkReplied={() => markReplied(c.id, "email")} />
                     </TableCell>
                   )}
                   {activeTab !== "whatsapp" && (
@@ -1080,7 +1106,7 @@ export default function ContactsPage() {
                   )}
                   {activeTab !== "email" && (
                     <TableCell>
-                      <StatusBadge status={c.wa_status} manual={c.wa_manual_last} />
+                      <StatusBadge status={c.wa_status} manual={c.wa_manual_last} onMarkReplied={() => markReplied(c.id, "whatsapp")} />
                     </TableCell>
                   )}
                   {activeTab !== "email" && (
