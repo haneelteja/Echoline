@@ -716,10 +716,30 @@
   - `packages/core`'s `nextDue()`/`dueList()` needed zero changes — `replied`/`opted_out` were already
     terminal statuses honoring `stopOnReply` on either channel, same as Phase 4's note.
   - Migration `0019_email_imap_connection_kind.sql` (applied) adds the enum value.
-  - **Not yet live-verified — this is the actual next step, not a formality:** the Elma project's
-    360Messenger connection needs a manual "Test" click (one-time, to register the webhook retroactively
-    for a connection made before this shipped) and a real WhatsApp reply sent to confirm `wa_status`
-    actually flips and a scheduled follow-up actually stops. The IMAP connection is mid-setup against a
+  - **WhatsApp — live-verification attempted (2026-11-04), blocked on 360Messenger's account plan, not
+    our code.** Two real bugs found and fixed along the way:
+    1. Elma's `projects.wa_number` was set to `916309060777`, but the actual number logged into the
+       360Messenger WhatsApp Web session is `9642917777` — the webhook's "To" field would never have
+       matched the project, so inbound replies could never have resolved to the right project regardless
+       of anything else. Corrected via the Project Settings page.
+    2. `registerWebhook360Messenger()` failing was only ever logged server-side
+       (`req.log.warn`) and swallowed — a failure here was completely invisible in the UI, with inbound
+       replies just never arriving and no diagnostic short of calling 360Messenger's API directly. Added
+       a `webhook_warning` column (migration `0025_connection_webhook_warning.sql`, applied) populated on
+       every connect/Test attempt, surfaced as a non-blocking "Replies unavailable" badge (hover for the
+       full error) on the Channels page — distinct from `status`/`needs_reconnect_reason` since the
+       connection is otherwise completely healthy for *sending*.
+    - **The actual blocker, confirmed by calling `POST /v2/settings/webhook/set` directly**: `403
+      FEATURE_LOCKED — "Invalid package level"`. 360Messenger's webhook/inbound-capture feature is
+      gated behind a paid plan tier the Elma account doesn't currently have — sending works fine, but
+      inbound messages can never be captured at all under the current plan, regardless of code. Verified
+      our own webhook handler logic is otherwise correct by POSTing a synthetic payload directly to
+      `/webhooks/whatsapp/360messenger`, which correctly flipped `wa_status` to `"replied"` for a
+      matching contact — the gap is entirely on 360Messenger's side. **Next step is on the user**:
+      check 360Messenger's pricing/plans for which tier unlocks webhooks, upgrade if the inbound-reply
+      feature is wanted, then retry the live-verification (a manual "Test" click should then clear the
+      "Replies unavailable" badge).
+  - **Email — not yet live-verified, not started this round.** The IMAP connection is mid-setup against a
     GoDaddy-hosted Microsoft 365 mailbox (`outlook.office365.com:993`) — not yet confirmed whether
     basic-auth IMAP is even enabled on that tenant (Microsoft 365's "Security Defaults"/Modern Auth
     commonly blocks it, which would require an app password or admin-side config change, not a code
