@@ -136,7 +136,11 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     if (testResult.ok && body.kind !== "ai") {
       await req.supabase
         .from("provider_connections")
-        .update({ status: "disconnected" })
+        // webhook_warning cleared too — otherwise a disconnected row can keep
+        // showing a stale "Replies unavailable" badge on the Channels page
+        // forever, since GET /connections returns every row regardless of
+        // status and the UI doesn't filter them out.
+        .update({ status: "disconnected", webhook_warning: null })
         .eq("project_id", id)
         .eq("kind", body.kind)
         .eq("status", "connected");
