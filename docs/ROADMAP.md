@@ -371,6 +371,8 @@
   plans, would need a shared store if ever scaled to multiple instances) and accepts an optional
   honeypot field (`website_url`, left empty by real visitors) that silently no-ops instead of creating
   a contact. Cloudflare Turnstile itself needs a sitekey/secret you'd have to obtain — not built.
+  **Explicitly deferred to a future release (2026-11-04 decision)**, alongside Zoho/HubSpot sync and
+  Twilio session-window replies below.
 - **Performance fixes from the full-stack architecture review — done.** Four of the five findings from a
   grounded performance audit (every finding cited a real file:line, published as an artifact) — the
   fifth, pagination on the generic collection API routes (`contacts`/`templates`/`kb`/`sources` all
@@ -634,11 +636,14 @@
   progress" entry below (`## Backlog progress`)**. Both need live verification (a real reply sent
   through each channel, confirmed to flip the contact's status and stop follow-ups) — tracked there,
   not done yet as of this writing.
-- Zoho CRM and HubSpot sync — named in the original spec, not built.
+- Zoho CRM and HubSpot sync — named in the original spec, not built. **Explicitly deferred to a future
+  release (2026-11-04 decision)**, alongside Turnstile and Twilio session-window replies.
 - Per-provider rate limiting (beyond the existing daily cap) — not implemented.
 - Meta/Twilio's `sendText()` for session-window free-form replies (distinct from 360Messenger's
   primary-path use of the same function) — still no feature calls it for those two specifically;
   would be for replying within the 24h window after an inbound message, not the main send flow.
+  **Explicitly deferred to a future release (2026-11-04 decision)**, alongside Turnstile and
+  Zoho/HubSpot sync.
 - Daily status poll (webhook-only currently), and phone number quality-rating/messaging-tier tracking
   (a different webhook event, `phone_number_quality_update`, never handled) + display on the Channels
   screen — not built.
