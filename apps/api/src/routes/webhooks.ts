@@ -78,21 +78,36 @@ async function resolveProjectByWabaId(db: ReturnType<typeof createAdminClient>, 
 
 /** Same decrypt-every-connection approach as resolveProjectByWabaId, but
  * returns the connection row + its decrypted credentials directly — needed
- * here to both update that exact row and call the Graph API with its token. */
+ * here to both update that exact row and call the Graph API with its token.
+ *
+ * A single WABA can own more than one phone number — an agency connecting
+ * two numbers from the same WABA into two different projects would have two
+ * connections sharing the same wabaId. displayPhoneNumber (the event's own
+ * value.display_phone_number) disambiguates between them by matching against
+ * account_label, which testMeta already populates with the Meta-reported
+ * display phone number — plaintext on the row, no decrypt needed for this
+ * part. Only a single WABA match is trusted without it (today's common case,
+ * one number per WABA); more than one match with no number to disambiguate
+ * returns null rather than guessing. */
 async function resolveMetaConnectionByWabaId(
   db: ReturnType<typeof createAdminClient>,
-  wabaId: string
+  wabaId: string,
+  displayPhoneNumber?: string
 ): Promise<{ connId: string; credentials: Record<string, string> } | null> {
   const { data: connections } = await db.from("provider_connections").select("*").eq("kind", "whatsapp").eq("provider", "meta");
+  const matches: { conn: any; credentials: Record<string, string> }[] = [];
   for (const conn of (connections as any[]) ?? []) {
     try {
       const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey()));
-      if (credentials.wabaId === wabaId) return { connId: conn.id, credentials };
+      if (credentials.wabaId === wabaId) matches.push({ conn, credentials });
     } catch {
       // skip a connection we can't decrypt
     }
   }
-  return null;
+  if (matches.length <= 1) return matches[0] ? { connId: matches[0].conn.id, credentials: matches[0].credentials } : null;
+  const wantPhone = normPhone(displayPhoneNumber);
+  const byPhone = wantPhone ? matches.find((m) => normPhone(m.conn.account_label) === wantPhone) : undefined;
+  return byPhone ? { connId: byPhone.conn.id, credentials: byPhone.credentials } : null;
 }
 
 async function recordEvent(
@@ -274,6 +289,10 @@ const body = req.body as {
             message_template_name?: string;
             message_template_language?: string;
             reason?: string;
+            // Only phone_number_quality_update carries this at the top level
+            // of `value` (not nested under metadata, unlike every other
+            // event type here) — confirmed against Meta's webhook reference.
+            display_phone_number?: string;
           };
         }[];
       }[];
@@ -313,7 +332,7 @@ const body = req.body as {
           // Graph API, same call the daily poll (waQualityPoll.ts) makes.
           const wabaId = entry.id;
           if (!wabaId) continue;
-          const resolved = await resolveMetaConnectionByWabaId(db, wabaId);
+          const resolved = await resolveMetaConnectionByWabaId(db, wabaId, value.display_phone_number);
           if (!resolved) continue;
           try {
             const quality = await fetchMetaPhoneQuality(resolved.credentials);

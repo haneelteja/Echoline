@@ -39,6 +39,26 @@ function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
 }
 
+/** Shared by the connect and manual-Test routes. Returns null on failure
+ * (distinct from a successful-but-empty result) rather than a nulled-out
+ * object, so each caller can decide what null means for its own write — the
+ * connect route (a fresh insert) writes explicit nulls either way, while the
+ * Test route (an update) uses null to mean "leave prior good data alone"
+ * rather than clobbering it on a transient failure. The webhook handler and
+ * waQualityPoll.ts (a different app) each have their own fetch+write, since
+ * both also do a different DB write shape around the fetch. */
+async function safeFetchMetaQuality(
+  credentials: Record<string, string>,
+  log: { warn: (obj: unknown, msg: string) => void }
+): Promise<{ qualityRating: string | null; messagingLimitTier: string | null } | null> {
+  try {
+    return await fetchMetaPhoneQuality(credentials);
+  } catch (err) {
+    log.warn({ err }, "failed to fetch Meta phone quality");
+    return null;
+  }
+}
+
 // Same refresh-unconditionally pattern as sendNow.ts/emailWorker.ts/
 // templateTestSend.ts — kept as a small duplicate here rather than
 // extracting a shared helper for one more call site.
@@ -169,15 +189,10 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     // Best-effort initial read so the Channels page shows real quality/tier
     // data immediately on connect, rather than appearing blank until the
     // next daily poll (waQualityPoll.ts) or the next phone_number_quality_update
-    // webhook fires — neither of which is guaranteed to happen soon.
-    let quality: { qualityRating: string | null; messagingLimitTier: string | null } = { qualityRating: null, messagingLimitTier: null };
-    if (testResult.ok && body.provider === "meta") {
-      try {
-        quality = await fetchMetaPhoneQuality(body.credentials);
-      } catch (err) {
-        req.log.warn({ err }, "failed to fetch Meta phone quality on connect — daily poll will retry");
-      }
-    }
+    // webhook fires — neither of which is guaranteed to happen soon. A fresh
+    // row has no prior data to preserve, so null (not attempted or failed)
+    // just means explicit nulls here — unlike the Test route below.
+    const quality = testResult.ok && body.provider === "meta" ? await safeFetchMetaQuality(body.credentials, req.log) : null;
 
     const { data, error } = await req.supabase
       .from("provider_connections")
@@ -190,9 +205,9 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
         status: testResult.ok ? "connected" : "disconnected",
         needs_reconnect_reason: testResult.ok ? null : testResult.error ?? null,
         webhook_warning: webhookWarning,
-        wa_quality_rating: quality.qualityRating,
-        wa_messaging_tier: quality.messagingLimitTier,
-        wa_quality_checked_at: quality.qualityRating || quality.messagingLimitTier ? new Date().toISOString() : null,
+        wa_quality_rating: quality?.qualityRating ?? null,
+        wa_messaging_tier: quality?.messagingLimitTier ?? null,
+        wa_quality_checked_at: quality ? new Date().toISOString() : null,
         ...row,
       })
       .select(SAFE_COLUMNS)
@@ -235,14 +250,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
         req.log.warn({ err }, "360Messenger webhook registration failed on manual Test");
       }
     }
-    let quality: { qualityRating: string | null; messagingLimitTier: string | null } | null = null;
-    if (result.ok && (conn as any).provider === "meta") {
-      try {
-        quality = await fetchMetaPhoneQuality(credentials);
-      } catch (err) {
-        req.log.warn({ err }, "failed to refresh Meta phone quality on manual Test");
-      }
-    }
+    const quality = result.ok && (conn as any).provider === "meta" ? await safeFetchMetaQuality(credentials, req.log) : null;
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({
