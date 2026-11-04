@@ -739,11 +739,20 @@
       check 360Messenger's pricing/plans for which tier unlocks webhooks, upgrade if the inbound-reply
       feature is wanted, then retry the live-verification (a manual "Test" click should then clear the
       "Replies unavailable" badge).
-  - **Email — not yet live-verified, not started this round.** The IMAP connection is mid-setup against a
-    GoDaddy-hosted Microsoft 365 mailbox (`outlook.office365.com:993`) — not yet confirmed whether
-    basic-auth IMAP is even enabled on that tenant (Microsoft 365's "Security Defaults"/Modern Auth
-    commonly blocks it, which would require an app password or admin-side config change, not a code
-    fix); needs a real reply sent to that mailbox, confirmed to flip `em_status` to `"replied"`.
+  - **Email — explicitly deferred to a future release (2026-11-04 decision), not started this round.**
+    The IMAP connection is mid-setup against a GoDaddy-hosted Microsoft 365 mailbox
+    (`outlook.office365.com:993`) — not yet confirmed whether basic-auth IMAP is even enabled on that
+    tenant (Microsoft 365's "Security Defaults"/Modern Auth commonly blocks it, which would require an
+    app password or admin-side config change, not a code fix); needs a real reply sent to that mailbox,
+    confirmed to flip `em_status` to `"replied"`.
+  - **Interim manual stand-in — done (2026-11-04), while automated detection is blocked/deferred for
+    both channels.** Contacts page now has a "Mark replied" action next to each channel's status badge
+    (shown only while that channel isn't already in a terminal status) that `PATCH`es `em_status`/
+    `wa_status` straight to `"replied"` — the exact same terminal status an automated webhook would set.
+    No backend changes needed: the generic `/projects/:id/contacts/:itemId` route (`collections.ts`)
+    already accepts any column, and `packages/core`'s `nextDue()` already honors `stopOnReply` against
+    `"replied"` on either channel, holding the next follow-up on *both* channels exactly like a real
+    reply would. This is the bridge until 360Messenger's plan is upgraded and/or IMAP is set up.
 
 - **Multi-org self-serve project creation and team invites — done, not yet live-verified, built
   after an explicit audit request ("have you built this for multiple clients, not just one?").**
