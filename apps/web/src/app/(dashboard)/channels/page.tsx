@@ -26,6 +26,21 @@ const STATUS_VARIANT: Record<string, "success" | "destructive" | "secondary"> = 
   needs_reconnect: "destructive",
   disconnected: "secondary",
 };
+// GREEN/YELLOW/RED/NA/UNKNOWN per Meta's Graph API quality_rating enum —
+// confirmed field values, not guessed. NA/UNKNOWN both render neutral since
+// neither means "bad," just "not yet determined."
+const QUALITY_VARIANT: Record<string, "success" | "destructive" | "secondary"> = {
+  GREEN: "success",
+  YELLOW: "secondary",
+  RED: "destructive",
+  NA: "secondary",
+  UNKNOWN: "secondary",
+};
+function messagingTierLabel(tier: string): string {
+  // "TIER_250" -> "250/day", "TIER_UNLIMITED" -> "Unlimited/day"
+  const n = tier.replace("TIER_", "");
+  return n === "UNLIMITED" || n === "NOT_SET" ? (n === "UNLIMITED" ? "Unlimited/day" : "Not set") : `${n}/day`;
+}
 const KIND_META = {
   email: { title: "Email", icon: Mail },
   whatsapp: { title: "WhatsApp", icon: MessageCircle },
@@ -279,6 +294,7 @@ export default function ChannelsPage() {
                     <TableHead>Provider</TableHead>
                     <TableHead>Account</TableHead>
                     <TableHead>Status</TableHead>
+                    {kind === "whatsapp" && <TableHead>Quality</TableHead>}
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -301,6 +317,25 @@ export default function ChannelsPage() {
                           )}
                         </div>
                       </TableCell>
+                      {kind === "whatsapp" && (
+                        <TableCell>
+                          {c.provider === "meta" && (c.wa_quality_rating || c.wa_messaging_tier) ? (
+                            <div
+                              className="flex flex-wrap items-center gap-1.5"
+                              title={c.wa_quality_checked_at ? `Last checked ${new Date(c.wa_quality_checked_at).toLocaleString()}` : undefined}
+                            >
+                              {c.wa_quality_rating && (
+                                <Badge variant={QUALITY_VARIANT[c.wa_quality_rating] ?? "secondary"} className="font-semibold">
+                                  {c.wa_quality_rating}
+                                </Badge>
+                              )}
+                              {c.wa_messaging_tier && <span className="text-xs text-muted-foreground">{messagingTierLabel(c.wa_messaging_tier)}</span>}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="flex justify-end gap-1.5">
                           <Button variant="outline" size="sm" disabled={busyId === c.id} onClick={() => openTestDialog(c)}>

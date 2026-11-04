@@ -14,6 +14,7 @@ import {
   refreshGoogleToken,
   refreshMicrosoftToken,
   registerWebhook360Messenger,
+  fetchMetaPhoneQuality,
 } from "@echoline/providers";
 import { normPhone } from "@echoline/core";
 import { sendDbError } from "../errors.js";
@@ -32,7 +33,7 @@ const createConnectionInput = z.object({
 // Columns safe to return to the browser — never includes the encrypted
 // credential/DEK columns. The API never returns secrets, only status.
 const SAFE_COLUMNS =
-  "id, project_id, kind, provider, account_label, scopes, status, needs_reconnect_reason, webhook_warning, created_at, updated_at";
+  "id, project_id, kind, provider, account_label, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, created_at, updated_at";
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -165,6 +166,19 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // Best-effort initial read so the Channels page shows real quality/tier
+    // data immediately on connect, rather than appearing blank until the
+    // next daily poll (waQualityPoll.ts) or the next phone_number_quality_update
+    // webhook fires — neither of which is guaranteed to happen soon.
+    let quality: { qualityRating: string | null; messagingLimitTier: string | null } = { qualityRating: null, messagingLimitTier: null };
+    if (testResult.ok && body.provider === "meta") {
+      try {
+        quality = await fetchMetaPhoneQuality(body.credentials);
+      } catch (err) {
+        req.log.warn({ err }, "failed to fetch Meta phone quality on connect — daily poll will retry");
+      }
+    }
+
     const { data, error } = await req.supabase
       .from("provider_connections")
       .insert({
@@ -176,6 +190,9 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
         status: testResult.ok ? "connected" : "disconnected",
         needs_reconnect_reason: testResult.ok ? null : testResult.error ?? null,
         webhook_warning: webhookWarning,
+        wa_quality_rating: quality.qualityRating,
+        wa_messaging_tier: quality.messagingLimitTier,
+        wa_quality_checked_at: quality.qualityRating || quality.messagingLimitTier ? new Date().toISOString() : null,
         ...row,
       })
       .select(SAFE_COLUMNS)
@@ -218,16 +235,26 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
         req.log.warn({ err }, "360Messenger webhook registration failed on manual Test");
       }
     }
+    let quality: { qualityRating: string | null; messagingLimitTier: string | null } | null = null;
+    if (result.ok && (conn as any).provider === "meta") {
+      try {
+        quality = await fetchMetaPhoneQuality(credentials);
+      } catch (err) {
+        req.log.warn({ err }, "failed to refresh Meta phone quality on manual Test");
+      }
+    }
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({
         status: result.ok ? "connected" : "needs_reconnect",
         needs_reconnect_reason: result.ok ? null : result.error ?? null,
         account_label: result.accountLabel ?? (conn as any).account_label,
-        // Only touch webhook_warning for 360messenger — other providers
-        // never set it, so leave their existing (always-null) value alone
-        // rather than clobbering it on every test of an unrelated provider.
+        // Only touch webhook_warning for 360messenger, quality fields for
+        // meta — other providers never set these, so leave their existing
+        // (always-null) values alone rather than clobbering them on every
+        // test of an unrelated provider.
         ...((conn as any).provider === "360messenger" ? { webhook_warning: webhookWarning } : {}),
+        ...(quality ? { wa_quality_rating: quality.qualityRating, wa_messaging_tier: quality.messagingLimitTier, wa_quality_checked_at: new Date().toISOString() } : {}),
       })
       .eq("id", connId)
       .select(SAFE_COLUMNS)

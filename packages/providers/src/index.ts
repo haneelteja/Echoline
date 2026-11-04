@@ -13,6 +13,14 @@ export * from "./oauth/google";
 export * from "./oauth/microsoft";
 export * from "./tracking";
 export * from "./webhooks/verify";
-export { submitMetaTemplate, uploadMetaMedia, type MetaTemplateSubmission, type MetaTemplateSubmissionResult, type MetaMediaUpload } from "./whatsapp/meta";
+export {
+  submitMetaTemplate,
+  uploadMetaMedia,
+  fetchMetaPhoneQuality,
+  type MetaTemplateSubmission,
+  type MetaTemplateSubmissionResult,
+  type MetaMediaUpload,
+  type MetaPhoneQuality,
+} from "./whatsapp/meta";
 export { readOneDriveTable, type SheetData } from "./sources/onedrive";
 export { readGoogleSheet, listGoogleSheetTabs, listGoogleSheetFiles } from "./sources/googleSheets";

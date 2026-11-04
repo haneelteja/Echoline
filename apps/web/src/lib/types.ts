@@ -175,6 +175,9 @@ export interface ConnectionRow {
   status: ConnectionStatus;
   needs_reconnect_reason: string | null;
   webhook_warning: string | null;
+  wa_quality_rating: string | null;
+  wa_messaging_tier: string | null;
+  wa_quality_checked_at: string | null;
   created_at: string;
   updated_at: string;
 }

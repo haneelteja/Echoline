@@ -1,6 +1,14 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { createAdminClient, decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
-import { verifyMetaSignature, verifySendGridSignature, verifySnsSignature, verifySvixSignature, verifyTwilioSignature, type SnsMessage } from "@echoline/providers";
+import {
+  verifyMetaSignature,
+  verifySendGridSignature,
+  verifySnsSignature,
+  verifySvixSignature,
+  verifyTwilioSignature,
+  fetchMetaPhoneQuality,
+  type SnsMessage,
+} from "@echoline/providers";
 import { normPhone } from "@echoline/core";
 
 function masterKey() {
@@ -61,6 +69,25 @@ async function resolveProjectByWabaId(db: ReturnType<typeof createAdminClient>, 
         const { data: project } = await db.from("projects").select("id, org_id").eq("id", conn.project_id).maybeSingle();
         if (project) return project as { id: string; org_id: string };
       }
+    } catch {
+      // skip a connection we can't decrypt
+    }
+  }
+  return null;
+}
+
+/** Same decrypt-every-connection approach as resolveProjectByWabaId, but
+ * returns the connection row + its decrypted credentials directly — needed
+ * here to both update that exact row and call the Graph API with its token. */
+async function resolveMetaConnectionByWabaId(
+  db: ReturnType<typeof createAdminClient>,
+  wabaId: string
+): Promise<{ connId: string; credentials: Record<string, string> } | null> {
+  const { data: connections } = await db.from("provider_connections").select("*").eq("kind", "whatsapp").eq("provider", "meta");
+  for (const conn of (connections as any[]) ?? []) {
+    try {
+      const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey()));
+      if (credentials.wabaId === wabaId) return { connId: conn.id, credentials };
     } catch {
       // skip a connection we can't decrypt
     }
@@ -275,6 +302,28 @@ const body = req.body as {
             .maybeSingle();
           const templateId = (waTemplate as { template_id: string | null } | null)?.template_id;
           if (templateId) await db.from("templates").update({ meta_status: status }).eq("id", templateId);
+          continue;
+        }
+
+        if (change.field === "phone_number_quality_update") {
+          // Deliberately not parsed from this event's own payload — its tier
+          // fields (current_limit/old_limit) are deprecated and it never
+          // carries quality_rating at all (see fetchMetaPhoneQuality's doc
+          // comment). Used purely as a trigger to fetch both fresh from the
+          // Graph API, same call the daily poll (waQualityPoll.ts) makes.
+          const wabaId = entry.id;
+          if (!wabaId) continue;
+          const resolved = await resolveMetaConnectionByWabaId(db, wabaId);
+          if (!resolved) continue;
+          try {
+            const quality = await fetchMetaPhoneQuality(resolved.credentials);
+            await db
+              .from("provider_connections")
+              .update({ wa_quality_rating: quality.qualityRating, wa_messaging_tier: quality.messagingLimitTier, wa_quality_checked_at: new Date().toISOString() })
+              .eq("id", resolved.connId);
+          } catch (err) {
+            req.log.warn({ err, connId: resolved.connId }, "failed to refresh Meta phone quality after webhook trigger — daily poll will retry");
+          }
           continue;
         }
 

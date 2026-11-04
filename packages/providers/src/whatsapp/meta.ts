@@ -26,6 +26,31 @@ export const testMeta: ConnectionTester = async (credentials) => {
   return { ok: true, accountLabel: data.display_phone_number ?? data.verified_name ?? "WhatsApp number" };
 };
 
+export interface MetaPhoneQuality {
+  qualityRating: string | null;
+  messagingLimitTier: string | null;
+}
+
+/**
+ * quality_rating (GREEN/YELLOW/RED/NA/UNKNOWN) and messaging_limit_tier
+ * (TIER_50.."TIER_UNLIMITED) both live on the phone-number node itself —
+ * confirmed against Meta's Graph API phone-number field reference. Deliberately
+ * NOT parsed from the phone_number_quality_update webhook payload: that
+ * event's own tier fields (current_limit/old_limit) are deprecated in favor
+ * of max_daily_conversations_per_business, and it never carries
+ * quality_rating at all — so the webhook is only used as a trigger to call
+ * this function fresh, not as the data source itself.
+ */
+export async function fetchMetaPhoneQuality(credentials: Record<string, string>): Promise<MetaPhoneQuality> {
+  const { accessToken, phoneNumberId } = credentials;
+  if (!accessToken || !phoneNumberId) throw new Error("accessToken and phoneNumberId are required");
+  const url = `https://graph.facebook.com/v19.0/${phoneNumberId}?fields=quality_rating,messaging_limit_tier&access_token=${encodeURIComponent(accessToken)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Meta Graph API responded ${res.status}: ${await res.text().catch(() => "")}`);
+  const data = (await res.json()) as { quality_rating?: string; messaging_limit_tier?: string };
+  return { qualityRating: data.quality_rating ?? null, messagingLimitTier: data.messaging_limit_tier ?? null };
+}
+
 async function metaSend(credentials: Record<string, string>, body: Record<string, unknown>) {
   const { accessToken, phoneNumberId } = credentials;
   if (!accessToken || !phoneNumberId) throw new Error("accessToken and phoneNumberId are required");
