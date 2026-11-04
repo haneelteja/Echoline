@@ -174,6 +174,7 @@ export interface ConnectionRow {
   scopes: string[];
   status: ConnectionStatus;
   needs_reconnect_reason: string | null;
+  webhook_warning: string | null;
   created_at: string;
   updated_at: string;
 }

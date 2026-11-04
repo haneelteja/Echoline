@@ -32,7 +32,7 @@ const createConnectionInput = z.object({
 // Columns safe to return to the browser — never includes the encrypted
 // credential/DEK columns. The API never returns secrets, only status.
 const SAFE_COLUMNS =
-  "id, project_id, kind, provider, account_label, scopes, status, needs_reconnect_reason, created_at, updated_at";
+  "id, project_id, kind, provider, account_label, scopes, status, needs_reconnect_reason, webhook_warning, created_at, updated_at";
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -146,11 +146,17 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     // dashboard), 360Messenger exposes a settings API for this — register it
     // now so inbound replies start flowing without the admin doing anything
     // provider-side. Best-effort: a registration failure shouldn't block
-    // saving a credential that otherwise tested fine.
+    // saving a credential that otherwise tested fine, but it's surfaced via
+    // webhook_warning rather than silently logged — e.g. 360Messenger
+    // returns 403 FEATURE_LOCKED when the account's plan doesn't include
+    // webhooks, which previously only showed up as inbound replies never
+    // arriving, with no indication why.
+    let webhookWarning: string | null = null;
     if (testResult.ok && body.provider === "360messenger" && process.env.API_PUBLIC_URL) {
       try {
         await registerWebhook360Messenger(body.credentials.apiKey, `${process.env.API_PUBLIC_URL}/webhooks/whatsapp/360messenger`);
       } catch (err) {
+        webhookWarning = `Inbound reply detection unavailable: ${err instanceof Error ? err.message : String(err)}`;
         req.log.warn({ err }, "360Messenger webhook registration failed on connect — retried on next manual Test");
       }
     }
@@ -165,6 +171,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
         account_label: body.accountLabel ?? testResult.accountLabel ?? null,
         status: testResult.ok ? "connected" : "disconnected",
         needs_reconnect_reason: testResult.ok ? null : testResult.error ?? null,
+        webhook_warning: webhookWarning,
         ...row,
       })
       .select(SAFE_COLUMNS)
@@ -198,10 +205,12 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const result = await tester(credentials);
+    let webhookWarning: string | null = null;
     if (result.ok && (conn as any).provider === "360messenger" && process.env.API_PUBLIC_URL) {
       try {
         await registerWebhook360Messenger(credentials.apiKey, `${process.env.API_PUBLIC_URL}/webhooks/whatsapp/360messenger`);
       } catch (err) {
+        webhookWarning = `Inbound reply detection unavailable: ${err instanceof Error ? err.message : String(err)}`;
         req.log.warn({ err }, "360Messenger webhook registration failed on manual Test");
       }
     }
@@ -211,6 +220,10 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
         status: result.ok ? "connected" : "needs_reconnect",
         needs_reconnect_reason: result.ok ? null : result.error ?? null,
         account_label: result.accountLabel ?? (conn as any).account_label,
+        // Only touch webhook_warning for 360messenger — other providers
+        // never set it, so leave their existing (always-null) value alone
+        // rather than clobbering it on every test of an unrelated provider.
+        ...((conn as any).provider === "360messenger" ? { webhook_warning: webhookWarning } : {}),
       })
       .eq("id", connId)
       .select(SAFE_COLUMNS)

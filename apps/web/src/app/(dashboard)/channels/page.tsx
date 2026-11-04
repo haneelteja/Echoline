@@ -288,10 +288,18 @@ export default function ChannelsPage() {
                       <TableCell className="font-semibold text-foreground">{providerInfo(c.provider)?.label ?? c.provider}</TableCell>
                       <TableCell className="text-muted-foreground">{c.account_label || "—"}</TableCell>
                       <TableCell>
-                        <Badge variant={STATUS_VARIANT[c.status]} className="gap-1" title={c.needs_reconnect_reason ?? undefined}>
-                          {c.status === "connected" ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                          {STATUS_LABEL[c.status]}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant={STATUS_VARIANT[c.status]} className="gap-1" title={c.needs_reconnect_reason ?? undefined}>
+                            {c.status === "connected" ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                            {STATUS_LABEL[c.status]}
+                          </Badge>
+                          {c.webhook_warning && (
+                            <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300" title={c.webhook_warning}>
+                              <AlertTriangle className="h-3 w-3" />
+                              Replies unavailable
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1.5">
