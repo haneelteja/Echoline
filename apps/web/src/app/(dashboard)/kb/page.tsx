@@ -227,7 +227,7 @@ export default function KbPage() {
         docs/ROADMAP.md). AI template generation reads these brand facts as plain text.
       </p>
 
-      <section className="panel">
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
           <h2>Files</h2>
           <div className="row small" style={{ gap: 8 }}>
@@ -331,7 +331,12 @@ export default function KbPage() {
             {childFolders.map((f) => {
               const count = folders.filter((x) => x.parent_id === f.id).length + assets.filter((a) => a.folder_id === f.id).length;
               return (
-                <div key={f.id} className="panel" style={{ cursor: "pointer", position: "relative" }} onClick={() => goToFolder(f.id)}>
+                <div
+                  key={f.id}
+                  className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
+                  style={{ cursor: "pointer", position: "relative" }}
+                  onClick={() => goToFolder(f.id)}
+                >
                   <b className="small">📁 {f.name}</b>
                   <div className="small muted">{count ? `${count} item${count === 1 ? "" : "s"}` : "Empty"}</div>
                   <button
@@ -388,7 +393,7 @@ function AssetCard({
 }) {
   return (
     <div
-      className="panel"
+      className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
       style={{ position: "relative", cursor: "pointer", outline: selected ? "2px solid var(--email)" : undefined }}
       onClick={onToggle}
     >

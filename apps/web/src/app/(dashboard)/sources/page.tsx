@@ -550,7 +550,7 @@ export default function SourcesPage() {
         </div>
       </div>
 
-      <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md" style={{ marginBottom: 16 }}>
         <h3>Connect a sheet/workbook account</h3>
         <p className="small muted">
           Required once per project before adding a OneDrive or Google Sheets source. Connect more than one Google account if your
@@ -598,7 +598,7 @@ export default function SourcesPage() {
       </div>
 
       {adding && (
-        <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md" style={{ marginBottom: 16 }}>
           <div className="grid g3">
             <div className="field">
               <label htmlFor="st">Type</label>
@@ -698,7 +698,7 @@ export default function SourcesPage() {
       )}
 
       {editingId && (
-        <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md" style={{ marginBottom: 16 }}>
           <h3>Edit source</h3>
           <div className="grid g3">
             <div className="field">
@@ -788,7 +788,7 @@ export default function SourcesPage() {
       )}
 
       {issued && (
-        <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md" style={{ marginBottom: 16 }}>
           <h3>Token generated — copy it now, it won&apos;t be shown again</h3>
           <p className="small muted">Send leads as JSON (webhooks) or a form POST (website forms) to:</p>
           <code style={{ display: "block", wordBreak: "break-all", margin: "8px 0" }}>
