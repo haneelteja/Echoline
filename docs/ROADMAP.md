@@ -968,10 +968,29 @@
   email) — no card or manual action needed for that part. Knock-on effect: with both services down for
   12 days straight, nothing ever queried Supabase, which separately auto-paused after its own ~7-day
   inactivity threshold (free-tier Supabase projects auto-pause, data stays intact and resumable).
-  Decided mitigation (as of this writing, not yet confirmed implemented): restrict the cron-job.org
-  pings to an active-hours window (e.g. 7am–11pm IST) instead of 24/7 — lets both services spin down
-  overnight, which both caps monthly Render hours *and* guarantees the worker's own 5-minute DB-query
-  tick runs at least once a day, keeping Supabase's 7-day inactivity clock from ever expiring again.
+  **Mitigation implemented and confirmed (2026-11-05).** Both cron-job.org jobs restricted from 24/7
+  to an active-hours window, `*/10 3-13 * * *` (03:00–14:00 UTC = 8:30am–7:30pm IST, 11h/day each) —
+  tightened from the originally-floated "7am–11pm" example, which at 16h/day would still have totaled
+  ~960 combined instance-hours/month (2 services), still over the 750-hour cap. The 11h window totals
+  ~682 hours/month on a 31-day month, ~9% under the cap with real margin. Free-tier cron-job.org caps
+  request timeout at a hard 30s (confirmed by testing — a 120s value was rejected with "maximum timeout
+  is 30 seconds"), well under the ~70-73s cold-start time measured directly against both services, so
+  the very first ping each morning (03:00 UTC) is expected to time out and log one isolated "Failed"
+  entry daily — harmless, since the container keeps booting server-side regardless of the client giving
+  up, and is fully warm again 10 minutes later for the next ping. Auto-disable (the failure mode that
+  caused this whole investigation, see below) has only ever been observed after hours of *consecutive*
+  failures, not a single daily blip, so this is expected to be stable — to be confirmed over the next
+  few days of real operation.
+  **Incidental discovery while implementing this (2026-11-05): a second, unrelated near-outage.** Both
+  cron-job.org jobs were found already disabled again (same silent-break failure mode as 2026-10-23,
+  see [[project_echoline_keepalive]]), with both services repeatedly hibernating and restarting on a
+  ~15-20 min cycle (confirmed via Render's own logs — pod hostnames literally contain `-hibernate-`,
+  and the failure/restart events are clean `SIGTERM`s, not crashes). Ruled out before concluding this:
+  the 750-hour pool (Billing showed 11.95/750 used this month — nowhere close) and a platform-wide
+  Render incident (status.render.com showed no incidents in the relevant window, all Oregon components
+  Operational). The low `11.95`-hour figure is itself corroborating evidence the keep-alive mechanism
+  had not actually been reaching the services for some time. Re-enabled both jobs, which immediately
+  resolved the restart churn, before proceeding with the active-hours change above.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
