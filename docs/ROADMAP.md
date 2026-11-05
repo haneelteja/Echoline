@@ -678,7 +678,23 @@
   `messages`/`statuses` handler matches against the webhook's `display_phone_number` to resolve
   which project an inbound reply or delivery-status event belongs to, so leaving it stale would have
   silently broken reply routing for the new number.
-- Per-org monthly AI usage limit — not enforced.
+- **Per-org monthly AI usage limit — done (2026-11-05).** Caps AI template-generation (`ai-generate`),
+  rewrite (`ai-rewrite`), and dashboard insights (`insights/ai`) calls per org per calendar month
+  (UTC), to bound OpenRouter/Anthropic/OpenAI/Gemini spend until real billing/plan tiers exist —
+  `plans`/`subscriptions` (`0001_init.sql`) are still unused Phase-8 stubs, not wired to anything.
+  One shared limit for every org, via `AI_MONTHLY_CALL_LIMIT` env var (default 500/month if unset) —
+  not yet configurable per org/plan, since there's no plan system to hang it off of yet.
+  `apps/api/src/aiUsage.ts`: `checkAiUsageLimit()` sums `usage_counters` rows for the org across all
+  its projects before each call (soft cap — the check and the post-call increment are separate round
+  trips, so a burst right at the boundary could let a few over; acceptable for a cost guardrail, not
+  relied on for billing accuracy); `recordAiUsage()` increments after a successful AI response via a
+  new `increment_usage_counter()` Postgres function (`0027_ai_usage_limit.sql`, applied) — deliberately
+  keyed by `(org_id, project_id, period, metric)` with `project_id` always set (never null) rather than
+  a separate org-level row, since Postgres doesn't treat two NULLs as equal for uniqueness and a null
+  `project_id` would let concurrent requests create duplicate counter rows. A blocked call returns
+  `429 ai_usage_limit_reached` with the used/limit counts. KB embedding backfill calls
+  (`backfillKbEmbeddings`) are deliberately NOT counted — bounded, best-effort, and a much smaller cost
+  than generation tokens.
 - Billing and plans (if sold as a product)
 - **Knowledge base file assets + Meta template header-image/document attachment — done.** New
   `kb_folders`/`kb_assets` tables (nested folders) and a public `kb-assets` Storage bucket

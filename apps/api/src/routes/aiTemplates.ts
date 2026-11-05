@@ -3,6 +3,7 @@ import { z } from "zod";
 import { decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
 import { getAiCompleter, getEmbedder } from "@echoline/providers";
 import { sendDbError } from "../errors.js";
+import { checkAiUsageLimit, recordAiUsage } from "../aiUsage.js";
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -143,6 +144,14 @@ export const aiTemplatesRoutes: FastifyPluginAsync = async (app) => {
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
+    const orgId = (project as any).org_id as string;
+
+    const usage = await checkAiUsageLimit(orgId);
+    if (!usage.ok) {
+      return reply
+        .code(429)
+        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
+    }
 
     const isEmail = body.channel === "email";
     const kbContext = await buildKbContext(req.supabase, id, `${body.goal} ${body.extra ?? ""}`.trim(), ai);
@@ -163,6 +172,7 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
     } catch (err) {
       return reply.code(502).send({ error: "ai_generation_failed", message: err instanceof Error ? err.message : String(err) });
     }
+    await recordAiUsage(orgId, id, req.log);
 
     const rows = (parsed.templates ?? []).map((x) => ({
       org_id: (project as any).org_id,
@@ -192,6 +202,18 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
     const completer = getAiCompleter(ai.provider);
     if (!completer) return reply.code(400).send({ error: "no_completer", message: `No completer implemented for provider ${ai.provider}` });
 
+    const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", projectId).maybeSingle();
+    if (projErr) return sendDbError(reply, projErr);
+    if (!project) return reply.code(404).send({ error: "not_found" });
+    const orgId = (project as any).org_id as string;
+
+    const usage = await checkAiUsageLimit(orgId);
+    if (!usage.ok) {
+      return reply
+        .code(429)
+        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
+    }
+
     const { data: current, error: fetchErr } = await req.supabase
       .from("templates")
       .select("channel, name, step, subject, body, category_lines")
@@ -216,6 +238,7 @@ Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`;
     } catch (err) {
       return reply.code(502).send({ error: "ai_rewrite_failed", message: err instanceof Error ? err.message : String(err) });
     }
+    await recordAiUsage(orgId, projectId, req.log);
 
     const { data, error } = await req.supabase
       .from("templates")
@@ -244,10 +267,17 @@ Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`;
     const completer = getAiCompleter(ai.provider);
     if (!completer) return reply.code(400).send({ error: "no_completer", message: `No completer implemented for provider ${ai.provider}` });
 
-    const { data: project, error: projErr } = await req.supabase.from("projects").select("name, brand").eq("id", id).maybeSingle();
+    const { data: project, error: projErr } = await req.supabase.from("projects").select("name, brand, org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
-    const p = project as { name: string; brand: string | null };
+    const p = project as { name: string; brand: string | null; org_id: string };
+
+    const usage = await checkAiUsageLimit(p.org_id);
+    if (!usage.ok) {
+      return reply
+        .code(429)
+        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
+    }
 
     const prompt = `You are a B2B outreach analyst for ${p.brand || p.name}. Here are campaign stats as JSON:
 ${JSON.stringify(body.stats)}
@@ -255,6 +285,7 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
 
     try {
       const text = await completer(ai.credentials, { user: prompt, maxTokens: 500 });
+      await recordAiUsage(p.org_id, id, req.log);
       return { text };
     } catch (err) {
       return reply.code(502).send({ error: "ai_insights_failed", message: err instanceof Error ? err.message : String(err) });
