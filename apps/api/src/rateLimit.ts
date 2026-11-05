@@ -44,7 +44,9 @@ export async function checkProviderRateLimit(
   overridePerMinute: number | null | undefined
 ): Promise<{ allowed: boolean; limit: number | null }> {
   const limit = overridePerMinute ?? DEFAULT_LIMITS[provider] ?? null;
-  if (!limit) return { allowed: true, limit: null };
+  // Not `!limit` — an explicit override of 0 (set directly via SQL to pause
+  // a connection entirely) is falsy and would otherwise read as "no limit."
+  if (limit === null) return { allowed: true, limit: null };
   const r = getRedisConnection();
   const key = `ratelimit:send:${connectionId}:${Math.floor(Date.now() / 60_000)}`;
   const count = await r.incr(key);

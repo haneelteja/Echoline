@@ -48,15 +48,6 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
   const db = createAdminClient();
   const { orgId, projectId, contactId, step } = job.data;
 
-  // Checked before claiming the message slot at all — a rate-limit hit here
-  // just throws and lets BullMQ's existing attempts/backoff retry later
-  // (same path an ordinary send error already takes), rather than claiming
-  // a slot and then needing a separate "unclaim" story.
-  const { data: conn } = await db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "whatsapp").eq("status", "connected").maybeSingle();
-  if (!conn) throw new Error("No connected WhatsApp provider for this project");
-  const rl = await checkProviderRateLimit(getRedisConnection(), (conn as any).provider, (conn as any).id, (conn as any).max_sends_per_minute);
-  if (!rl.allowed) throw new Error(`Rate limit exceeded for ${(conn as any).provider} connection ${(conn as any).id} (max ${rl.limit}/min)`);
-
   // Idempotency: claim_message_send is the real guard (see its migration for
   // why a plain insert-and-treat-conflict-as-duplicate breaks retries). It
   // returns SQL NULL if another attempt already holds or completed this slot —
@@ -91,22 +82,30 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
   }
 
   try {
-    const [{ data: contact }, { data: project }, { data: template }, { data: seq }] = await Promise.all([
+    const [{ data: contact }, { data: project }, { data: template }, { data: seq }, { data: conn }] = await Promise.all([
       db.from("contacts").select("*").eq("id", contactId).single(),
       db.from("projects").select("*").eq("id", projectId).single(),
       db.from("templates").select("*").eq("project_id", projectId).eq("channel", "whatsapp").eq("step", step).maybeSingle(),
       db.from("sequence_settings").select("wa").eq("project_id", projectId).single(),
+      db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "whatsapp").eq("status", "connected").maybeSingle(),
     ]);
 
     const c = contact as ContactRow | null;
     const phone = normPhone(c?.phone ?? null);
     if (!c || !phone) throw new Error("Contact has no valid WhatsApp number");
+    if (!conn) throw new Error("No connected WhatsApp provider for this project");
 
     const t = template as TemplateRow | null;
     if (!t) {
       await fail("No WhatsApp template configured for this step", "blocked");
       return;
     }
+
+    // Checked after claiming (not before) so a rate-limit hit goes through
+    // the same messages/message_events/dead-letter bookkeeping as any other
+    // send failure below, instead of throwing invisibly with no record.
+    const rl = await checkProviderRateLimit(getRedisConnection(), (conn as any).provider, (conn as any).id, (conn as any).max_sends_per_minute);
+    if (!rl.allowed) throw new Error(`Rate limit exceeded for ${(conn as any).provider} connection ${(conn as any).id} (max ${rl.limit}/min)`);
 
     const providerId = (conn as any).provider as WhatsAppProviderId;
     const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));

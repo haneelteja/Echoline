@@ -90,15 +90,6 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
   const db = createAdminClient();
   const { orgId, projectId, contactId, step } = job.data;
 
-  // Checked before claiming the message slot at all — a rate-limit hit here
-  // just throws and lets BullMQ's existing attempts/backoff retry later
-  // (same path an ordinary send error already takes), rather than claiming
-  // a slot and then needing a separate "unclaim" story.
-  const { data: conn } = await db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "email").eq("status", "connected").maybeSingle();
-  if (!conn) throw new Error("No connected email provider for this project");
-  const rl = await checkProviderRateLimit(getRedisConnection(), (conn as any).provider, (conn as any).id, (conn as any).max_sends_per_minute);
-  if (!rl.allowed) throw new Error(`Rate limit exceeded for ${(conn as any).provider} connection ${(conn as any).id} (max ${rl.limit}/min)`);
-
   // Idempotency: claim_message_send is the real guard (see its migration for
   // why a plain insert-and-treat-conflict-as-duplicate breaks retries). It
   // returns SQL NULL if another attempt already holds or completed this slot —
@@ -120,17 +111,27 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
   const messageId = (claimed as { id: string }).id;
 
   try {
-    const [{ data: contact }, { data: project }, { data: template }, { data: seq }, { data: channelSettings }] = await Promise.all([
+    const [{ data: contact }, { data: project }, { data: template }, { data: seq }, { data: channelSettings }, { data: conn }] = await Promise.all([
       db.from("contacts").select("*").eq("id", contactId).single(),
       db.from("projects").select("*").eq("id", projectId).single(),
       db.from("templates").select("*").eq("project_id", projectId).eq("channel", "email").eq("step", step).maybeSingle(),
       db.from("sequence_settings").select("em").eq("project_id", projectId).single(),
       db.from("channel_settings").select("email").eq("project_id", projectId).maybeSingle(),
+      db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "email").eq("status", "connected").maybeSingle(),
     ]);
 
     const c = contact as ContactRow | null;
     if (!c || !validEmail(c.email)) throw new Error("Contact has no valid email");
     if (!template) throw new Error(`No email template for step ${step}`);
+    if (!conn) throw new Error("No connected email provider for this project");
+
+    // Checked after claiming (not before) so a rate-limit hit goes through
+    // the same messages/message_events/dead-letter bookkeeping as any other
+    // send failure below, instead of throwing invisibly with no record —
+    // the claimed slot already makes the normal catch block's bookkeeping
+    // correct for this, same as any other failure reason.
+    const rl = await checkProviderRateLimit(getRedisConnection(), (conn as any).provider, (conn as any).id, (conn as any).max_sends_per_minute);
+    if (!rl.allowed) throw new Error(`Rate limit exceeded for ${(conn as any).provider} connection ${(conn as any).id} (max ${rl.limit}/min)`);
 
     const sender = getEmailSender((conn as any).provider);
     if (!sender) throw new Error(`No sender implemented for provider ${(conn as any).provider}`);

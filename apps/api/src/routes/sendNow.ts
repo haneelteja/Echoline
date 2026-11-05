@@ -246,14 +246,17 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
     if (connErr) return sendDbError(reply, connErr);
     if (!conn) return reply.code(400).send({ error: "no_connection", message: `No connected ${kind} provider for this project` });
 
-    const rl = await checkProviderRateLimit((conn as any).provider, (conn as any).id, (conn as any).max_sends_per_minute);
+    // Neither depends on the other's result, so run them concurrently rather
+    // than paying both round trips back-to-back on this synchronous path.
+    const [rl, { data: seqRow, error: seqErr }] = await Promise.all([
+      checkProviderRateLimit((conn as any).provider, (conn as any).id, (conn as any).max_sends_per_minute),
+      db.from("sequence_settings").select("daily_cap, em, wa").eq("project_id", projectId).maybeSingle(),
+    ]);
     if (!rl.allowed) {
       return reply
         .code(429)
         .send({ error: "rate_limited", message: `This ${kind} provider is capped at ${rl.limit} sends/minute — try again in a moment.` });
     }
-
-    const { data: seqRow, error: seqErr } = await db.from("sequence_settings").select("daily_cap, em, wa").eq("project_id", projectId).maybeSingle();
     if (seqErr) return sendDbError(reply, seqErr);
     const seq = seqRow as { daily_cap: number; em: { steps: unknown[] }; wa: { steps: unknown[] } } | null;
     const dailyCap = seq?.daily_cap ?? 50;
