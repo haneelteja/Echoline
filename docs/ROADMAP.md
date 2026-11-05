@@ -664,7 +664,27 @@
   not done yet as of this writing.
 - Zoho CRM and HubSpot sync — named in the original spec, not built. **Explicitly deferred to a future
   release (2026-11-04 decision)**, alongside Turnstile and Twilio session-window replies.
-- Per-provider rate limiting (beyond the existing daily cap) — not implemented.
+- **Per-provider rate limiting — done (2026-11-05).** `sequence_settings.daily_cap` bounds total
+  volume/day per channel; nothing bounded burst speed/minute, which matters most for 360Messenger
+  (unofficial WhatsApp-Web automation, not Meta's real Business API) — sending fast enough to look
+  automated risks the number getting flagged or banned. New nullable
+  `provider_connections.max_sends_per_minute` column (no UI yet, set directly via SQL) plus a Redis
+  fixed-window counter keyed by connection id (`apps/worker/src/rateLimit.ts`, duplicated in
+  `apps/api/src/rateLimit.ts` — same cross-app-duplicate reasoning as `testSendMode.ts`). Deliberately
+  gave only 360Messenger a default (10/min, a conservative starting point, not a documented limit —
+  360Messenger publishes none); every other provider stays unlimited unless explicitly overridden,
+  since asserting a real provider's documented rate limit without their docs in hand would either
+  throttle a legitimate account for no reason or just be wrong. Checked in both send workers before
+  `claim_message_send` (a rate-limited job never claims a slot — it just throws and rides the existing
+  attempts/backoff retry, the same path an ordinary send error already takes) and in `sendNow.ts`
+  (returns `429` instead, since manual "Send now" is a synchronous HTTP request with no retry queue
+  behind it). **Verified logic-only, not against the live Redis**: the repo's local `.env` only has a
+  `localhost` placeholder for `REDIS_URL` (the real one lives on Render), so the exact same
+  `checkProviderRateLimit` control flow (default lookup, override precedence, no-limit passthrough,
+  per-connection isolation, boundary at the Nth call) was exercised against a minimal in-memory stub
+  implementing Redis's `INCR`/`PEXPIRE` semantics instead — all checks passed. Not yet confirmed
+  against the real deployed Upstash instance or a real 360Messenger send (that connection is currently
+  disconnected).
 - Meta/Twilio's `sendText()` for session-window free-form replies (distinct from 360Messenger's
   primary-path use of the same function) — still no feature calls it for those two specifically;
   would be for replying within the 24h window after an inbound message, not the main send flow.
