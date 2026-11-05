@@ -702,10 +702,18 @@
   to the live DB; verified end-to-end against the real deployed API (not just logic-only this time):
   setting an override, seeing it reflected in the connections list, and clearing it back to null all
   round-tripped correctly on Elma's live Meta WhatsApp connection. One pre-existing, codebase-wide gap
-  surfaced incidentally and left as-is (out of scope for this feature): every `zod.parse(req.body)`
-  call site in `apps/api` (20+ routes, not just this one) returns a raw `500 internal_error` on invalid
-  input instead of `400`, because `server.ts`'s global error handler only special-cases Fastify's own
-  `err.validation` (ajv) and never catches `ZodError`.
+  surfaced incidentally: every `zod.parse(req.body)` call site in `apps/api` (20+ routes, not just
+  this one) was returning a raw `500 internal_error` on invalid input instead of `400`. **Fixed
+  (2026-11-05), paged live by a real Sentry "high priority" alert on this exact route** (a client
+  PATCHing `maxSendsPerMinute: 0`). The first fix attempt (adding an `err instanceof ZodError` check)
+  was a correct diagnosis of the *symptom* but missed the actual *cause* — confirmed wrong by a
+  diagnostic marker log inside the handler that never fired in production despite the deployed code
+  being verified correct. The real bug: `app.setErrorHandler(...)` was called in `server.ts` *after*
+  every route was registered. Fastify binds each route to whatever error-handling chain exists at
+  registration time, not dynamically at request time — so every single route in the app, not just this
+  one, was still wired to Fastify's own default handler the whole time, regardless of what the handler
+  itself checked for. Moved the registration to immediately after Fastify instance creation, before any
+  `app.register()` call; now returns `400 validation_error` correctly, confirmed live.
 - Meta/Twilio's `sendText()` for session-window free-form replies (distinct from 360Messenger's
   primary-path use of the same function) — still no feature calls it for those two specifically;
   would be for replying within the 24h window after an inbound message, not the main send flow.
