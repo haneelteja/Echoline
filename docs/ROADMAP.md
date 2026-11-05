@@ -843,7 +843,9 @@
   WhatsApp templates too, previously email-only.
 
 - **Reply detection, closing the "stop on reply" gap for WhatsApp (360Messenger) and email — done,
-  not yet live-verified, user-requested.** Previously, inbound-reply detection existed only for Meta
+  not yet live-verified. Live-verification explicitly deferred to the next release (2026-11-05
+  decision)** — alongside Zoho/HubSpot sync, Turnstile, and Twilio session-window replies, which were
+  already deferred. Previously, inbound-reply detection existed only for Meta
   Cloud API/Twilio/360dialog (Phase 4) — 360Messenger (the WhatsApp provider actually connected on
   the Elma project) had no webhook at all, and no email provider has ever had reply detection, since
   none of them (Resend, SendGrid, SES, Gmail, Outlook, Brevo, SMTP) expose a "someone replied to this
