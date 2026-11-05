@@ -699,12 +699,16 @@
   directly three times in a row and confirmed one row, count incrementing 1→2→3, not three duplicate
   rows (the exact failure mode a nullable `project_id` would risk). Seeded Elma's org to exactly the
   default limit (500) and confirmed a real `insights/ai` request got `429 ai_usage_limit_reached` with
-  the correct used/limit counts in the message, before it ever reached the AI provider. Did not get to
-  verify the successful-call increment path against a real AI response, though — Elma's connected
-  OpenRouter model ID (`NVIDIA Nemotron 3.5 Lightning`) turned out to be invalid
-  (`"...is not a valid model ID"`, unrelated pre-existing issue, not touched this session) and every
-  real completion attempt failed before reaching the success path. Covered indirectly: the direct RPC
-  test above exercises the same increment the success path calls.
+  the correct used/limit counts in the message, before it ever reached the AI provider.
+  **Follow-up fix (2026-11-05):** the successful-call path was then also fixed and live-verified.
+  Elma's OpenRouter connection had the model's dashboard *display name* stored
+  (`NVIDIA Nemotron 3.5 Lightning`) rather than OpenRouter's slug — corrected directly to
+  `nvidia/nemotron-3.5-lightning`. That alone still returned empty text on real `insights/ai` calls,
+  because Nemotron 3.5 Lightning is a reasoning model that spends hidden completion tokens on a
+  reasoning pass before emitting visible content, and that route's `maxTokens: 500` left no room for
+  both; raised to 2000 (`apps/api/src/routes/aiTemplates.ts`, matching `ai-rewrite`'s existing budget).
+  Re-verified against the real deployed API: a real `insights/ai` call now returns non-empty analyst
+  text and `usage_counters` for Elma's org correctly incremented 1→2→3 across the test calls.
 - Billing and plans (if sold as a product)
 - **Knowledge base file assets + Meta template header-image/document attachment — done.** New
   `kb_folders`/`kb_assets` tables (nested folders) and a public `kb-assets` Storage bucket
