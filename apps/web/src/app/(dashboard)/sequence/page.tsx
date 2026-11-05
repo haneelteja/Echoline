@@ -299,7 +299,7 @@ export default function SequencePage() {
   function column(ch: ChannelKey) {
     const steps = draft![ch].steps;
     return (
-      <section className="panel" key={ch}>
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md" key={ch}>
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
           <h2>{CH_LABEL[ch]}</h2>
           <div className="row small" style={{ gap: 10 }}>
@@ -401,7 +401,7 @@ export default function SequencePage() {
         {column("wa")}
       </div>
 
-      <section className="panel">
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
         <h2>Sending rules</h2>
         <div className="grid g3" style={{ marginTop: 12 }}>
           <div className="field">
