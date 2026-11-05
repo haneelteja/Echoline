@@ -1,5 +1,6 @@
 import Fastify, { type FastifyError } from "fastify";
 import cors from "@fastify/cors";
+import { ZodError } from "zod";
 import { initSentry, captureException } from "./sentry.js";
 import { requireAuth } from "./auth.js";
 import { projectRoutes } from "./routes/projects.js";
@@ -100,8 +101,16 @@ await app.register(
   { prefix: "/v1" }
 );
 
-app.setErrorHandler((err: FastifyError, req, reply) => {
+app.setErrorHandler((err: FastifyError | ZodError, req, reply) => {
   req.log.error(err);
+  // Fastify's own schema validation (ajv) sets err.validation; every route that
+  // instead does `someSchema.parse(req.body)` throws a plain ZodError, which
+  // has no statusCode — without this check it fell through to the 500/Sentry
+  // branch below, paging on ordinary bad input (e.g. a client PATCHing an
+  // out-of-range number) instead of just rejecting it with a 400.
+  if (err instanceof ZodError) {
+    return reply.code(400).send({ error: "validation_error", message: err.message });
+  }
   if (err.validation) {
     return reply.code(400).send({ error: "validation_error", message: err.message });
   }
