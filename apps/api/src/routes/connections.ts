@@ -47,6 +47,25 @@ function masterKey() {
  * rather than clobbering it on a transient failure. The webhook handler and
  * waQualityPoll.ts (a different app) each have their own fetch+write, since
  * both also do a different DB write shape around the fetch. */
+// Shared by /test, /test-send-email and /test-send-whatsapp — each of those
+// can flip a previously-"disconnected" row back to "connected" (that's how a
+// user picks a new "active" email/WhatsApp provider without re-entering
+// credentials: test the one you want active). Without this, two rows of the
+// same (project, kind) could end up "connected" at once, which breaks every
+// code path that assumes at most one (e.g. whatsappWorker.ts's .maybeSingle()
+// lookup). AI is exempt — multiple AI connections may usefully stay
+// "connected" at once; see the connect route's own comment on this.
+async function demoteSiblingConnections(supabase: any, projectId: string, kind: string, keepConnId: string): Promise<void> {
+  if (kind === "ai") return;
+  await supabase
+    .from("provider_connections")
+    .update({ status: "disconnected", webhook_warning: null })
+    .eq("project_id", projectId)
+    .eq("kind", kind)
+    .eq("status", "connected")
+    .neq("id", keepConnId);
+}
+
 async function safeFetchMetaQuality(
   credentials: Record<string, string>,
   log: { warn: (obj: unknown, msg: string) => void }
@@ -221,7 +240,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     const { data: conn, error } = await req.supabase
       .from("provider_connections")
       .select(
-        "id, provider, encrypted_credentials, encryption_iv, encryption_tag, encrypted_dek, dek_iv, dek_tag"
+        "id, kind, provider, encrypted_credentials, encryption_iv, encryption_tag, encrypted_dek, dek_iv, dek_tag"
       )
       .eq("project_id", projectId)
       .eq("id", connId)
@@ -251,6 +270,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       }
     }
     const quality = result.ok && (conn as any).provider === "meta" ? await safeFetchMetaQuality(credentials, req.log) : null;
+    if (result.ok) await demoteSiblingConnections(req.supabase, projectId, (conn as any).kind, connId);
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({
@@ -329,6 +349,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(502).send({ error: "send_failed", message: err instanceof Error ? err.message : String(err) });
     }
 
+    await demoteSiblingConnections(req.supabase, projectId, c.kind as string, connId);
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({ status: "connected", needs_reconnect_reason: null })
@@ -385,6 +406,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(502).send({ error: "send_failed", message: err instanceof Error ? err.message : String(err) });
     }
 
+    await demoteSiblingConnections(req.supabase, projectId, c.kind as string, connId);
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({ status: "connected", needs_reconnect_reason: null })

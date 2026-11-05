@@ -143,8 +143,18 @@ export default function ChannelsPage() {
     }
   }
 
-  async function testConnection(conn: ConnectionRow) {
+  async function testConnection(conn: ConnectionRow, otherConnected?: ConnectionRow) {
     if (!pid) return;
+    if (
+      otherConnected &&
+      !confirm(
+        `This will make ${providerInfo(conn.provider)?.label ?? conn.provider} the active ${conn.kind} connection for this project, replacing ${
+          providerInfo(otherConnected.provider)?.label ?? otherConnected.provider
+        }. Continue?`
+      )
+    ) {
+      return;
+    }
     setBusyId(conn.id);
     setError(null);
     try {
@@ -161,11 +171,21 @@ export default function ChannelsPage() {
   // their Test button on the plain credential check. Email/WhatsApp open a
   // dialog that actually sends something real, prefilled from this project's
   // settings (email/WhatsApp number) so there's nothing to type for a quick check.
-  function openTestDialog(conn: ConnectionRow) {
+  function openTestDialog(conn: ConnectionRow, otherConnected?: ConnectionRow) {
     // AI and the IMAP reply inbox have nothing meaningful to send a test
     // message to — keep their Test button on the plain credential check.
     if (conn.kind === "ai" || conn.kind === "email_imap") {
-      testConnection(conn);
+      testConnection(conn, conn.kind === "email_imap" ? otherConnected : undefined);
+      return;
+    }
+    if (
+      otherConnected &&
+      !confirm(
+        `This will make ${providerInfo(conn.provider)?.label ?? conn.provider} the active ${conn.kind} connection for this project, replacing ${
+          providerInfo(otherConnected.provider)?.label ?? otherConnected.provider
+        }. Continue?`
+      )
+    ) {
       return;
     }
     setError(null);
@@ -299,7 +319,10 @@ export default function ChannelsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {conns.map((c) => (
+                  {conns.map((c) => {
+                    const activeSibling = kind !== "ai" ? conns.find((other) => other.id !== c.id && other.status === "connected") : undefined;
+                    const willSwitchActive = c.status !== "connected" && !!activeSibling;
+                    return (
                     <TableRow key={c.id}>
                       <TableCell className="font-semibold text-foreground">{providerInfo(c.provider)?.label ?? c.provider}</TableCell>
                       <TableCell className="text-muted-foreground">{c.account_label || "—"}</TableCell>
@@ -338,8 +361,14 @@ export default function ChannelsPage() {
                       )}
                       <TableCell>
                         <div className="flex justify-end gap-1.5">
-                          <Button variant="outline" size="sm" disabled={busyId === c.id} onClick={() => openTestDialog(c)}>
-                            {busyId === c.id ? "…" : "Test"}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busyId === c.id}
+                            onClick={() => openTestDialog(c, activeSibling)}
+                            title={willSwitchActive ? `Make this the active ${KIND_META[kind].title.toLowerCase()} connection` : undefined}
+                          >
+                            {busyId === c.id ? "…" : willSwitchActive ? "Make active" : "Test"}
                           </Button>
                           <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={busyId === c.id} onClick={() => disconnect(c)}>
                             Disconnect
@@ -347,7 +376,8 @@ export default function ChannelsPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             ) : (
