@@ -681,7 +681,7 @@ export default function ContactsPage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await Promise.all(confirmDelete.ids.map((id) => apiFetch(`/v1/projects/${pid}/contacts/${id}`, { method: "DELETE" })));
+      await apiFetch(`/v1/projects/${pid}/contacts`, { method: "DELETE", body: JSON.stringify({ ids: confirmDelete.ids }) });
       setSelected(new Set());
       setConfirmDelete(null);
       await refreshProjectData();

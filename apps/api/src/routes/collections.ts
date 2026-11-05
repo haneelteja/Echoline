@@ -78,6 +78,23 @@ function registerCollection(app: Parameters<FastifyPluginAsync>[0], cfg: Collect
     if (error) return sendDbError(reply, error);
     return reply.code(204).send();
   });
+
+  // Bulk delete as one request/one query instead of the caller firing N
+  // individual item-DELETEs in parallel — that pattern (used by the leads
+  // page's "delete invalid leads") looked "stuck" on Render's free tier
+  // once N got into the hundreds, even though every request did eventually
+  // land; one round trip removes both the slowness and the all-or-nothing
+  // fragility of N concurrent requests.
+  app.delete(`/projects/:id/${cfg.path}`, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { ids } = req.body as { ids?: unknown };
+    if (!Array.isArray(ids) || ids.length === 0 || !ids.every((v) => typeof v === "string")) {
+      return reply.code(400).send({ error: "ids_required", message: "Body must be { ids: string[] }" });
+    }
+    const { error } = await req.supabase.from(cfg.table).delete().eq("project_id", id).in("id", ids);
+    if (error) return sendDbError(reply, error);
+    return reply.code(204).send();
+  });
 }
 
 export const collectionRoutes: FastifyPluginAsync = async (app) => {
