@@ -592,11 +592,21 @@
   column that's existed since Phase 1). Scoped to OpenAI only — Gemini's embeddings are 768-dim, and
   mixing dimensions in one pgvector column isn't viable, so Gemini/Anthropic connections keep the
   original plain-text-concatenation KB context exactly as before (not a regression, an honest
-  constraint). Migration `0010_kb_vector_search.sql` (not yet applied to the live DB — run via Supabase
-  SQL Editor) adds an `ivfflat` cosine-distance index and `match_kb_items(query_embedding, project_id,
-  match_count)` RPC. `apps/api/src/routes/aiTemplates.ts`'s `buildKbContext` now best-effort backfills
-  missing embeddings on KB items before querying top-5 similarity matches, when the project's connected
-  AI provider is OpenAI.
+  constraint). Migration `0010_kb_vector_search.sql` adds an `ivfflat` cosine-distance index and
+  `match_kb_items(query_embedding, project_id, match_count)` RPC. `apps/api/src/routes/aiTemplates.ts`'s
+  `buildKbContext` now best-effort backfills missing embeddings on KB items before querying top-5
+  similarity matches, when the project's connected AI provider is OpenAI. **Migration status corrected
+  (2026-11-05): already applied live** — this had been logged as "not yet applied" but a direct check
+  found the index and RPC both already existed (likely applied alongside a later migration run and
+  never reflected back here). **`match_kb_items` live-verified (2026-11-05)** against the real deployed
+  DB using synthetic embedding vectors (no OpenAI call involved): correct cosine-similarity ranking
+  (near vector ranked first, far vector second), rows with a null embedding correctly excluded, and
+  strict `project_id` scoping confirmed (a query against an unrelated project id returned nothing).
+  **Still not verified**: the actual OpenAI embedding call itself, end-to-end through a real project —
+  no project in the live DB has an `openai` AI connection (Elma uses `openrouter`), and no OpenAI API
+  key exists anywhere in the deployed system, not even for testing. This is a real gap, not just an
+  oversight: the feature cannot be exercised end-to-end until some project actually connects an OpenAI
+  AI provider.
 - **OneDrive Excel / Google Sheets scheduled sync — done, not yet live-verified (no OAuth credentials
   exist yet, per your "build it, I'll get credentials later" call).** Generalized the OAuth plumbing
   that was previously hardcoded to email-only (`gmail`/`outlook`) into a shared `OAuthableProvider`
@@ -604,7 +614,9 @@
   Google Cloud/Azure OAuth app as Gmail/Outlook, just different scopes
   (`GOOGLE_SHEETS_SCOPES`/`ONEDRIVE_SCOPES` in `packages/providers/src/oauth/*.ts`), reusing the
   existing `provider_connections` vault rather than new storage. Migration
-  `0011_onedrive_sheets_connection_kind.sql` (not yet applied) adds both kinds to the
+  `0011_onedrive_sheets_connection_kind.sql` — **migration status corrected (2026-11-05): already
+  applied live** (same stale-roadmap situation as 0010 above; both enum values confirmed present) —
+  adds both kinds to the
   `connection_kind` enum. `packages/providers/src/sources/{onedrive,googleSheets}.ts`: read a workbook
   table via Microsoft Graph or a sheet range via the Sheets API, same shape (`{headers, rows}`) either
   way. `apps/worker/src/sourceSync.ts`: a new `runSourceSyncTick` rides the existing 5-minute scheduler
