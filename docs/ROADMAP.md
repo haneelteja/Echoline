@@ -695,6 +695,16 @@
   `429 ai_usage_limit_reached` with the used/limit counts. KB embedding backfill calls
   (`backfillKbEmbeddings`) are deliberately NOT counted — bounded, best-effort, and a much smaller cost
   than generation tokens.
+  **Live-verified (2026-11-05)** against the real deployed API: called `increment_usage_counter`
+  directly three times in a row and confirmed one row, count incrementing 1→2→3, not three duplicate
+  rows (the exact failure mode a nullable `project_id` would risk). Seeded Elma's org to exactly the
+  default limit (500) and confirmed a real `insights/ai` request got `429 ai_usage_limit_reached` with
+  the correct used/limit counts in the message, before it ever reached the AI provider. Did not get to
+  verify the successful-call increment path against a real AI response, though — Elma's connected
+  OpenRouter model ID (`NVIDIA Nemotron 3.5 Lightning`) turned out to be invalid
+  (`"...is not a valid model ID"`, unrelated pre-existing issue, not touched this session) and every
+  real completion attempt failed before reaching the success path. Covered indirectly: the direct RPC
+  test above exercises the same increment the success path calls.
 - Billing and plans (if sold as a product)
 - **Knowledge base file assets + Meta template header-image/document attachment — done.** New
   `kb_folders`/`kb_assets` tables (nested folders) and a public `kb-assets` Storage bucket
