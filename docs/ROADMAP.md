@@ -549,9 +549,11 @@
   follow the shadcn pattern (cva variants, Radix for Dialog/Label, a native-`<select>`-based Select to
   avoid pulling in Radix's heavier positioning engine for simple pick-one-of-few cases). Migrated so
   far: the dashboard Shell (`layout.tsx` — sidebar nav, project switcher, mobile menu) since it wraps
-  every page, and the Leads page + Excel import dialog in full. Remaining pages (Templates, KB,
-  Channels, Sources, Activity, Project settings) still render on the old CSS and will be migrated
-  page-by-page on request.
+  every page, and the Leads page + Excel import dialog in full. **Page-by-page redesign now complete
+  across every page (2026-11-05)** — Channels and Activity turned out to already be on the new
+  Card-based look (not previously reflected here); Dashboard, Sequence & Templates, KB, Sources, and
+  Project settings are documented below. `/templates` is a one-line redirect to `/sequence`, not a
+  separate page.
   - **Dashboard — card chrome reskinned (2026-11-05).** Each of the 7 content panels (Channel funnels,
     Insights, Messages sent trend, Coming up, Segments, Data health, Areas) now uses the same white
     `rounded-xl`/`shadow-sm`-to-`shadow-md`-on-hover recipe as `KpiCard`, replacing the old handwritten
@@ -569,6 +571,13 @@
     wait-time pills) and the WhatsApp preview bubble (styled green on purpose to look like a chat
     bubble, not a content card) are untouched. Same build/lint/typecheck verification as Dashboard;
     same live-visual-verification caveat.
+  - **KB, Sources, Project settings — card chrome reskinned (2026-11-05).** Same recipe applied to the
+    true remaining set: KB's outer "Files" section plus its individual folder/asset tiles (these are
+    themselves small cards in a grid, not list rows, so they got the same treatment as `KpiCard`);
+    Sources' four top-level sections (connect-account, add-source form, edit-source form, issued-token
+    box); Project settings' single settings-form section (`TeamSettings` below it already used the new
+    `Card` component). Same scoping rule throughout — only the outer card, no form control, table, or
+    logic touched. Same build/lint/typecheck verification and live-visual-verification caveat as above.
 - **Excel import on the Leads page — done, user-requested.** Not from the original spec — the user
   asked directly for a way to import an Excel file with column mapping. `apps/web/src/lib/excelImport.ts`
   parses the file client-side with SheetJS (no upload/storage of the raw file), best-guess maps headers
