@@ -644,8 +644,8 @@
   would be for replying within the 24h window after an inbound message, not the main send flow.
   **Explicitly deferred to a future release (2026-11-04 decision)**, alongside Turnstile and
   Zoho/HubSpot sync.
-- **Phone number quality-rating/messaging-tier tracking (Meta only) — done, not yet live-verified
-  (2026-11-04).** `quality_rating` (GREEN/YELLOW/RED/NA/UNKNOWN) and `messaging_limit_tier`
+- **Phone number quality-rating/messaging-tier tracking (Meta only) — done, live-verified
+  (2026-11-05).** `quality_rating` (GREEN/YELLOW/RED/NA/UNKNOWN) and `messaging_limit_tier`
   (TIER_50.."TIER_UNLIMITED) both come from the phone-number Graph API node itself
   (`fetchMetaPhoneQuality`, `packages/providers/src/whatsapp/meta.ts`), confirmed against Meta's
   current field reference — deliberately NOT parsed from the `phone_number_quality_update` webhook's
@@ -661,10 +661,14 @@
   on WABA ID alone, which would silently update the wrong project's connection for an agency running
   two phone numbers off the same WABA across two projects — now disambiguates using the event's
   `display_phone_number` against `account_label` when more than one WABA match exists.
-  **Not yet live-verified**: no project in this environment has a connected Meta Cloud API WhatsApp
-  number (Elma's WhatsApp connection is 360messenger) — needs a real Meta connection to confirm the
-  end-to-end fetch/display, and ideally a real `phone_number_quality_update` webhook event to confirm
-  the trigger path.
+  **Live-verified (2026-11-05)**: connected a real Meta WhatsApp Business Cloud API number
+  (+91 90142 78170, WABA "Vijay Enterprises") to Elma's project via the Channels UI. Connect-time
+  fetch worked immediately — Channels page shows status "Connected" and quality badge "GREEN" for
+  the new Meta connection. Webhook callback (`https://echoline-api.onrender.com/webhooks/whatsapp/meta`)
+  verified successfully against `META_WEBHOOK_VERIFY_TOKEN`/`META_APP_SECRET` set on Render
+  (`echoline-api`). Not separately confirmed: a real `phone_number_quality_update` webhook event
+  firing the trigger path (harder to force on demand) — the daily poll backstop covers this gap
+  regardless.
 - Per-org monthly AI usage limit — not enforced.
 - Billing and plans (if sold as a product)
 - **Knowledge base file assets + Meta template header-image/document attachment — done.** New
