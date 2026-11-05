@@ -549,9 +549,20 @@
   follow the shadcn pattern (cva variants, Radix for Dialog/Label, a native-`<select>`-based Select to
   avoid pulling in Radix's heavier positioning engine for simple pick-one-of-few cases). Migrated so
   far: the dashboard Shell (`layout.tsx` — sidebar nav, project switcher, mobile menu) since it wraps
-  every page, and the Leads page + Excel import dialog in full. Remaining pages (Dashboard, Sequence,
-  Templates, KB, Channels, Sources, Activity, Project settings) still render on the old CSS and will be
-  migrated page-by-page on request.
+  every page, and the Leads page + Excel import dialog in full. Remaining pages (Sequence, Templates,
+  KB, Channels, Sources, Activity, Project settings) still render on the old CSS and will be migrated
+  page-by-page on request.
+  - **Dashboard — card chrome reskinned (2026-11-05).** Each of the 7 content panels (Channel funnels,
+    Insights, Messages sent trend, Coming up, Segments, Data health, Areas) now uses the same white
+    `rounded-xl`/`shadow-sm`-to-`shadow-md`-on-hover recipe as `KpiCard`, replacing the old handwritten
+    `.panel` class. Deliberately scoped to just the outer card — every chart (SVG rings, funnel bars,
+    trend chart, heatmap, health meters, area bars) and its layout classes (`.card-h`, `.chan`,
+    `.insights`, `.health`, `.week`, `.bars`, `.heat`) are untouched, since those are chart layout, not
+    card skin, and this page's 12-column `.dash`/`.cN` grid is shared with no other page so changing it
+    carried no cross-page risk. The hero banner is deliberately left as-is — it's this app's own
+    dark/colorful accent, not one of the reference look's plain content cards. Not visually verified
+    live (same caveat as the rest of this redesign — no live login available this session); typecheck,
+    lint, and a full production build (17/17 static pages) all pass clean.
 - **Excel import on the Leads page — done, user-requested.** Not from the original spec — the user
   asked directly for a way to import an Excel file with column mapping. `apps/web/src/lib/excelImport.ts`
   parses the file client-side with SheetJS (no upload/storage of the raw file), best-guess maps headers
