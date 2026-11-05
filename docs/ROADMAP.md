@@ -709,6 +709,17 @@
   both; raised to 2000 (`apps/api/src/routes/aiTemplates.ts`, matching `ai-rewrite`'s existing budget).
   Re-verified against the real deployed API: a real `insights/ai` call now returns non-empty analyst
   text and `usage_counters` for Elma's org correctly incremented 1→2→3 across the test calls.
+- **Dashboard realtime updates silently dead — fixed (2026-11-05).** Reported as "Mark replied isn't
+  working": the PATCH actually succeeded every time (confirmed — a lead's `wa_status` was already
+  `replied` in the DB from an earlier click the UI never reflected), but `WorkspaceProvider.tsx`'s
+  `postgres_changes` subscription — which every dashboard page relies on to pick up any backend-driven
+  change without a manual reload — had never received a single event. Root cause: `contacts`,
+  `templates`, `kb_items`, `lead_sources`, and `lead_status_log` were never added to Supabase's
+  `supabase_realtime` publication, so the Postgres replication stream Realtime listens to never
+  included them; this wasn't a regression, it had presumably never worked since these subscriptions
+  were added. Fixed via `0028_enable_realtime.sql` (idempotent `ALTER PUBLICATION ... ADD TABLE`,
+  applied). **Live-verified**: subscribed with the real owner session and confirmed a genuine
+  `contacts` UPDATE now fires both an unfiltered and a `project_id`-filtered `postgres_changes` event.
 - Billing and plans (if sold as a product)
 - **Knowledge base file assets + Meta template header-image/document attachment — done.** New
   `kb_folders`/`kb_assets` tables (nested folders) and a public `kb-assets` Storage bucket
