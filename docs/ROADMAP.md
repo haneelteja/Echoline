@@ -1010,6 +1010,44 @@
   Operational). The low `11.95`-hour figure is itself corroborating evidence the keep-alive mechanism
   had not actually been reaching the services for some time. Re-enabled both jobs, which immediately
   resolved the restart churn, before proceeding with the active-hours change above.
+- **`/code-review high` pass over the entire day's diff (2026-11-05), user-requested ("double check
+  the whole implementation").** 10 findings, all confirmed; 3 fixed, 1 investigated and found to
+  already be mitigated, 6 left as-is (acknowledged quality/duplication debt, not correctness bugs).
+  - **Fixed**: `rateLimit.ts` (both apps) treated an explicit `max_sends_per_minute` override of `0`
+    as "unlimited" instead of "blocked" (`!limit` is true for `0`) — only reachable via direct SQL,
+    since the UI's PATCH route already schema-validates `min(1)`, but migration `0030`'s own comment
+    explicitly invites setting it that way. `emailWorker.ts`/`whatsappWorker.ts` ran the
+    no-connected-provider and rate-limit checks before `claim_message_send`, outside the try/catch
+    that does failure bookkeeping — so those two failure modes never wrote `message_events`, meaning
+    `deadLetterIfExhausted`'s own failure counter (see its doc comment: built specifically to stop an
+    *otherwise-infinite* per-contact retry+Sentry-alert loop) could never trigger for them. Moved both
+    checks to after the claim, inside the try block — which also incidentally fixed two more findings
+    from the same review: the connection row being fetched early and reused stale ~80 lines later, and
+    the Redis `INCR` running before the idempotency check (so duplicate/retried attempts consumed a
+    rate-limit slot for sends that never happened). `sendNow.ts`'s rate-limit check and its
+    `sequence_settings` fetch were awaited sequentially despite not depending on each other —
+    parallelized.
+  - **Investigated, found already mitigated — not a real bug**: the review flagged a race in
+    `demoteSiblingConnections` (two concurrent `/test` calls for two different connections of the same
+    kind could both pass the "any sibling connected?" check before either flips its own row).
+    Re-checked against `provider_connections_one_connected_per_kind` (migration `0005`), whose own
+    comment says it's deliberately "the safety net for races" — the loser's final `UPDATE` hits that
+    unique index and fails with a real DB error (`updateErr`, already checked and returned via
+    `sendDbError`), not a silent double-connected state. Confirmed by reading the actual code path
+    rather than taking the finding at face value.
+  - **Left as-is — real but lower priority, acknowledged duplication/efficiency debt, not bugs**:
+    `apps/api/src/rateLimit.ts` and `apps/worker/src/rateLimit.ts` duplicate the whole algorithm
+    instead of sharing it via `@echoline/core` (same precedented pattern as this session's other
+    cross-app duplicates, e.g. `testSendMode.ts`); the same sibling-demotion rule exists both inline in
+    the connect route and in the `demoteSiblingConnections` helper; `aiTemplates.ts`'s three handlers
+    (generate/rewrite/insights) copy-paste the same `checkAiUsageLimit`/`429` block; and
+    `server.ts`'s error-handler fix (see above) is correct today but depends on staying the first thing
+    registered after Fastify instance creation — a future `app.register(...)` added above it would
+    silently reintroduce the exact bug that paged Sentry, with nothing in CI to catch the reordering.
+  - Typecheck/lint/full test suite clean after the fixes. The `rateLimit.ts`/`sendNow.ts` fixes are
+    simple and low-risk; the worker reordering is typecheck-verified but **not live-tested against the
+    real BullMQ queue** — `apps/worker` has no test files, and exercising this needs an actual enqueued
+    job processed by a running worker, not just an HTTP call like every other fix verified today.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
