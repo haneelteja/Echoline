@@ -906,7 +906,7 @@
     `"replied"` on either channel, holding the next follow-up on *both* channels exactly like a real
     reply would. This is the bridge until 360Messenger's plan is upgraded and/or IMAP is set up.
 
-- **Multi-org self-serve project creation and team invites — done, not yet live-verified, built
+- **Multi-org self-serve project creation and team invites — done, live-verified, built
   after an explicit audit request ("have you built this for multiple clients, not just one?").**
   The audit found the DB/RLS layer was genuinely multi-tenant already, but two real gaps existed:
   no UI/API ever created a new organization or project (only a one-off seed script did), and no
@@ -939,6 +939,15 @@
     `403 email_mismatch`; accepting a revoked invite gets `410 revoked`; and the owner-protection
     guards both hold — `PATCH`/`DELETE` on the owner's own membership row both correctly `400`.
     All test invites/memberships/users cleaned up after.
+  - **Re-confirmed end-to-end (2026-11-05), this time through the real `POST /invites` route itself
+    (not a manually-inserted row) — confirms `PLATFORM_RESEND_API_KEY`/`PLATFORM_EMAIL_FROM` are in
+    fact set on Render and Resend genuinely accepted the send.** Full pass: `POST /orgs` → owner
+    membership created correctly; `GET /members` resolves the owner's email; `POST /invites` → `201`
+    (real Resend delivery, not simulated); pending list shows it; revoke → `200`, pending list empties;
+    a separately-inserted invite exercised accept/edge-cases again (wrong-user `403`, correct accept
+    `200` + membership created with the right role, re-accept `410`); owner role-change/removal both
+    `400`; a non-owner's role change succeeds `200`. All test orgs/invites/memberships/the test auth
+    user cleaned up after — no residue left in the live DB.
   - Deliberately left as-is, not a gap: `TEST_SEND_MODE`'s redirect target stays one global env var
     per deployment rather than becoming per-project/per-org — explicit decision, revisit once a
     second real client actually needs independent test/live state.
