@@ -102,6 +102,7 @@ await app.register(
 );
 
 app.setErrorHandler((err: FastifyError | ZodError, req, reply) => {
+  req.log.error({ customErrorHandlerMarker: true }, "CUSTOM_ERROR_HANDLER_INVOKED");
   req.log.error(err);
   // Fastify's own schema validation (ajv) sets err.validation; every route that
   // instead does `someSchema.parse(req.body)` throws a plain ZodError, which
