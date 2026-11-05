@@ -26,6 +26,7 @@ import {
 import { buildUnsubscribeHeaders, emailHTML, fill, fillPlainText, normPhone, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 import { isTestSendMode, testSendEmail, testSendWhatsApp } from "../testSendMode.js";
+import { checkProviderRateLimit } from "../rateLimit.js";
 
 const sendNowInput = z.object({
   channel: z.enum(["email", "whatsapp"]),
@@ -244,6 +245,13 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
       .maybeSingle();
     if (connErr) return sendDbError(reply, connErr);
     if (!conn) return reply.code(400).send({ error: "no_connection", message: `No connected ${kind} provider for this project` });
+
+    const rl = await checkProviderRateLimit((conn as any).provider, (conn as any).id, (conn as any).max_sends_per_minute);
+    if (!rl.allowed) {
+      return reply
+        .code(429)
+        .send({ error: "rate_limited", message: `This ${kind} provider is capped at ${rl.limit} sends/minute — try again in a moment.` });
+    }
 
     const { data: seqRow, error: seqErr } = await db.from("sequence_settings").select("daily_cap, em, wa").eq("project_id", projectId).maybeSingle();
     if (seqErr) return sendDbError(reply, seqErr);

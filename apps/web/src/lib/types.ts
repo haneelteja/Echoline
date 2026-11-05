@@ -178,6 +178,7 @@ export interface ConnectionRow {
   wa_quality_rating: string | null;
   wa_messaging_tier: string | null;
   wa_quality_checked_at: string | null;
+  max_sends_per_minute: number | null;
   created_at: string;
   updated_at: string;
 }

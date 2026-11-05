@@ -16,6 +16,7 @@ import { fill, fillPlainText, emailHTML, buildUnsubscribeHeaders, STAGE_STATUS_K
 import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
+import { checkProviderRateLimit } from "../rateLimit.js";
 import { SEND_EMAIL_QUEUE, type SendJobData } from "../queues.js";
 import { isTestSendMode, testSendEmail } from "../testSendMode.js";
 
@@ -89,6 +90,15 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
   const db = createAdminClient();
   const { orgId, projectId, contactId, step } = job.data;
 
+  // Checked before claiming the message slot at all — a rate-limit hit here
+  // just throws and lets BullMQ's existing attempts/backoff retry later
+  // (same path an ordinary send error already takes), rather than claiming
+  // a slot and then needing a separate "unclaim" story.
+  const { data: conn } = await db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "email").eq("status", "connected").maybeSingle();
+  if (!conn) throw new Error("No connected email provider for this project");
+  const rl = await checkProviderRateLimit(getRedisConnection(), (conn as any).provider, (conn as any).id, (conn as any).max_sends_per_minute);
+  if (!rl.allowed) throw new Error(`Rate limit exceeded for ${(conn as any).provider} connection ${(conn as any).id} (max ${rl.limit}/min)`);
+
   // Idempotency: claim_message_send is the real guard (see its migration for
   // why a plain insert-and-treat-conflict-as-duplicate breaks retries). It
   // returns SQL NULL if another attempt already holds or completed this slot —
@@ -110,20 +120,17 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
   const messageId = (claimed as { id: string }).id;
 
   try {
-    const [{ data: contact }, { data: project }, { data: template }, { data: conn }, { data: seq }, { data: channelSettings }] =
-      await Promise.all([
-        db.from("contacts").select("*").eq("id", contactId).single(),
-        db.from("projects").select("*").eq("id", projectId).single(),
-        db.from("templates").select("*").eq("project_id", projectId).eq("channel", "email").eq("step", step).maybeSingle(),
-        db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "email").eq("status", "connected").maybeSingle(),
-        db.from("sequence_settings").select("em").eq("project_id", projectId).single(),
-        db.from("channel_settings").select("email").eq("project_id", projectId).maybeSingle(),
-      ]);
+    const [{ data: contact }, { data: project }, { data: template }, { data: seq }, { data: channelSettings }] = await Promise.all([
+      db.from("contacts").select("*").eq("id", contactId).single(),
+      db.from("projects").select("*").eq("id", projectId).single(),
+      db.from("templates").select("*").eq("project_id", projectId).eq("channel", "email").eq("step", step).maybeSingle(),
+      db.from("sequence_settings").select("em").eq("project_id", projectId).single(),
+      db.from("channel_settings").select("email").eq("project_id", projectId).maybeSingle(),
+    ]);
 
     const c = contact as ContactRow | null;
     if (!c || !validEmail(c.email)) throw new Error("Contact has no valid email");
     if (!template) throw new Error(`No email template for step ${step}`);
-    if (!conn) throw new Error("No connected email provider for this project");
 
     const sender = getEmailSender((conn as any).provider);
     if (!sender) throw new Error(`No sender implemented for provider ${(conn as any).provider}`);
