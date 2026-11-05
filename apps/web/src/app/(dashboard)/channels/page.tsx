@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, Inbox, Mail, MessageCircle, Plus, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Gauge, Inbox, Mail, MessageCircle, Pencil, Plus, Sparkles } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { createClient } from "@/lib/supabase/client";
@@ -41,6 +41,15 @@ function messagingTierLabel(tier: string): string {
   const n = tier.replace("TIER_", "");
   return n === "UNLIMITED" || n === "NOT_SET" ? (n === "UNLIMITED" ? "Unlimited/day" : "Not set") : `${n}/day`;
 }
+// Mirrors apps/worker/src/rateLimit.ts / apps/api/src/rateLimit.ts's
+// DEFAULT_LIMITS — display-only, so a connection with no explicit override
+// shows the real default it's getting instead of looking falsely unlimited.
+const DEFAULT_RATE_LIMITS: Partial<Record<string, number>> = { "360messenger": 10 };
+function rateLimitLabel(conn: ConnectionRow): string {
+  if (conn.max_sends_per_minute != null) return `${conn.max_sends_per_minute}/min`;
+  const def = DEFAULT_RATE_LIMITS[conn.provider];
+  return def ? `${def}/min (default)` : "Unlimited";
+}
 const KIND_META = {
   email: { title: "Email", icon: Mail },
   whatsapp: { title: "WhatsApp", icon: MessageCircle },
@@ -72,6 +81,13 @@ export default function ChannelsPage() {
   const [testBusy, setTestBusy] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
   const [testSuccess, setTestSuccess] = useState<string | null>(null);
+
+  // Rate-limit override editor — a plain column, not a credential, so it's
+  // a separate tiny dialog rather than folded into the add/test ones above.
+  const [editingRateLimit, setEditingRateLimit] = useState<ConnectionRow | null>(null);
+  const [rateLimitValue, setRateLimitValue] = useState("");
+  const [rateLimitBusy, setRateLimitBusy] = useState(false);
+  const [rateLimitError, setRateLimitError] = useState<string | null>(null);
 
   useEffect(() => {
     createClient()
@@ -262,6 +278,31 @@ export default function ChannelsPage() {
     }
   }
 
+  function openRateLimitEditor(conn: ConnectionRow) {
+    setEditingRateLimit(conn);
+    setRateLimitValue(conn.max_sends_per_minute != null ? String(conn.max_sends_per_minute) : "");
+    setRateLimitError(null);
+  }
+
+  async function saveRateLimit() {
+    if (!pid || !editingRateLimit) return;
+    setRateLimitBusy(true);
+    setRateLimitError(null);
+    try {
+      const trimmed = rateLimitValue.trim();
+      await apiFetch(`/v1/projects/${pid}/connections/${editingRateLimit.id}/rate-limit`, {
+        method: "PATCH",
+        body: JSON.stringify({ maxSendsPerMinute: trimmed ? Number(trimmed) : null }),
+      });
+      setEditingRateLimit(null);
+      await refresh();
+    } catch (e) {
+      setRateLimitError(e instanceof ApiError && e.status === 403 ? "You need admin access to change this." : "Couldn't save.");
+    } finally {
+      setRateLimitBusy(false);
+    }
+  }
+
   async function disconnect(conn: ConnectionRow) {
     if (!pid) return;
     if (!confirm(`Disconnect ${providerInfo(conn.provider)?.label ?? conn.provider}?`)) return;
@@ -315,6 +356,7 @@ export default function ChannelsPage() {
                     <TableHead>Account</TableHead>
                     <TableHead>Status</TableHead>
                     {kind === "whatsapp" && <TableHead>Quality</TableHead>}
+                    {kind !== "ai" && kind !== "email_imap" && <TableHead>Rate limit</TableHead>}
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -357,6 +399,20 @@ export default function ChannelsPage() {
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+                      )}
+                      {kind !== "ai" && kind !== "email_imap" && (
+                        <TableCell>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground hover:border-muted-foreground"
+                            onClick={() => openRateLimitEditor(c)}
+                            title="Set a max sends/minute override for this connection"
+                          >
+                            <Gauge className="h-3 w-3" />
+                            {rateLimitLabel(c)}
+                            <Pencil className="h-3 w-3 opacity-60" />
+                          </button>
                         </TableCell>
                       )}
                       <TableCell>
@@ -580,6 +636,44 @@ export default function ChannelsPage() {
                 </Button>
                 <Button onClick={submitWaTest} disabled={testBusy || !waTestForm.to.trim() || !waTestForm.message.trim()}>
                   {testBusy ? "Sending…" : "Send test message"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingRateLimit} onOpenChange={(open) => !open && !rateLimitBusy && setEditingRateLimit(null)}>
+        <DialogContent>
+          {editingRateLimit && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Rate limit — {providerInfo(editingRateLimit.provider)?.label ?? editingRateLimit.provider}</DialogTitle>
+                <DialogDescription>
+                  Caps how fast sends go out through this connection, independent of the sequence&apos;s daily cap — a backstop against
+                  tripping the provider&apos;s own abuse detection. Leave blank for{" "}
+                  {DEFAULT_RATE_LIMITS[editingRateLimit.provider] ? `the default (${DEFAULT_RATE_LIMITS[editingRateLimit.provider]}/min)` : "unlimited"}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rate-limit-value">Max sends per minute</Label>
+                <Input
+                  id="rate-limit-value"
+                  type="number"
+                  min={1}
+                  max={10000}
+                  placeholder="Unlimited"
+                  value={rateLimitValue}
+                  onChange={(e) => setRateLimitValue(e.target.value)}
+                />
+              </div>
+              {rateLimitError && <p className="text-sm text-destructive">{rateLimitError}</p>}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditingRateLimit(null)} disabled={rateLimitBusy}>
+                  Cancel
+                </Button>
+                <Button onClick={saveRateLimit} disabled={rateLimitBusy}>
+                  {rateLimitBusy ? "Saving…" : "Save"}
                 </Button>
               </DialogFooter>
             </>

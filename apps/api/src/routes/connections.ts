@@ -33,7 +33,9 @@ const createConnectionInput = z.object({
 // Columns safe to return to the browser — never includes the encrypted
 // credential/DEK columns. The API never returns secrets, only status.
 const SAFE_COLUMNS =
-  "id, project_id, kind, provider, account_label, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, created_at, updated_at";
+  "id, project_id, kind, provider, account_label, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, max_sends_per_minute, created_at, updated_at";
+
+const rateLimitInput = z.object({ maxSendsPerMinute: z.number().int().min(1).max(10_000).nullable() });
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -444,5 +446,25 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     const { error } = await req.supabase.from("provider_connections").delete().eq("project_id", projectId).eq("id", connId);
     if (error) return sendDbError(reply, error);
     return reply.code(204).send();
+  });
+
+  // Overrides the send-rate default a provider gets in apps/worker's/this
+  // app's own rateLimit.ts (currently only 360Messenger has one) — null
+  // clears back to that default. A plain column, not an encrypted
+  // credential, so this is its own small route rather than going through
+  // the credential-handling /test-style routes above.
+  app.patch("/projects/:projectId/connections/:connId/rate-limit", async (req, reply) => {
+    const { projectId, connId } = req.params as { projectId: string; connId: string };
+    const body = rateLimitInput.parse(req.body);
+    const { data, error } = await req.supabase
+      .from("provider_connections")
+      .update({ max_sends_per_minute: body.maxSendsPerMinute })
+      .eq("project_id", projectId)
+      .eq("id", connId)
+      .select(SAFE_COLUMNS)
+      .maybeSingle();
+    if (error) return sendDbError(reply, error);
+    if (!data) return reply.code(404).send({ error: "not_found" });
+    return data;
   });
 };
