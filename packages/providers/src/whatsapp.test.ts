@@ -334,8 +334,14 @@ describe("send360MessengerText", () => {
     const result = await send360MessengerText({ apiKey: "key-abc" }, textMessage);
     expect(result).toEqual({ providerMessageId: "msg-123" });
     const [url, init] = fetchSpy.mock.calls[0];
-    expect(url).toBe("https://api.360messenger.com/v2/sendMessage/");
-    expect(JSON.parse(init.body as string)).toEqual({ phone: "919876543210", message: "Hi there" });
+    expect(url).toBe("https://api.360messenger.com/v2/sendMessage");
+    // multipart/form-data, not JSON — confirmed against 360Messenger's own
+    // n8n integration source (see the comment in whatsapp/360messenger.ts).
+    expect(init.body).toBeInstanceOf(FormData);
+    const form = init.body as FormData;
+    expect(form.get("phonenumber")).toBe("919876543210");
+    expect(form.get("text")).toBe("Hi there");
+    expect(form.get("url")).toBeNull();
   });
 
   it("requires an apiKey", async () => {
