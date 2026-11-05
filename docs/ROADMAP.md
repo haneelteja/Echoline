@@ -669,6 +669,15 @@
   (`echoline-api`). Not separately confirmed: a real `phone_number_quality_update` webhook event
   firing the trigger path (harder to force on demand) — the daily poll backstop covers this gap
   regardless.
+  Per explicit user decision, this Meta connection was then made Elma's **active** WhatsApp sender
+  (not just a verification test) — 360Messenger was already `status: "disconnected"`, and the
+  worker's send path (`apps/worker/src/workers/whatsappWorker.ts`) picks whichever single connection
+  has `status: "connected"` for a project, so Meta took over automatically once connected. Also
+  updated `projects.wa_number` from `9642917777` to `9014278170` to match — this isn't just the
+  click-to-chat display number, it's also what `apps/api/src/routes/webhooks.ts`'s Meta
+  `messages`/`statuses` handler matches against the webhook's `display_phone_number` to resolve
+  which project an inbound reply or delivery-status event belongs to, so leaving it stale would have
+  silently broken reply routing for the new number.
 - Per-org monthly AI usage limit — not enforced.
 - Billing and plans (if sold as a product)
 - **Knowledge base file assets + Meta template header-image/document attachment — done.** New
