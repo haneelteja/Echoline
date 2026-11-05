@@ -32,6 +32,33 @@ const app = Fastify({
   },
 });
 
+// Must be registered before any routes — Fastify binds each route to
+// whatever error-handling chain exists at the moment that route is
+// registered, not dynamically at request time. Setting this after
+// app.register(...) (where it previously lived) meant every single route
+// in the app kept resolving to Fastify's own default error handler, which
+// is why a ZodError (or any other thrown error) was always coming back as
+// a raw {statusCode,error:"Internal Server Error",message} instead of our
+// {error,message} shape — confirmed live via a diagnostic marker log that
+// never fired when this handler lived after route registration.
+app.setErrorHandler((err: FastifyError | ZodError, req, reply) => {
+  req.log.error(err);
+  // Fastify's own schema validation (ajv) sets err.validation; every route that
+  // instead does `someSchema.parse(req.body)` throws a plain ZodError, which
+  // has no statusCode — without this check it fell through to the 500/Sentry
+  // branch below, paging on ordinary bad input (e.g. a client PATCHing an
+  // out-of-range number) instead of just rejecting it with a 400.
+  if (err instanceof ZodError) {
+    return reply.code(400).send({ error: "validation_error", message: err.message });
+  }
+  if (err.validation) {
+    return reply.code(400).send({ error: "validation_error", message: err.message });
+  }
+  // Only unexpected (5xx) errors go to Sentry — a bad request isn't a bug to page anyone about.
+  if (!err.statusCode || err.statusCode >= 500) captureException(err);
+  return reply.code(err.statusCode ?? 500).send({ error: "internal_error", message: err.message });
+});
+
 // Provider webhook signatures (Resend/SendGrid/Meta) are computed over the
 // exact raw request bytes — Fastify's default JSON parser doesn't retain
 // those, so this override stashes them on req.rawBody before parsing. Also
@@ -100,25 +127,6 @@ await app.register(
   },
   { prefix: "/v1" }
 );
-
-app.setErrorHandler((err: FastifyError | ZodError, req, reply) => {
-  req.log.error({ customErrorHandlerMarker: true }, "CUSTOM_ERROR_HANDLER_INVOKED");
-  req.log.error(err);
-  // Fastify's own schema validation (ajv) sets err.validation; every route that
-  // instead does `someSchema.parse(req.body)` throws a plain ZodError, which
-  // has no statusCode — without this check it fell through to the 500/Sentry
-  // branch below, paging on ordinary bad input (e.g. a client PATCHing an
-  // out-of-range number) instead of just rejecting it with a 400.
-  if (err instanceof ZodError) {
-    return reply.code(400).send({ error: "validation_error", message: err.message });
-  }
-  if (err.validation) {
-    return reply.code(400).send({ error: "validation_error", message: err.message });
-  }
-  // Only unexpected (5xx) errors go to Sentry — a bad request isn't a bug to page anyone about.
-  if (!err.statusCode || err.statusCode >= 500) captureException(err);
-  return reply.code(err.statusCode ?? 500).send({ error: "internal_error", message: err.message });
-});
 
 process.on("unhandledRejection", (err) => {
   captureException(err);
