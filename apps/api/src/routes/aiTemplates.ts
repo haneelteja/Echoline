@@ -284,7 +284,7 @@ ${JSON.stringify(body.stats)}
 Write 4 short, specific, actionable observations (max 2 sentences each) as plain text lines starting with "• ". Base everything on the numbers; say when data is too thin. No preamble.`;
 
     try {
-      const text = await completer(ai.credentials, { user: prompt, maxTokens: 500 });
+      const text = await completer(ai.credentials, { user: prompt, maxTokens: 2000 });
       await recordAiUsage(p.org_id, id, req.log);
       return { text };
     } catch (err) {
