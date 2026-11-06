@@ -475,8 +475,10 @@ export default function ChannelsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-display text-2xl font-bold text-foreground">Email &amp; WhatsApp</h1>
-        <p className="text-sm text-muted-foreground">Connect sender accounts. Credentials are encrypted at rest and never sent back to the browser.</p>
+        <h1 className="font-display text-2xl font-bold text-foreground">Connections</h1>
+        <p className="text-sm text-muted-foreground">
+          Connect email, WhatsApp, AI, and other provider accounts. Credentials are encrypted at rest and never sent back to the browser.
+        </p>
       </div>
 
       {banner && (

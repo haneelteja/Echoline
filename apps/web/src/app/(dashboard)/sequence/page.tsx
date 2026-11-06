@@ -189,7 +189,7 @@ export default function SequencePage() {
           ? e.status === 403
             ? "AI features need admin access on this project."
             : e.body && typeof e.body === "object" && "error" in e.body && (e.body as { error?: string }).error === "no_connection"
-              ? "Connect an AI provider under Email & WhatsApp → AI first."
+              ? "Connect an AI provider under Connections → AI first."
               : e.message
           : "Generation failed"
       );
@@ -213,7 +213,7 @@ export default function SequencePage() {
     } catch (e) {
       setTplError(
         e instanceof ApiError && e.body && typeof e.body === "object" && "error" in e.body && (e.body as { error?: string }).error === "no_connection"
-          ? "Connect an AI provider under Email & WhatsApp → AI first."
+          ? "Connect an AI provider under Connections → AI first."
           : "Rewrite failed"
       );
     } finally {
@@ -267,7 +267,7 @@ export default function SequencePage() {
       setTestEmailError(
         e instanceof ApiError
           ? e.body && typeof e.body === "object" && "error" in e.body && (e.body as { error?: string }).error === "no_connection"
-            ? "Connect an email provider under Email & WhatsApp first."
+            ? "Connect an email provider under Connections first."
             : e.message
           : "Couldn't send test email."
       );

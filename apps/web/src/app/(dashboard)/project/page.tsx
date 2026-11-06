@@ -94,7 +94,7 @@ export default function ProjectSettingsPage() {
         <div className="field">
           <label htmlFor="email">Email</label>
           <input id="email" type="email" value={email ?? ""} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourcompany.com" />
-          <p className="hint">Used to prefill the recipient when testing an email connection under Email &amp; WhatsApp.</p>
+          <p className="hint">Used to prefill the recipient when testing an email connection under Connections.</p>
         </div>
         <div className="field">
           <label htmlFor="wa">WhatsApp number for click-to-chat</label>

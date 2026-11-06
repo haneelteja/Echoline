@@ -76,7 +76,7 @@ export default function DashboardPage() {
     } catch (e) {
       setAiError(
         e instanceof ApiError && e.body && typeof e.body === "object" && "error" in e.body && (e.body as { error?: string }).error === "no_connection"
-          ? "Connect an AI provider under Email & WhatsApp → AI first."
+          ? "Connect an AI provider under Connections → AI first."
           : "AI analysis isn't available right now."
       );
     } finally {
