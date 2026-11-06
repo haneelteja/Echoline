@@ -272,7 +272,7 @@ export default function DashboardPage() {
               </a>
             </div>
             {runMessage && (
-              <p className="small" style={{ color: "#D8D2F5", marginBottom: 10 }}>
+              <p className="small" style={{ color: "rgba(255,255,255,.75)", marginBottom: 10 }}>
                 {runMessage}
               </p>
             )}
@@ -444,7 +444,7 @@ function RingsChart({ n, reached, engaged, replied }: { n: number; reached: numb
   const rings: [number, string][] = [
     [n, "rgba(255,255,255,.10)"],
     [reached, "var(--email)"],
-    [engaged, "#8B7CFF"],
+    [engaged, "#38bdf8"],
     [replied, "var(--ok)"],
   ];
   const rr = (v: number) => (n ? Math.max(v ? 10 : 0, Math.sqrt(v / n) * R) : 0);

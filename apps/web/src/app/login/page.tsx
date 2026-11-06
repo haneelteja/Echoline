@@ -116,7 +116,7 @@ export default function LoginPage() {
     <div className="auth-screen">
       <div className="auth-card">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
-          <span style={{ display: "inline-flex", background: "var(--side, #16112B)", borderRadius: 10, padding: 6 }}>
+          <span style={{ display: "inline-flex", background: "var(--side, #0F172A)", borderRadius: 10, padding: 6 }}>
             <LogoMark size={22} />
           </span>
           <h1 style={{ margin: 0 }}>Echoline</h1>
