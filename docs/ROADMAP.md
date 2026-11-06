@@ -1143,6 +1143,43 @@
     Needs credits added at openrouter.ai/settings/credits before this specific route can be fully
     confirmed; the request plumbing (auth, endpoint, error surfacing) is confirmed correct up to that
     point.
+  - **Upgraded to true cross-provider orchestration — done, live regression-verified (2026-11-06),
+    user-requested ("picking the LLM should completely rely on our core orchestrator's intelligence"
+    once "the user can add a single or multiple LLMs").** The router above only ever orchestrated
+    *within* one connected provider, because a DB unique index still blocked a project from having more
+    than one connected AI provider at all — this fixes that for real. Migration
+    `0032_multi_ai_provider.sql` (mirrors the existing `google_sheets` exemption pattern, `0024`): drops
+    and recreates `provider_connections_one_connected_per_kind` excluding `'ai'` too, plus a new
+    secondary index keeping at most one connected row per `(project, provider)` — a project can connect
+    Anthropic *and* OpenAI *and* OpenRouter simultaneously, just not two separate OpenAI keys. No UI
+    change needed: the Channels page already renders every row of a kind via its existing `section()`
+    helper, and `connections.ts` already skipped AI sibling-demotion — this was always just the DB
+    blocking it.
+    - **No separate hand-maintained price list for direct Anthropic/OpenAI/Gemini connections** (those
+      vendors expose no live pricing API the way OpenRouter does) — a direct connection is ranked using
+      the *same* OpenRouter-derived `ai_model_catalog`'s entries for that vendor (e.g. a direct Anthropic
+      connection is compared against the catalog's `anthropic/*` rows, vendor prefix stripped before
+      calling Anthropic's own adapter directly). An estimate, not exact billing — consistent with this
+      router's existing stance everywhere else.
+    - New pure module `packages/providers/src/router/multiProviderCatalog.ts` (5 unit tests): builds the
+      `pickModel()` candidate pool across every connected provider via a composite `"{provider}::
+      {modelId}"` id — `pickModel` itself needed zero changes, since it only ever compares ids by cost.
+    - `apps/api/src/aiRouter.ts`: `getAiCredentials` (one connection) → `getAiConnections` (every
+      connected row); `selectModel` (model override within one fixed connection) →
+      `selectProviderAndModel` (returns which provider *and* model to actually use). Falls back to the
+      first connected provider when there's no catalog data at all — unchanged pre-orchestration
+      behavior, not a failure path. All 5 routes in `aiTemplates.ts` updated to resolve the
+      completer/image generator from the *picked* provider, which may now differ from any particular
+      connection.
+    - **Live-verified**: re-ran the exact same `insights`/`copilot`/`templates/:id/ai-rewrite` checks
+      from above against Elma's real deployed API after this rework — all three still return correct
+      output (same picked models, same restored-template cleanup), confirming no regression to the
+      single-connection case.
+    - **Not yet live-verified**: genuinely picking *across* two different providers for the same task —
+      no second real provider key is available to connect today (explicit user decision: unit-test the
+      selection logic now, live cross-provider check whenever a second key is actually connected). The
+      `multiProviderCatalog.ts` unit tests cover per-vendor filtering, the union across multiple
+      connected providers, and the composite-id round-trip with synthetic data in the meantime.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
