@@ -1,14 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
 import { getAiCompleter, getEmbedder, getImageGenerator } from "@echoline/providers";
 import { sendDbError } from "../errors.js";
 import { checkAiUsageLimit, recordAiUsage } from "../aiUsage.js";
-import { selectModel, estimateTokens } from "../aiRouter.js";
-
-function masterKey() {
-  return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
-}
+import { getAiConnections, selectProviderAndModel, estimateTokens, type AiConnection } from "../aiRouter.js";
 
 /** Strips a ```json ... ``` fence if the model wrapped its output in one
  * despite being asked for JSON only — common enough across providers that
@@ -91,27 +86,14 @@ OTHER NOTES: ${notes}
 LEAD CATEGORIES IN THIS PROJECT: ${categories.join(", ") || "Restaurant, Hotel, Banquet Hall, Car Dealer / Retail Showroom"}`;
 }
 
-// The app layer's intent is "multiple AI providers can be connected to one
-// project at once, most-recently-connected wins" — but a DB-level unique
-// index (provider_connections_one_connected_per_kind) still covers kind='ai'
-// too, so in practice only one AI connection can ever be status='connected'
-// per project today (confirmed 2026-11-06 while building the model router).
-// This ORDER BY/LIMIT 1 is defensive, not a real selection mechanism; the
-// router (selectModel, ../aiRouter.ts) picks the *model* within whichever
-// one connection this returns, not between connections.
-async function getAiCredentials(supabase: any, projectId: string): Promise<{ provider: string; credentials: Record<string, string> } | null> {
-  const { data: conns } = await supabase
-    .from("provider_connections")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("kind", "ai")
-    .eq("status", "connected")
-    .order("updated_at", { ascending: false })
-    .limit(1);
-  const conn = conns?.[0];
-  if (!conn) return null;
-  const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey()));
-  return { provider: (conn as any).provider, credentials };
+// Embeddings are a separate concern from which provider the orchestrator
+// picks for a completion — only OpenAI implements Embedder (see its doc
+// comment in packages/providers), so KB retrieval always uses the
+// project's own OpenAI connection specifically, if one is connected,
+// regardless of which provider selectProviderAndModel ends up picking for
+// the actual generation/rewrite/insights/copilot call.
+function embeddingConnection(connections: AiConnection[]): AiConnection {
+  return connections.find((c) => c.provider === "openai") ?? connections[0];
 }
 
 const generateInput = z.object({
@@ -147,10 +129,8 @@ export const aiTemplatesRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string };
     const body = generateInput.parse(req.body);
 
-    const ai = await getAiCredentials(req.supabase, id);
-    if (!ai) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-    const completer = getAiCompleter(ai.provider);
-    if (!completer) return reply.code(400).send({ error: "no_completer", message: `No completer implemented for provider ${ai.provider}` });
+    const connections = await getAiConnections(req.supabase, id);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
 
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
@@ -165,7 +145,7 @@ export const aiTemplatesRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const isEmail = body.channel === "email";
-    const kbContext = await buildKbContext(req.supabase, id, `${body.goal} ${body.extra ?? ""}`.trim(), ai);
+    const kbContext = await buildKbContext(req.supabase, id, `${body.goal} ${body.extra ?? ""}`.trim(), embeddingConnection(connections));
     const prompt = `You write B2B outreach ${isEmail ? "emails" : "WhatsApp messages"} for an Indian business. Use only facts from the knowledge base below; never invent prices or claims.
 ${kbContext}
 CAMPAIGN GOAL: ${body.goal}
@@ -178,8 +158,10 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
 
     let parsed: { templates?: { step: number; name?: string; subject?: string; body?: string; categoryLines?: Record<string, string> }[] };
     try {
-      const credentials = await selectModel(req.supabase, ai, "template_generate", estimateTokens(prompt, 4000));
-      const raw = await completer(credentials, { user: prompt, maxTokens: 4000 });
+      const picked = await selectProviderAndModel(req.supabase, connections, "template_generate", estimateTokens(prompt, 4000));
+      const completer = getAiCompleter(picked.provider);
+      if (!completer) throw new Error(`No completer implemented for provider ${picked.provider}`);
+      const raw = await completer(picked.credentials, { user: prompt, maxTokens: 4000 });
       parsed = parseJsonLoose(raw) as typeof parsed;
     } catch (err) {
       return reply.code(502).send({ error: "ai_generation_failed", message: err instanceof Error ? err.message : String(err) });
@@ -209,10 +191,8 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
     const { projectId, templateId } = req.params as { projectId: string; templateId: string };
     const body = rewriteInput.parse(req.body);
 
-    const ai = await getAiCredentials(req.supabase, projectId);
-    if (!ai) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-    const completer = getAiCompleter(ai.provider);
-    if (!completer) return reply.code(400).send({ error: "no_completer", message: `No completer implemented for provider ${ai.provider}` });
+    const connections = await getAiConnections(req.supabase, projectId);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
 
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", projectId).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
@@ -236,7 +216,7 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
     if (!current) return reply.code(404).send({ error: "not_found" });
     const cur = current as { channel: string; name: string | null; step: number; subject: string | null; body: string | null; category_lines: Record<string, string> };
 
-    const kbContext = await buildKbContext(req.supabase, projectId, body.instruction, ai);
+    const kbContext = await buildKbContext(req.supabase, projectId, body.instruction, embeddingConnection(connections));
     const prompt = `Rewrite this ${cur.channel} outreach template. Keep placeholders like {{company}} intact. Use only facts from the knowledge base.
 ${kbContext}
 CURRENT: ${JSON.stringify({ subject: cur.subject, body: cur.body, categoryLines: cur.category_lines })}
@@ -245,8 +225,10 @@ Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`;
 
     let parsed: { subject?: string; body?: string; categoryLines?: Record<string, string> };
     try {
-      const credentials = await selectModel(req.supabase, ai, "template_rewrite", estimateTokens(prompt, 2000));
-      const raw = await completer(credentials, { user: prompt, maxTokens: 2000 });
+      const picked = await selectProviderAndModel(req.supabase, connections, "template_rewrite", estimateTokens(prompt, 2000));
+      const completer = getAiCompleter(picked.provider);
+      if (!completer) throw new Error(`No completer implemented for provider ${picked.provider}`);
+      const raw = await completer(picked.credentials, { user: prompt, maxTokens: 2000 });
       parsed = parseJsonLoose(raw) as typeof parsed;
     } catch (err) {
       return reply.code(502).send({ error: "ai_rewrite_failed", message: err instanceof Error ? err.message : String(err) });
@@ -275,10 +257,8 @@ Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`;
     const { id } = req.params as { id: string };
     const body = insightsInput.parse(req.body);
 
-    const ai = await getAiCredentials(req.supabase, id);
-    if (!ai) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-    const completer = getAiCompleter(ai.provider);
-    if (!completer) return reply.code(400).send({ error: "no_completer", message: `No completer implemented for provider ${ai.provider}` });
+    const connections = await getAiConnections(req.supabase, id);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
 
     const { data: project, error: projErr } = await req.supabase.from("projects").select("name, brand, org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
@@ -297,8 +277,10 @@ ${JSON.stringify(body.stats)}
 Write 4 short, specific, actionable observations (max 2 sentences each) as plain text lines starting with "• ". Base everything on the numbers; say when data is too thin. No preamble.`;
 
     try {
-      const credentials = await selectModel(req.supabase, ai, "insights", estimateTokens(prompt, 2000));
-      const text = await completer(credentials, { user: prompt, maxTokens: 2000 });
+      const picked = await selectProviderAndModel(req.supabase, connections, "insights", estimateTokens(prompt, 2000));
+      const completer = getAiCompleter(picked.provider);
+      if (!completer) throw new Error(`No completer implemented for provider ${picked.provider}`);
+      const text = await completer(picked.credentials, { user: prompt, maxTokens: 2000 });
       await recordAiUsage(p.org_id, id, req.log);
       return { text };
     } catch (err) {
@@ -307,17 +289,13 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
   });
 
   // New image generation + copilot tasks both route through the same
-  // selectModel mechanism as the three text tasks above.
+  // selectProviderAndModel mechanism as the three text tasks above.
   app.post("/projects/:id/kb/ai-generate-image", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = imageGenerateInput.parse(req.body);
 
-    const ai = await getAiCredentials(req.supabase, id);
-    if (!ai) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-    const generator = getImageGenerator(ai.provider);
-    if (!generator) {
-      return reply.code(400).send({ error: "no_image_generator", message: `No image generator implemented for provider ${ai.provider} — connect OpenRouter for image generation.` });
-    }
+    const connections = await getAiConnections(req.supabase, id);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
 
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
@@ -333,8 +311,12 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
 
     let image: { base64: string; mimeType: string };
     try {
-      const credentials = await selectModel(req.supabase, ai, "image_generate", { prompt: 0, completion: 0 });
-      image = await generator(credentials, body.prompt);
+      const picked = await selectProviderAndModel(req.supabase, connections, "image_generate", { prompt: 0, completion: 0 });
+      const generator = getImageGenerator(picked.provider);
+      if (!generator) {
+        throw new Error(`No image generator implemented for provider ${picked.provider} — connect OpenRouter for image generation.`);
+      }
+      image = await generator(picked.credentials, body.prompt);
       await recordAiUsage(orgId, id, req.log);
     } catch (err) {
       return reply.code(502).send({ error: "ai_image_generation_failed", message: err instanceof Error ? err.message : String(err) });
@@ -371,10 +353,8 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
     const { id } = req.params as { id: string };
     const body = copilotInput.parse(req.body);
 
-    const ai = await getAiCredentials(req.supabase, id);
-    if (!ai) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-    const completer = getAiCompleter(ai.provider);
-    if (!completer) return reply.code(400).send({ error: "no_completer", message: `No completer implemented for provider ${ai.provider}` });
+    const connections = await getAiConnections(req.supabase, id);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
 
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
@@ -389,13 +369,15 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
     }
 
     const lastUserMessage = body.messages.filter((m) => m.role === "user").pop()?.content ?? "";
-    const kbContext = await buildKbContext(req.supabase, id, lastUserMessage, ai);
+    const kbContext = await buildKbContext(req.supabase, id, lastUserMessage, embeddingConnection(connections));
     const system = `You are a helpful assistant for the team running outreach for this business. Use only facts from the knowledge base below; say when you don't know something rather than inventing it.
 ${kbContext}`;
 
     try {
-      const credentials = await selectModel(req.supabase, ai, "copilot_chat", estimateTokens(system + lastUserMessage, 2000));
-      const reply_ = await completer(credentials, { system, user: lastUserMessage, messages: body.messages, maxTokens: 2000 });
+      const picked = await selectProviderAndModel(req.supabase, connections, "copilot_chat", estimateTokens(system + lastUserMessage, 2000));
+      const completer = getAiCompleter(picked.provider);
+      if (!completer) throw new Error(`No completer implemented for provider ${picked.provider}`);
+      const reply_ = await completer(picked.credentials, { system, user: lastUserMessage, messages: body.messages, maxTokens: 2000 });
       await recordAiUsage(orgId, id, req.log);
       return { reply: reply_ };
     } catch (err) {
