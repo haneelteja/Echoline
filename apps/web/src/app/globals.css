@@ -40,12 +40,12 @@
 }
 
 :root {
-  --bg: #f6f5fb;
+  --bg: #ece9f6;
   --panel: #ffffff;
   --ink: #16132a;
   --ink2: #4b4768;
   --muted: #8a84a3;
-  --line: #e7e3f2;
+  --line: #d8d2ec;
   --email: #4f46e5;
   --email-soft: #ecebfe;
   --wa: #0ea371;
@@ -83,7 +83,7 @@
     --ink: #ede9fa;
     --ink2: #bbb3d8;
     --muted: #8982a8;
-    --line: #2b2447;
+    --line: #342c54;
     --email: #9b8cff;
     --email-soft: #241f45;
     --wa: #36d39e;
@@ -303,6 +303,7 @@
     border-radius: var(--r-s);
     padding: 9px 11px;
     width: 100%;
+    box-shadow: inset 0 1px 2px rgba(22, 19, 42, 0.04);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
   .field input:focus,

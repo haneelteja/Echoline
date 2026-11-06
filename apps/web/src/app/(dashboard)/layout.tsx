@@ -166,7 +166,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
       {open && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setOpen(false)} aria-hidden="true" />}
 
-      <main className="min-w-0 flex-1 bg-gradient-to-br from-slate-50 via-blue-50/60 to-indigo-50/60 p-5 lg:p-8">
+      <main className="min-w-0 flex-1 bg-background p-5 lg:p-8">
         {loadingProjects ? (
           // Without this branch, children rendered immediately on first
           // mount with pid/projects still empty — e.g. the Leads page would

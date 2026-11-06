@@ -625,7 +625,7 @@ export default function SequencePage() {
                   <div className="field" style={{ marginBottom: 0 }}>
                     <label>Preview</label>
                     {editing.channel === "email" && previewHtml ? (
-                      <iframe title="Email preview" srcDoc={previewHtml} style={{ width: "100%", height: 460, border: "1px solid var(--border, #e0e0e0)", borderRadius: 8 }} />
+                      <iframe title="Email preview" srcDoc={previewHtml} style={{ width: "100%", height: 460, border: "1px solid var(--line)", borderRadius: 8 }} />
                     ) : (
                       <div className="panel" style={{ background: "#dcf8c6", fontSize: 14 }}>
                         {draftTpl.headerAssetId &&
