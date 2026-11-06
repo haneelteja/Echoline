@@ -1035,15 +1035,30 @@
     unique index and fails with a real DB error (`updateErr`, already checked and returned via
     `sendDbError`), not a silent double-connected state. Confirmed by reading the actual code path
     rather than taking the finding at face value.
-  - **Left as-is — real but lower priority, acknowledged duplication/efficiency debt, not bugs**:
-    `apps/api/src/rateLimit.ts` and `apps/worker/src/rateLimit.ts` duplicate the whole algorithm
-    instead of sharing it via `@echoline/core` (same precedented pattern as this session's other
-    cross-app duplicates, e.g. `testSendMode.ts`); the same sibling-demotion rule exists both inline in
-    the connect route and in the `demoteSiblingConnections` helper; `aiTemplates.ts`'s three handlers
-    (generate/rewrite/insights) copy-paste the same `checkAiUsageLimit`/`429` block; and
-    `server.ts`'s error-handler fix (see above) is correct today but depends on staying the first thing
-    registered after Fastify instance creation — a future `app.register(...)` added above it would
-    silently reintroduce the exact bug that paged Sentry, with nothing in CI to catch the reordering.
+  - **All 4 of the below cleaned up and live-verified (2026-11-06), user-requested.**
+    - `rateLimit.ts` was duplicated verbatim across `apps/api`/`apps/worker` (and had already drifted
+      out of sync once — one got the 0-vs-null fix before the other). Moved the pure decision logic to
+      `packages/providers/src/rateLimit.ts` (5 new unit tests), using a minimal structural
+      `RateLimitRedis` interface instead of importing ioredis's own type, so the package takes on no new
+      runtime dependency. `apps/api` keeps a thin wrapper around its own Redis connection;
+      `apps/worker`'s two callers now import the shared function directly.
+    - `connections.ts`'s create route had its own inline copy of the sibling-demotion logic instead of
+      calling `demoteSiblingConnections()`. Gave the helper an optional `keepConnId` (the create route
+      has no row to keep yet) and replaced the inline duplicate with a call to it.
+    - `aiTemplates.ts`'s `checkAiUsageLimit`/`429` block was copy-pasted across all 5 routes (3 before
+      today, 2 more added today). Factored into one `enforceAiUsageLimit(orgId, reply)` helper.
+    - `server.ts`'s error-handler fix had no structural guard against a future regression — just a
+      comment asking the next person not to reorder it. Split into `apps/api/src/app.ts` (`buildApp()`,
+      zero side effects on import) and a thin `server.ts` entrypoint that's the only thing calling
+      `.listen()`. This makes the registration order genuinely testable: `app.test.ts` uses Fastify's
+      `.inject()` against a real built app (no mocking, no real port bound) to assert the custom
+      handler's shape comes back instead of Fastify's default, in both the top-level and the
+      nested-under-auth plugin context. A future reordering now fails a test, not just goes unread in a
+      comment.
+    - Live-verified after deploy: both services boot cleanly (`/health` 200 on each); `insights`,
+      `copilot`, and the full `GET /connections` list all still work correctly — no regression from any
+      of the four changes. Full monorepo typecheck/lint/build/test clean (173 tests in
+      `packages/providers` + `apps/api`, up from 164 before this).
   - Typecheck/lint/full test suite clean after the fixes. The `rateLimit.ts`/`sendNow.ts` fixes are
     simple and low-risk; the worker reordering is typecheck-verified but **not live-tested against the
     real BullMQ queue** — `apps/worker` has no test files, and exercising this needs an actual enqueued
