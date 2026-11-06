@@ -446,6 +446,7 @@ export default function ContactsPage() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [resetDone, setResetDone] = useState<number | null>(null);
 
   const kpis = useMemo(() => {
     const total = contacts.length;
@@ -716,9 +717,14 @@ export default function ContactsPage() {
     setResetting(true);
     setResetError(null);
     try {
-      await apiFetch(`/v1/projects/${pid}/contacts/reset-status`, { method: "POST" });
+      const result = await apiFetch<{ reset: number }>(`/v1/projects/${pid}/contacts/reset-status`, { method: "POST" });
       setConfirmReset(false);
       await refreshProjectData();
+      // Visible confirmation that something actually happened, not just a
+      // dialog quietly closing — easy to miss otherwise if you're not staring
+      // at the right row. Self-clears so it doesn't linger as stale state.
+      setResetDone(result.reset);
+      setTimeout(() => setResetDone(null), 6000);
     } catch (e) {
       setResetError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't reset lead status." : "Couldn't reset lead status.");
     } finally {
@@ -856,6 +862,13 @@ export default function ContactsPage() {
       </div>
 
       {error && !adding && <p className="text-sm text-destructive">{error}</p>}
+
+      {resetDone !== null && (
+        <p className="flex items-center gap-1.5 text-sm font-medium text-success">
+          <CheckCircle2 className="h-4 w-4" />
+          Reset status for {resetDone} lead{resetDone === 1 ? "" : "s"}.
+        </p>
+      )}
 
       {confirmDelete && (
         <Dialog open onOpenChange={(open) => !open && !deleting && setConfirmDelete(null)}>
