@@ -42,5 +42,14 @@ export async function fetchOpenRouterCatalog(apiKey: string): Promise<OpenRouter
     throw new Error(`OpenRouter model list failed (${res.status}): ${body}`);
   }
   const body = (await res.json()) as { data?: RawOpenRouterModel[] };
-  return (body.data ?? []).map(toCatalogEntry);
+  return (body.data ?? [])
+    // ":batch" variants are a genuinely different endpoint (OpenAI's async
+    // Batch API, routed through a different OpenRouter adapter) — calling
+    // them via the regular /chat/completions endpoint 404s outright.
+    // Confirmed live, 2026-11-06: router picked one (attractive batch
+    // pricing) and both insights and copilot calls failed because of it.
+    // Every other suffix (":free", ":nitro", ":floor", ":online") is still
+    // a valid chat/completions model, so only ":batch" is excluded here.
+    .filter((m) => !m.id.endsWith(":batch"))
+    .map(toCatalogEntry);
 }
