@@ -1,4 +1,4 @@
-import type { AiCompleter, AiProviderId, ConnectionTester, Embedder, EmailProviderId, EmailSender, ProviderId, WhatsAppProviderId, WhatsAppTemplateSender, WhatsAppTextSender } from "./types";
+import type { AiCompleter, AiProviderId, ConnectionTester, Embedder, EmailProviderId, EmailSender, ImageGenerator, ProviderId, WhatsAppProviderId, WhatsAppTemplateSender, WhatsAppTextSender } from "./types";
 import { testGmail, sendGmail } from "./email/gmail";
 import { testOutlook, sendOutlook } from "./email/outlook";
 import { testSes, sendSes } from "./email/ses";
@@ -18,6 +18,7 @@ import { testAnthropic, completeAnthropic } from "./ai/anthropic";
 import { testOpenAi, completeOpenAi, embedOpenAi } from "./ai/openai";
 import { testGemini, completeGemini } from "./ai/gemini";
 import { testOpenRouter, completeOpenRouter } from "./ai/openrouter";
+import { generateImage } from "./ai/openrouterImage";
 
 export const connectionTesters: Record<ProviderId, ConnectionTester> = {
   gmail: testGmail,
@@ -112,4 +113,13 @@ export const embedders: Partial<Record<AiProviderId, Embedder>> = {
 
 export function getEmbedder(providerId: string): Embedder | undefined {
   return embedders[providerId as AiProviderId];
+}
+
+// Only OpenRouter — see ImageGenerator's own doc comment in types.ts.
+export const imageGenerators: Partial<Record<AiProviderId, ImageGenerator>> = {
+  openrouter: generateImage,
+};
+
+export function getImageGenerator(providerId: string): ImageGenerator | undefined {
+  return imageGenerators[providerId as AiProviderId];
 }

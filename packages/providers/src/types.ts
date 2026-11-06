@@ -99,6 +99,9 @@ export interface AiCompletionRequest {
   system?: string;
   user: string;
   maxTokens?: number;
+  /** Multi-turn conversation history, for the copilot — when set, adapters
+   * use this instead of `user` as the message list (with `user` ignored). */
+  messages?: { role: "user" | "assistant"; content: string }[];
 }
 
 /** Returns the raw text completion — JSON parsing/validation is the caller's
@@ -113,3 +116,13 @@ export type AiCompleter = (credentials: Record<string, string>, request: AiCompl
  * back to plain-text KB context instead of real similarity search.
  */
 export type Embedder = (credentials: Record<string, string>, text: string) => Promise<number[]>;
+
+export interface GeneratedImage {
+  base64: string;
+  mimeType: string;
+}
+
+/** Only OpenRouter implements this today (see ai/openrouterImage.ts) — none
+ * of the other three providers in this file expose an image-generation API
+ * of their own; OpenRouter proxies many image models behind one endpoint. */
+export type ImageGenerator = (credentials: Record<string, string>, prompt: string) => Promise<GeneratedImage>;

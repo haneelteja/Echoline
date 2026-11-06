@@ -18,7 +18,10 @@ export const completeGemini: AiCompleter = async (credentials, request) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: request.user }] }],
+      // Gemini uses "model" rather than "assistant" for the other turn's role.
+      contents: request.messages
+        ? request.messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
+        : [{ role: "user", parts: [{ text: request.user }] }],
       systemInstruction: request.system ? { parts: [{ text: request.system }] } : undefined,
       generationConfig: { maxOutputTokens: request.maxTokens ?? 2000 },
     }),

@@ -1,9 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
-import { getAiCompleter, getEmbedder } from "@echoline/providers";
+import { getAiCompleter, getEmbedder, getImageGenerator } from "@echoline/providers";
 import { sendDbError } from "../errors.js";
 import { checkAiUsageLimit, recordAiUsage } from "../aiUsage.js";
+import { selectModel, estimateTokens } from "../aiRouter.js";
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -90,10 +91,14 @@ OTHER NOTES: ${notes}
 LEAD CATEGORIES IN THIS PROJECT: ${categories.join(", ") || "Restaurant, Hotel, Banquet Hall, Car Dealer / Retail Showroom"}`;
 }
 
-// Multiple AI providers can be connected to one project at once (see
-// connections.ts) — when more than one qualifies, the most recently
-// connected/reconnected one wins, since that's the one the admin most
-// recently chose to use.
+// The app layer's intent is "multiple AI providers can be connected to one
+// project at once, most-recently-connected wins" — but a DB-level unique
+// index (provider_connections_one_connected_per_kind) still covers kind='ai'
+// too, so in practice only one AI connection can ever be status='connected'
+// per project today (confirmed 2026-11-06 while building the model router).
+// This ORDER BY/LIMIT 1 is defensive, not a real selection mechanism; the
+// router (selectModel, ../aiRouter.ts) picks the *model* within whichever
+// one connection this returns, not between connections.
 async function getAiCredentials(supabase: any, projectId: string): Promise<{ provider: string; credentials: Record<string, string> } | null> {
   const { data: conns } = await supabase
     .from("provider_connections")
@@ -124,6 +129,12 @@ const rewriteInput = z.object({ instruction: z.string().min(1) });
 // it's a JSON object avoids this route needing to know the dashboard's
 // exact stats shape, which would make the two drift out of sync.
 const insightsInput = z.object({ stats: z.record(z.unknown()) });
+
+const imageGenerateInput = z.object({ prompt: z.string().min(1) });
+
+const copilotInput = z.object({
+  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1) })).min(1),
+});
 
 /**
  * AI template generation/rewrite — gated to org-admins, same reasoning as
@@ -167,7 +178,8 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
 
     let parsed: { templates?: { step: number; name?: string; subject?: string; body?: string; categoryLines?: Record<string, string> }[] };
     try {
-      const raw = await completer(ai.credentials, { user: prompt, maxTokens: 4000 });
+      const credentials = await selectModel(req.supabase, ai, "template_generate", estimateTokens(prompt, 4000));
+      const raw = await completer(credentials, { user: prompt, maxTokens: 4000 });
       parsed = parseJsonLoose(raw) as typeof parsed;
     } catch (err) {
       return reply.code(502).send({ error: "ai_generation_failed", message: err instanceof Error ? err.message : String(err) });
@@ -233,7 +245,8 @@ Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`;
 
     let parsed: { subject?: string; body?: string; categoryLines?: Record<string, string> };
     try {
-      const raw = await completer(ai.credentials, { user: prompt, maxTokens: 2000 });
+      const credentials = await selectModel(req.supabase, ai, "template_rewrite", estimateTokens(prompt, 2000));
+      const raw = await completer(credentials, { user: prompt, maxTokens: 2000 });
       parsed = parseJsonLoose(raw) as typeof parsed;
     } catch (err) {
       return reply.code(502).send({ error: "ai_rewrite_failed", message: err instanceof Error ? err.message : String(err) });
@@ -284,11 +297,109 @@ ${JSON.stringify(body.stats)}
 Write 4 short, specific, actionable observations (max 2 sentences each) as plain text lines starting with "• ". Base everything on the numbers; say when data is too thin. No preamble.`;
 
     try {
-      const text = await completer(ai.credentials, { user: prompt, maxTokens: 2000 });
+      const credentials = await selectModel(req.supabase, ai, "insights", estimateTokens(prompt, 2000));
+      const text = await completer(credentials, { user: prompt, maxTokens: 2000 });
       await recordAiUsage(p.org_id, id, req.log);
       return { text };
     } catch (err) {
       return reply.code(502).send({ error: "ai_insights_failed", message: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // New image generation + copilot tasks both route through the same
+  // selectModel mechanism as the three text tasks above.
+  app.post("/projects/:id/kb/ai-generate-image", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = imageGenerateInput.parse(req.body);
+
+    const ai = await getAiCredentials(req.supabase, id);
+    if (!ai) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
+    const generator = getImageGenerator(ai.provider);
+    if (!generator) {
+      return reply.code(400).send({ error: "no_image_generator", message: `No image generator implemented for provider ${ai.provider} — connect OpenRouter for image generation.` });
+    }
+
+    const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
+    if (projErr) return sendDbError(reply, projErr);
+    if (!project) return reply.code(404).send({ error: "not_found" });
+    const orgId = (project as any).org_id as string;
+
+    const usage = await checkAiUsageLimit(orgId);
+    if (!usage.ok) {
+      return reply
+        .code(429)
+        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
+    }
+
+    let image: { base64: string; mimeType: string };
+    try {
+      const credentials = await selectModel(req.supabase, ai, "image_generate", { prompt: 0, completion: 0 });
+      image = await generator(credentials, body.prompt);
+      await recordAiUsage(orgId, id, req.log);
+    } catch (err) {
+      return reply.code(502).send({ error: "ai_image_generation_failed", message: err instanceof Error ? err.message : String(err) });
+    }
+
+    const ext = image.mimeType.split("/")[1] ?? "png";
+    const storagePath = `${id}/ai-generated/${Date.now()}.${ext}`;
+    const bytes = Buffer.from(image.base64, "base64");
+    const { error: uploadErr } = await req.supabase.storage.from("kb-assets").upload(storagePath, bytes, { contentType: image.mimeType });
+    if (uploadErr) return reply.code(502).send({ error: "storage_upload_failed", message: uploadErr.message });
+    const { data: publicUrl } = req.supabase.storage.from("kb-assets").getPublicUrl(storagePath);
+
+    const { data, error } = await req.supabase
+      .from("kb_assets")
+      .insert({
+        project_id: id,
+        org_id: orgId,
+        kind: "image",
+        name: `AI: ${body.prompt.slice(0, 60)}`,
+        mime_type: image.mimeType,
+        size_bytes: bytes.byteLength,
+        storage_path: storagePath,
+        url: publicUrl.publicUrl,
+      })
+      .select()
+      .single();
+    if (error) return sendDbError(reply, error);
+    return reply.code(201).send(data);
+  });
+
+  // Non-streaming v1 — real multi-turn context, single request/response.
+  // True SSE streaming is a deliberate, separable follow-up (see docs/ROADMAP.md).
+  app.post("/projects/:id/copilot", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = copilotInput.parse(req.body);
+
+    const ai = await getAiCredentials(req.supabase, id);
+    if (!ai) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
+    const completer = getAiCompleter(ai.provider);
+    if (!completer) return reply.code(400).send({ error: "no_completer", message: `No completer implemented for provider ${ai.provider}` });
+
+    const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
+    if (projErr) return sendDbError(reply, projErr);
+    if (!project) return reply.code(404).send({ error: "not_found" });
+    const orgId = (project as any).org_id as string;
+
+    const usage = await checkAiUsageLimit(orgId);
+    if (!usage.ok) {
+      return reply
+        .code(429)
+        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
+    }
+
+    const lastUserMessage = body.messages.filter((m) => m.role === "user").pop()?.content ?? "";
+    const kbContext = await buildKbContext(req.supabase, id, lastUserMessage, ai);
+    const system = `You are a helpful assistant for the team running outreach for this business. Use only facts from the knowledge base below; say when you don't know something rather than inventing it.
+${kbContext}`;
+
+    try {
+      const credentials = await selectModel(req.supabase, ai, "copilot_chat", estimateTokens(system + lastUserMessage, 2000));
+      const reply_ = await completer(credentials, { system, user: lastUserMessage, messages: body.messages, maxTokens: 2000 });
+      await recordAiUsage(orgId, id, req.log);
+      return { reply: reply_ };
+    } catch (err) {
+      return reply.code(502).send({ error: "ai_copilot_failed", message: err instanceof Error ? err.message : String(err) });
     }
   });
 };

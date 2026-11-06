@@ -16,7 +16,10 @@ export const testOpenAi: ConnectionTester = async (credentials) => {
 export const completeOpenAi: AiCompleter = async (credentials, request) => {
   const apiKey = credentials.apiKey;
   if (!apiKey) throw new Error("apiKey is required");
-  const messages = [request.system ? { role: "system", content: request.system } : null, { role: "user", content: request.user }].filter(Boolean);
+  const messages = [
+    request.system ? { role: "system", content: request.system } : null,
+    ...(request.messages ?? [{ role: "user", content: request.user }]),
+  ].filter(Boolean);
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

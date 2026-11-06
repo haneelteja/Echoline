@@ -21,7 +21,10 @@ export const testOpenRouter: ConnectionTester = async (credentials) => {
 export const completeOpenRouter: AiCompleter = async (credentials, request) => {
   const apiKey = credentials.apiKey;
   if (!apiKey) throw new Error("apiKey is required");
-  const messages = [request.system ? { role: "system", content: request.system } : null, { role: "user", content: request.user }].filter(Boolean);
+  const messages = [
+    request.system ? { role: "system", content: request.system } : null,
+    ...(request.messages ?? [{ role: "user", content: request.user }]),
+  ].filter(Boolean);
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -32,7 +35,15 @@ export const completeOpenRouter: AiCompleter = async (credentials, request) => {
       "HTTP-Referer": "https://echoline-omega.vercel.app",
       "X-Title": "Echoline",
     },
-    body: JSON.stringify({ model: credentials.model || DEFAULT_MODEL, max_tokens: request.maxTokens ?? 2000, messages }),
+    body: JSON.stringify({
+      model: credentials.model || DEFAULT_MODEL,
+      max_tokens: request.maxTokens ?? 2000,
+      messages,
+      // Set by the router (apps/api/src/aiRouter.ts) only when the picked
+      // model's catalog row says it supports it — real JSON mode instead of
+      // relying purely on prompt wording + markdown-fence-stripping.
+      ...(credentials.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
+    }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");

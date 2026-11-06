@@ -26,7 +26,7 @@ export const completeAnthropic: AiCompleter = async (credentials, request) => {
       model: credentials.model || DEFAULT_MODEL,
       max_tokens: request.maxTokens ?? 2000,
       system: request.system,
-      messages: [{ role: "user", content: request.user }],
+      messages: request.messages ?? [{ role: "user", content: request.user }],
     }),
   });
   if (!res.ok) {
