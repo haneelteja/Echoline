@@ -397,28 +397,35 @@ function AssetCard({
   onDelete: () => void;
 }) {
   return (
-    <div
-      className={cn("group panel relative cursor-pointer transition-shadow hover:shadow-md", selected && "ring-2 ring-primary")}
-      onClick={onToggle}
-    >
-      <span
+    <div className={cn("group panel relative transition-shadow hover:shadow-md", selected && "ring-2 ring-primary")}>
+      <button
+        type="button"
+        aria-label={selected ? "Deselect" : "Select"}
         className={cn(
           "absolute left-2.5 top-2.5 z-10 flex h-5 w-5 items-center justify-center rounded border",
-          selected ? "border-primary bg-primary" : "border-border bg-background"
+          selected ? "border-primary bg-primary" : "border-border bg-background hover:border-primary"
         )}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
       >
         {selected && <Check className="h-3 w-3 text-primary-foreground" />}
-      </span>
-      {asset.kind === "image" ? (
-        <img src={asset.url} alt={asset.name} className="mb-2 h-[110px] w-full rounded-md object-cover" />
-      ) : (
-        <div className="mb-2 flex h-[110px] items-center justify-center rounded-md bg-muted">
-          <File className="h-10 w-10 text-muted-foreground" />
-        </div>
-      )}
-      <b className="small block truncate" title={asset.name}>
-        {asset.name}
-      </b>
+      </button>
+      {/* Opens the original file in a new tab — browsers preview images/PDFs
+          inline and download anything else, same as any plain file link. */}
+      <a href={asset.url} target="_blank" rel="noopener noreferrer" className="block cursor-pointer" title={`Open ${asset.name}`}>
+        {asset.kind === "image" ? (
+          <img src={asset.url} alt={asset.name} className="mb-2 h-[110px] w-full rounded-md object-cover" />
+        ) : (
+          <div className="mb-2 flex h-[110px] items-center justify-center rounded-md bg-muted">
+            <File className="h-10 w-10 text-muted-foreground" />
+          </div>
+        )}
+        <b className="small block truncate" title={asset.name}>
+          {asset.name}
+        </b>
+      </a>
       <div className="small muted">{formatSize(asset.size_bytes)}</div>
       <Button
         variant="ghost"
@@ -426,6 +433,7 @@ function AssetCard({
         className="absolute right-2 top-2 h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
         onClick={(e) => {
           e.stopPropagation();
+          e.preventDefault();
           onDelete();
         }}
       >
