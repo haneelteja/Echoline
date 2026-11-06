@@ -1,4 +1,4 @@
-import { pickModel, type CatalogRow, type TaskType } from "@echoline/providers";
+import { pickModel, TASK_PROFILES, type CatalogRow, type TaskType } from "@echoline/providers";
 
 function toCatalogRow(row: any): CatalogRow {
   return {
@@ -33,10 +33,17 @@ export async function selectModel(
   const picked = pickModel(task, catalog.map(toCatalogRow), estimatedTokens);
   if (!picked) return conn.credentials;
   const row = (catalog as any[]).find((r) => r.id === picked.modelId);
+  // Only request real JSON mode when the *task* actually wants JSON output
+  // (template_generate/template_rewrite) — not just because the picked
+  // model happens to support it. Confirmed live, 2026-11-06: forcing
+  // response_format:json_object on insights/copilot (plain-text tasks)
+  // broke them outright on some providers (OpenAI/Azure reject it unless
+  // the prompt itself mentions "json") and returned empty text on others.
+  const wantsJsonMode = TASK_PROFILES[task].requiresJsonMode && row?.supports_json_mode;
   return {
     ...conn.credentials,
     model: picked.modelId,
-    ...(row?.supports_json_mode ? { responseFormat: "json_object" } : {}),
+    ...(wantsJsonMode ? { responseFormat: "json_object" } : {}),
   };
 }
 

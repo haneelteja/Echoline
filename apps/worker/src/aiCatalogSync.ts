@@ -53,7 +53,14 @@ export async function runAiCatalogSyncTick(log: Logger): Promise<void> {
     const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));
     const entries = await fetchOpenRouterCatalog(credentials.apiKey);
     if (!entries.length) return;
-    const { error } = await db.from("ai_model_catalog").upsert(entries.map(toRow));
+    // Full replace, not an incremental upsert — a model OpenRouter removed
+    // (deprecated, renamed, or excluded by a new filter like :batch) must
+    // disappear from the catalog too, or the router can keep picking a
+    // stale id forever. Confirmed live, 2026-11-06: an earlier upsert-only
+    // version left already-excluded :batch rows sitting in the table.
+    const { error: deleteErr } = await db.from("ai_model_catalog").delete().not("id", "is", null);
+    if (deleteErr) throw deleteErr;
+    const { error } = await db.from("ai_model_catalog").insert(entries.map(toRow));
     if (error) throw error;
     log.info({ count: entries.length }, "ai catalog sync: refreshed");
   } catch (err) {
