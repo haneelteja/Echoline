@@ -1048,6 +1048,59 @@
     simple and low-risk; the worker reordering is typecheck-verified but **not live-tested against the
     real BullMQ queue** — `apps/worker` has no test files, and exercising this needs an actual enqueued
     job processed by a running worker, not just an HTTP call like every other fix verified today.
+- **Intelligent AI model router + image generation + copilot — done, not yet live-verified,
+  user-requested ("core... key important feature").** Every AI task previously picked a model with
+  zero intelligence — whichever provider connection was most recently updated, always its one hardcoded
+  default model. New `packages/providers/src/router/` (`pickModel.ts`, pure and unit-tested, 8 tests):
+  picks the **cheapest model clearing a per-task quality floor** (not best-quality-within-budget —
+  explicit user decision) from OpenRouter's live catalog, filtered on quality tier, context length,
+  output modality, and JSON-mode support.
+  - **Quality tiers are a curated model-ID-prefix allow-list** (`qualityTiers.ts`), not OpenRouter's own
+    `benchmarks.artificial_analysis` score — that field is too sparse (most of the 400+ models don't
+    have it) to use as a hard floor. Needs manual review as new flagship models ship.
+  - **Catalog caching**: new `ai_model_catalog` table, refreshed by `apps/worker/src/aiCatalogSync.ts`
+    riding the existing 5-minute scheduler tick, same `isDue()`-style >24h staleness check as
+    `waQualityPoll.ts` — not fetched on every tick, since the model list doesn't change minute to
+    minute. Not project-specific: any project's connected OpenRouter key works, since the catalog is
+    the same for every tenant.
+  - **Real constraint found and worked around, not fixed**: a DB unique index
+    (`provider_connections_one_connected_per_kind`) still blocks more than one *connected* AI provider
+    per project at a time, contrary to `aiTemplates.ts`'s own comments claiming otherwise (corrected
+    those comments while here). Explicit user decision: don't fix this now — the router stays scoped to
+    picking a *model* within whichever single provider is connected, which in practice means OpenRouter
+    only (the only AI provider exposing a live, machine-readable pricing/capability catalog; direct
+    Anthropic/OpenAI/Gemini connections get no routing, same single default model as before).
+  - **Integration, zero `AiCompleter` signature change**: `apps/api/src/aiRouter.ts`'s `selectModel()`
+    overrides the connection's `credentials.model` per call before invoking the existing completer —
+    `openrouter.ts` already supported an arbitrary model string, so this needed no new plumbing there.
+    Wired into all 3 existing text tasks (`templates/ai-generate`, `templates/:id/ai-rewrite`,
+    `insights/ai`).
+  - **Real JSON mode added**: when the router's picked model supports it (per the catalog's
+    `supports_json_mode`), `openrouter.ts` now sends `response_format: {type:"json_object"}` instead of
+    relying purely on prompt wording + `parseJsonLoose()`'s markdown-fence-stripping (kept as a
+    fallback, not removed).
+  - **Image generation — new, `POST /projects/:id/kb/ai-generate-image`.** OpenRouter's dedicated Image
+    API (`POST /api/v1/images`, base64 in/out), not `/chat/completions` with a `modalities` array —
+    OpenRouter's own docs confirm the latter bills combined text+image tokens and ends up ~10x pricier
+    for the same output. Default model `google/gemini-2.5-flash-image` (OpenRouter's own documented
+    example for this endpoint). Generated images upload directly into the existing `kb-assets` Storage
+    bucket + a `kb_assets` row (same path convention `kbAssets.ts` already uses, so the existing RLS
+    policies apply unchanged) — shows up in the AssetPicker/template editor for free, no new UI needed.
+    Image cost uses OpenRouter's per-image pricing, not token pricing — these aren't interchangeable, so
+    `pickModel` branches on the task's output modality to use the right cost basis.
+  - **Copilot — new, `POST /projects/:id/copilot`.** No conversational or streaming infrastructure
+    existed anywhere in this repo before this. Real multi-turn history (`AiCompletionRequest` gained an
+    optional `messages` field, threaded through all 4 provider adapters, including mapping `"assistant"`
+    to Gemini's `"model"` role convention). **Deliberately non-streaming for v1** — true SSE streaming
+    needs per-provider streaming support in all 4 adapters plus a Fastify streaming reply, a separable
+    follow-up, flagged here rather than silently cut. **No chat UI built yet either** — this is a
+    backend endpoint only; a frontend surface is a separate future piece.
+  - Full monorepo typecheck/lint/build/test clean (195 tests). **Not yet live-verified**: migration
+    `0031_ai_model_catalog.sql` needs applying to the live DB first, then the catalog needs to actually
+    populate (first worker tick after that), then each of the 3 updated text tasks + the 2 new routes
+    need a real round trip against Elma's live OpenRouter connection to confirm the picked models are
+    sensible (e.g. template_generate landing on a tier-3 model, insights on a cheaper tier-2 one) and
+    that a generated image really lands in `kb_assets` + Storage.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
