@@ -1048,7 +1048,7 @@
     simple and low-risk; the worker reordering is typecheck-verified but **not live-tested against the
     real BullMQ queue** — `apps/worker` has no test files, and exercising this needs an actual enqueued
     job processed by a running worker, not just an HTTP call like every other fix verified today.
-- **Intelligent AI model router + image generation + copilot — done, not yet live-verified,
+- **Intelligent AI model router + image generation + copilot — done, live-verified (2026-11-06),
   user-requested ("core... key important feature").** Every AI task previously picked a model with
   zero intelligence — whichever provider connection was most recently updated, always its one hardcoded
   default model. New `packages/providers/src/router/` (`pickModel.ts`, pure and unit-tested, 8 tests):
@@ -1095,12 +1095,54 @@
     needs per-provider streaming support in all 4 adapters plus a Fastify streaming reply, a separable
     follow-up, flagged here rather than silently cut. **No chat UI built yet either** — this is a
     backend endpoint only; a frontend surface is a separate future piece.
-  - Full monorepo typecheck/lint/build/test clean (195 tests). **Not yet live-verified**: migration
-    `0031_ai_model_catalog.sql` needs applying to the live DB first, then the catalog needs to actually
-    populate (first worker tick after that), then each of the 3 updated text tasks + the 2 new routes
-    need a real round trip against Elma's live OpenRouter connection to confirm the picked models are
-    sensible (e.g. template_generate landing on a tier-3 model, insights on a cheaper tier-2 one) and
-    that a generated image really lands in `kb_assets` + Storage.
+  - Full monorepo typecheck/lint/build/test clean (201 tests after the fixes below). Migration
+    `0031_ai_model_catalog.sql` applied; catalog populated directly (376 real OpenRouter models, after
+    excluding `:batch` variants) rather than waiting on the worker's own 24h-staleness tick — the
+    worker's `aiCatalogSync.ts` runs the identical `fetchOpenRouterCatalog`/full-replace logic, just
+    not separately observed firing live yet.
+  - **Three real bugs found and fixed via live verification against Elma's real OpenRouter connection**,
+    not caught by unit tests or typecheck:
+    1. The router picked `openai/gpt-5-nano:batch` for both insights and copilot — OpenRouter lists
+       async-Batch-API model variants (`:batch` suffix) in the same catalog as regular chat models, and
+       calling one via `/chat/completions` 404s outright ("cannot be used with the chat/completions
+       endpoint"). Fixed: `fetchOpenRouterCatalog` now excludes any `:batch`-suffixed id (every other
+       suffix — `:free`, `:nitro`, `:floor`, `:online` — is still a valid chat/completions model).
+    2. `aiCatalogSync.ts` used `upsert()`, which only adds/updates rows but never removes ones OpenRouter
+       no longer returns — confirmed live: the `:batch` rows excluded by fix #1 were still sitting in the
+       table from a prior run, since upsert alone can't be relied on to purge now-excluded or
+       deprecated/renamed models. Fixed: full delete-then-insert per refresh, since this is a complete
+       cache of OpenRouter's catalog, not an incremental one.
+    3. `selectModel()` set `response_format:"json_object"` whenever the *picked model* supported it,
+       regardless of whether the *task* actually wanted JSON output. Broke insights (returned empty
+       text) and copilot (hard `400`, "Response input messages must contain the word 'json'...") — both
+       are plain-text tasks. Fixed: now gated on the task's own `requiresJsonMode` flag
+       (`template_generate`/`template_rewrite` only), not just model capability.
+    4. (A second insights failure, found *after* fix #3, same empty-output symptom but a different
+       cause): a bare version prefix like `"openai/gpt-5"` or `"google/gemini-3"` matches every size
+       variant shipped under it, not just the flagship — `openai/gpt-5-nano` and
+       `google/gemini-3.8-flash` both matched a tier-3 prefix this way. The nano variant got picked for
+       insights and returned empty output — almost certainly a reasoning-heavy small model spending its
+       whole token budget on hidden reasoning before emitting anything visible, the same failure class as
+       the Nemotron `maxTokens` issue fixed earlier this session, just a different model the router
+       picked on its own this time. Fixed in `qualityTiers.ts`: small-variant name markers
+       (`nano`/`mini`/`flash`/`lite`/`haiku`/`small`) now exclude a model from tier-3 prefix matching,
+       checked after the explicit tier-2 list (which deliberately lists several of these same markers on
+       purpose — e.g. `gpt-4o-mini`, `claude-haiku`).
+  - **Confirmed working end-to-end after all four fixes**: `insights/ai` returned a real, substantive
+    4-bullet analysis (picked `google/gemini-2.5-flash-lite`, tier 2); `copilot` correctly used prior
+    conversation turns (asked to remember "42," correctly recalled it two turns later); `templates/:id/
+    ai-rewrite` produced real on-brand copy (picked a tier-3 model), verified against Elma's actual
+    email step-0 template and restored to its original content afterward, leaving no residue.
+    `templates/ai-generate` wasn't separately end-to-end tested — Elma already has an email step-0
+    template, and the route's pre-existing `templates_project_channel_step_unique` constraint correctly
+    rejected a second one (unrelated to the router; the exact same `selectModel`/`buildKbContext`/
+    completer call path is already proven by the rewrite test).
+  - **Not yet confirmed working — blocked on an account limitation, not a code issue**:
+    `kb/ai-generate-image` reaches OpenRouter's real Image API correctly and surfaces a clean, structured
+    error, but the connected OpenRouter account has purchased zero credits (`402 Insufficient credits`).
+    Needs credits added at openrouter.ai/settings/credits before this specific route can be fully
+    confirmed; the request plumbing (auth, endpoint, error surfacing) is confirmed correct up to that
+    point.
 
 ## Compliance notes
 - Business-initiated WhatsApp messages outside the 24-hour window must use Meta-approved templates.
