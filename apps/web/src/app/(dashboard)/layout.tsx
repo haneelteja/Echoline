@@ -144,7 +144,9 @@ function Shell({ children }: { children: React.ReactNode }) {
                 onClick={() => setOpen(false)}
                 className={cn(
                   "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
-                  active ? "bg-primary/10 text-primary" : "text-foreground/80 hover:bg-accent hover:text-foreground"
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-foreground/80 hover:bg-accent hover:text-foreground"
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
