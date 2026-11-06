@@ -40,6 +40,17 @@ const BRAND_FIELDS = [
 ] as const;
 type BrandFieldKey = (typeof BRAND_FIELDS)[number]["key"];
 
+// Supabase Storage's public URL honors a `download` query param — when set,
+// the response carries Content-Disposition: ...filename="<value>", which is
+// what makes the browser open/save the file under its real name instead of
+// the random UUID the object is actually stored under (see uploadFiles in
+// useKbAssets.ts). Appending it by hand here avoids a round trip through the
+// Supabase client just to re-derive a URL we already have.
+function downloadUrl(asset: KbAssetRow): string {
+  const sep = asset.url.includes("?") ? "&" : "?";
+  return `${asset.url}${sep}download=${encodeURIComponent(asset.name)}`;
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -412,9 +423,13 @@ function AssetCard({
       >
         {selected && <Check className="h-3 w-3 text-primary-foreground" />}
       </button>
-      {/* Opens the original file in a new tab — browsers preview images/PDFs
-          inline and download anything else, same as any plain file link. */}
-      <a href={asset.url} target="_blank" rel="noopener noreferrer" className="block cursor-pointer" title={`Open ${asset.name}`}>
+      {/* Storage objects are keyed by a random UUID (see uploadFiles in
+          useKbAssets.ts), not the original filename, so the plain public URL's
+          last path segment is that UUID — Supabase Storage's own `download`
+          query param is what tells it to respond with
+          Content-Disposition: ...filename="<name>" instead, so the file opens
+          /saves under the name the user actually uploaded it as. */}
+      <a href={downloadUrl(asset)} target="_blank" rel="noopener noreferrer" className="block cursor-pointer" title={`Open ${asset.name}`}>
         {asset.kind === "image" ? (
           <img src={asset.url} alt={asset.name} className="mb-2 h-[110px] w-full rounded-md object-cover" />
         ) : (
