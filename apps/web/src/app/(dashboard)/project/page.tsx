@@ -74,41 +74,45 @@ export default function ProjectSettingsPage() {
           setPid(created.id);
         }}
       />
-      <section className="panel" style={{ maxWidth: 680 }}>
-        <div className="field">
-          <label htmlFor="name">Project name</label>
-          <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+      <section className="panel" style={{ maxWidth: 820 }}>
+        <div className="grid g2">
+          <div className="field">
+            <label htmlFor="name">Project name</label>
+            <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="brand">Brand name in messages</label>
+            <input id="brand" value={brand ?? ""} onChange={(e) => setBrand(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="sender">Sender name</label>
+            <input id="sender" value={senderName ?? ""} onChange={(e) => setSenderName(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="website">Website</label>
+            <input id="website" value={website ?? ""} onChange={(e) => setWebsite(e.target.value)} />
+          </div>
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input id="email" type="email" value={email ?? ""} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourcompany.com" />
+            <p className="hint">Used to prefill the recipient when testing an email connection under Connections.</p>
+          </div>
+          <div className="field">
+            <label htmlFor="wa">WhatsApp number for click-to-chat</label>
+            <input id="wa" value={waNumber ?? ""} onChange={(e) => setWaNumber(e.target.value)} />
+          </div>
         </div>
-        <div className="field">
-          <label htmlFor="brand">Brand name in messages</label>
-          <input id="brand" value={brand ?? ""} onChange={(e) => setBrand(e.target.value)} />
+        <div style={{ marginTop: 20 }}>
+          <button className="btn primary" onClick={save}>
+            Save project
+          </button>
+          {saved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
+          {error && (
+            <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+              {error}
+            </p>
+          )}
         </div>
-        <div className="field">
-          <label htmlFor="sender">Sender name</label>
-          <input id="sender" value={senderName ?? ""} onChange={(e) => setSenderName(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="website">Website</label>
-          <input id="website" value={website ?? ""} onChange={(e) => setWebsite(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="email">Email</label>
-          <input id="email" type="email" value={email ?? ""} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourcompany.com" />
-          <p className="hint">Used to prefill the recipient when testing an email connection under Connections.</p>
-        </div>
-        <div className="field">
-          <label htmlFor="wa">WhatsApp number for click-to-chat</label>
-          <input id="wa" value={waNumber ?? ""} onChange={(e) => setWaNumber(e.target.value)} />
-        </div>
-        <button className="btn primary" onClick={save}>
-          Save project
-        </button>
-        {saved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
-        {error && (
-          <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-            {error}
-          </p>
-        )}
       </section>
 
       <TeamSettings orgId={project.org_id} />
