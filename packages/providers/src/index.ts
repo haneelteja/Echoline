@@ -5,6 +5,7 @@ export * from "./router/taskProfiles";
 export * from "./router/qualityTiers";
 export * from "./router/openRouterCatalog";
 export * from "./router/multiProviderCatalog";
+export * from "./rateLimit";
 // registerWebhook360Messenger has no polymorphic equivalent across other
 // WhatsApp providers (Meta/Twilio/360dialog webhooks are configured in
 // their own dashboards, not via an API call) — direct export rather than

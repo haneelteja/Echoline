@@ -57,15 +57,13 @@ function masterKey() {
 // code path that assumes at most one (e.g. whatsappWorker.ts's .maybeSingle()
 // lookup). AI is exempt — multiple AI connections may usefully stay
 // "connected" at once; see the connect route's own comment on this.
-async function demoteSiblingConnections(supabase: any, projectId: string, kind: string, keepConnId: string): Promise<void> {
+async function demoteSiblingConnections(supabase: any, projectId: string, kind: string, keepConnId?: string): Promise<void> {
   if (kind === "ai") return;
-  await supabase
-    .from("provider_connections")
-    .update({ status: "disconnected", webhook_warning: null })
-    .eq("project_id", projectId)
-    .eq("kind", kind)
-    .eq("status", "connected")
-    .neq("id", keepConnId);
+  let query = supabase.from("provider_connections").update({ status: "disconnected", webhook_warning: null }).eq("project_id", projectId).eq("kind", kind).eq("status", "connected");
+  // The create route calls this before the new row exists yet (nothing to
+  // exclude); /test calls it on an existing row it wants to keep connected.
+  if (keepConnId) query = query.neq("id", keepConnId);
+  await query;
 }
 
 async function safeFetchMetaQuality(
@@ -175,18 +173,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     // was connected/reconnected most recently when more than one qualifies.
     // Guarded on testResult.ok so a failed new attempt never disconnects a
     // working existing connection.
-    if (testResult.ok && body.kind !== "ai") {
-      await req.supabase
-        .from("provider_connections")
-        // webhook_warning cleared too — otherwise a disconnected row can keep
-        // showing a stale "Replies unavailable" badge on the Channels page
-        // forever, since GET /connections returns every row regardless of
-        // status and the UI doesn't filter them out.
-        .update({ status: "disconnected", webhook_warning: null })
-        .eq("project_id", id)
-        .eq("kind", body.kind)
-        .eq("status", "connected");
-    }
+    if (testResult.ok) await demoteSiblingConnections(req.supabase, id, body.kind);
 
     // Unlike Meta/Twilio/360dialog (webhook URL configured in their own
     // dashboard), 360Messenger exposes a settings API for this — register it

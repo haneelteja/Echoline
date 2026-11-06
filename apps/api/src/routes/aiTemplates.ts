@@ -1,9 +1,19 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { z } from "zod";
 import { getAiCompleter, getEmbedder, getImageGenerator } from "@echoline/providers";
 import { sendDbError } from "../errors.js";
 import { checkAiUsageLimit, recordAiUsage } from "../aiUsage.js";
 import { getAiConnections, selectProviderAndModel, estimateTokens, type AiConnection } from "../aiRouter.js";
+
+/** Shared by every route below — sends the 429 itself and returns false when
+ * the org is over its monthly AI call cap, so each call site just does
+ * `if (!(await enforceAiUsageLimit(orgId, reply))) return;`. */
+async function enforceAiUsageLimit(orgId: string, reply: FastifyReply): Promise<boolean> {
+  const usage = await checkAiUsageLimit(orgId);
+  if (usage.ok) return true;
+  reply.code(429).send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
+  return false;
+}
 
 /** Strips a ```json ... ``` fence if the model wrapped its output in one
  * despite being asked for JSON only — common enough across providers that
@@ -137,12 +147,7 @@ export const aiTemplatesRoutes: FastifyPluginAsync = async (app) => {
     if (!project) return reply.code(404).send({ error: "not_found" });
     const orgId = (project as any).org_id as string;
 
-    const usage = await checkAiUsageLimit(orgId);
-    if (!usage.ok) {
-      return reply
-        .code(429)
-        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
-    }
+    if (!(await enforceAiUsageLimit(orgId, reply))) return;
 
     const isEmail = body.channel === "email";
     const kbContext = await buildKbContext(req.supabase, id, `${body.goal} ${body.extra ?? ""}`.trim(), embeddingConnection(connections));
@@ -199,12 +204,7 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
     if (!project) return reply.code(404).send({ error: "not_found" });
     const orgId = (project as any).org_id as string;
 
-    const usage = await checkAiUsageLimit(orgId);
-    if (!usage.ok) {
-      return reply
-        .code(429)
-        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
-    }
+    if (!(await enforceAiUsageLimit(orgId, reply))) return;
 
     const { data: current, error: fetchErr } = await req.supabase
       .from("templates")
@@ -265,12 +265,7 @@ Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`;
     if (!project) return reply.code(404).send({ error: "not_found" });
     const p = project as { name: string; brand: string | null; org_id: string };
 
-    const usage = await checkAiUsageLimit(p.org_id);
-    if (!usage.ok) {
-      return reply
-        .code(429)
-        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
-    }
+    if (!(await enforceAiUsageLimit(p.org_id, reply))) return;
 
     const prompt = `You are a B2B outreach analyst for ${p.brand || p.name}. Here are campaign stats as JSON:
 ${JSON.stringify(body.stats)}
@@ -302,12 +297,7 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
     if (!project) return reply.code(404).send({ error: "not_found" });
     const orgId = (project as any).org_id as string;
 
-    const usage = await checkAiUsageLimit(orgId);
-    if (!usage.ok) {
-      return reply
-        .code(429)
-        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
-    }
+    if (!(await enforceAiUsageLimit(orgId, reply))) return;
 
     let image: { base64: string; mimeType: string };
     try {
@@ -361,12 +351,7 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
     if (!project) return reply.code(404).send({ error: "not_found" });
     const orgId = (project as any).org_id as string;
 
-    const usage = await checkAiUsageLimit(orgId);
-    if (!usage.ok) {
-      return reply
-        .code(429)
-        .send({ error: "ai_usage_limit_reached", message: `This org has reached its AI usage limit for this month (${usage.used}/${usage.limit} calls).` });
-    }
+    if (!(await enforceAiUsageLimit(orgId, reply))) return;
 
     const lastUserMessage = body.messages.filter((m) => m.role === "user").pop()?.content ?? "";
     const kbContext = await buildKbContext(req.supabase, id, lastUserMessage, embeddingConnection(connections));

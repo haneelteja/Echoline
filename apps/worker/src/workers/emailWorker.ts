@@ -16,7 +16,7 @@ import { fill, fillPlainText, emailHTML, buildUnsubscribeHeaders, STAGE_STATUS_K
 import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
-import { checkProviderRateLimit } from "../rateLimit.js";
+import { checkProviderRateLimit } from "@echoline/providers";
 import { SEND_EMAIL_QUEUE, type SendJobData } from "../queues.js";
 import { isTestSendMode, testSendEmail } from "../testSendMode.js";
 

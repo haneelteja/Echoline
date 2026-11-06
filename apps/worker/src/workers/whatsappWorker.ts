@@ -6,7 +6,7 @@ import { STAGE_STATUS_KEYS, normPhone, fill } from "@echoline/core";
 import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
-import { checkProviderRateLimit } from "../rateLimit.js";
+import { checkProviderRateLimit } from "@echoline/providers";
 import { SEND_WHATSAPP_QUEUE, type SendJobData } from "../queues.js";
 import { isTestSendMode, testSendWhatsApp } from "../testSendMode.js";
 
