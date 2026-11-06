@@ -365,6 +365,7 @@ function ColumnHead({
   filterValue,
   onFilterChange,
   onSortChange,
+  className,
 }: {
   columnKey: ColumnKey;
   label: string;
@@ -376,11 +377,15 @@ function ColumnHead({
   filterValue: string;
   onFilterChange: (key: ColumnKey, value: string) => void;
   onSortChange: (key: ColumnKey, dir: SortDirection) => void;
+  // Lets individual columns progressively hide on narrower screens (see the
+  // matching `hidden ...:table-cell` classes on each column's TableHead/
+  // TableCell pair below) instead of the table always overflowing sideways.
+  className?: string;
 }) {
   const index = sort.findIndex((s) => s.key === columnKey);
   const dir = index >= 0 ? sort[index].dir : null;
   return (
-    <TableHead>
+    <TableHead className={className}>
       <div className="flex items-center gap-1">
         {Icon && <Icon className={cn("h-3.5 w-3.5", iconClassName)} />}
         <span>{label}</span>
@@ -1003,7 +1008,17 @@ export default function ContactsPage() {
                 </TableHead>
               )}
               <ColumnHead columnKey="name" label="Business" icon={Users} iconClassName="text-muted-foreground" sort={sort} filterValue={columnFilters.name} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
-              <ColumnHead columnKey="area" label="Location" icon={MapPin} iconClassName="text-muted-foreground" sort={sort} filterValue={columnFilters.area} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              <ColumnHead
+                columnKey="area"
+                label="Location"
+                icon={MapPin}
+                iconClassName="text-muted-foreground"
+                sort={sort}
+                filterValue={columnFilters.area}
+                onFilterChange={setColumnFilter}
+                onSortChange={setColumnSort}
+                className="hidden 2xl:table-cell"
+              />
               <ColumnHead
                 columnKey="created_at"
                 label="Lead added"
@@ -1013,9 +1028,10 @@ export default function ContactsPage() {
                 filterValue={columnFilters.created_at}
                 onFilterChange={setColumnFilter}
                 onSortChange={setColumnSort}
+                className="hidden 2xl:table-cell"
               />
               {activeTab !== "whatsapp" && (
-                <TableHead>
+                <TableHead className="hidden lg:table-cell">
                   <span className="inline-flex items-center gap-1.5">
                     <Mail className="h-3.5 w-3.5 text-sky-600" />
                     Email
@@ -1023,7 +1039,7 @@ export default function ContactsPage() {
                 </TableHead>
               )}
               {activeTab !== "email" && (
-                <TableHead>
+                <TableHead className="hidden lg:table-cell">
                   <span className="inline-flex items-center gap-1.5">
                     <MessageCircle className="h-3.5 w-3.5 text-teal-600" />
                     WhatsApp
@@ -1056,6 +1072,7 @@ export default function ContactsPage() {
                   filterValue={columnFilters.next_email}
                   onFilterChange={setColumnFilter}
                   onSortChange={setColumnSort}
+                  className="hidden xl:table-cell"
                 />
               )}
               {activeTab !== "email" && (
@@ -1084,6 +1101,7 @@ export default function ContactsPage() {
                   filterValue={columnFilters.next_whatsapp}
                   onFilterChange={setColumnFilter}
                   onSortChange={setColumnSort}
+                  className="hidden xl:table-cell"
                 />
               )}
               <ColumnHead
@@ -1097,8 +1115,9 @@ export default function ContactsPage() {
                 filterValue={columnFilters.sentiment}
                 onFilterChange={setColumnFilter}
                 onSortChange={setColumnSort}
+                className="hidden sm:table-cell"
               />
-              <TableHead>
+              <TableHead className="hidden md:table-cell">
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                   Status log
@@ -1128,7 +1147,7 @@ export default function ContactsPage() {
                       <span className="truncate">{c.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="hidden text-muted-foreground 2xl:table-cell">
                     {c.area ? (
                       <span className="inline-flex items-center gap-1">
                         <MapPin className="h-3 w-3 shrink-0 opacity-60" />
@@ -1138,7 +1157,7 @@ export default function ContactsPage() {
                       "—"
                     )}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                  <TableCell className="hidden whitespace-nowrap text-muted-foreground 2xl:table-cell">
                     {new Date(c.created_at).toLocaleString(undefined, {
                       year: "numeric",
                       month: "short",
@@ -1148,7 +1167,7 @@ export default function ContactsPage() {
                     })}
                   </TableCell>
                   {activeTab !== "whatsapp" && (
-                    <TableCell className="max-w-[180px] truncate text-muted-foreground" title={c.email ?? undefined}>
+                    <TableCell className="hidden max-w-[180px] truncate text-muted-foreground lg:table-cell" title={c.email ?? undefined}>
                       {c.email ? (
                         <span className="inline-flex items-center gap-1.5">
                           <Mail className="h-3 w-3 shrink-0 opacity-50" />
@@ -1160,7 +1179,7 @@ export default function ContactsPage() {
                     </TableCell>
                   )}
                   {activeTab !== "email" && (
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                    <TableCell className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">
                       {c.phone ? (
                         <span className="inline-flex items-center gap-1.5">
                           <MessageCircle className="h-3 w-3 shrink-0 opacity-50" />
@@ -1177,7 +1196,7 @@ export default function ContactsPage() {
                     </TableCell>
                   )}
                   {activeTab !== "whatsapp" && (
-                    <TableCell>
+                    <TableCell className="hidden xl:table-cell">
                       <NextSendCell due={dueMaps.emDue.get(c.id) ?? null} withinWindow={withinSendWindow} windowLabel={windowLabel} />
                     </TableCell>
                   )}
@@ -1187,14 +1206,14 @@ export default function ContactsPage() {
                     </TableCell>
                   )}
                   {activeTab !== "email" && (
-                    <TableCell>
+                    <TableCell className="hidden xl:table-cell">
                       <NextSendCell due={dueMaps.waDue.get(c.id) ?? null} withinWindow={withinSendWindow} windowLabel={windowLabel} />
                     </TableCell>
                   )}
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <SentimentPicker value={c.sentiment} onChange={(v) => updateSentiment(c.id, v)} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <button
                       className={cn(
                         "group flex max-w-[190px] flex-col items-start gap-0.5 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors",
