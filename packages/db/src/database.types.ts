@@ -57,6 +57,7 @@ export interface ProjectRow {
   wa_number: string | null;
   accent: string | null;
   timezone: string;
+  test_send_mode: boolean;
   created_at: string;
 }
 

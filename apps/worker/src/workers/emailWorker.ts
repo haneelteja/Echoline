@@ -172,7 +172,8 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     // the real lead, with the subject tagged so a shared test inbox stays
     // legible across many different leads/steps.
     let toEmail = c.email!;
-    if (isTestSendMode()) {
+    const testMode = isTestSendMode(p.test_send_mode);
+    if (testMode) {
       subject = `[TEST → ${c.name} <${c.email}>, step ${step}] ${subject}`;
       toEmail = testSendEmail();
     }
@@ -214,7 +215,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
         contact_id: contactId,
         channel: "em",
         event_type: "sent",
-        payload: { step, providerMessageId: result.providerMessageId, test: isTestSendMode() },
+        payload: { step, providerMessageId: result.providerMessageId, test: testMode },
       }),
     ]);
     log.info({ messageId, contactId, step }, "email sent");

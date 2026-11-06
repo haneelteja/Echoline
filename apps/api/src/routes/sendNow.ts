@@ -302,7 +302,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
 
         // Testing-phase safety valve: redirect to a fixed test inbox instead
         // of the real lead — see testSendMode.ts.
-        const testMode = isTestSendMode();
+        const testMode = isTestSendMode(p.test_send_mode);
         let toEmail = c.email!;
         if (testMode) {
           subject = `[TEST → ${c.name} <${c.email}>] ${subject}`;
@@ -347,7 +347,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
 
       // Testing-phase safety valve: redirect to a fixed test number instead
       // of the real lead — see testSendMode.ts.
-      const testMode = isTestSendMode();
+      const testMode = isTestSendMode(p.test_send_mode);
       const toPhone = testMode ? testSendWhatsApp() : phone;
 
       let providerMessageId: string;

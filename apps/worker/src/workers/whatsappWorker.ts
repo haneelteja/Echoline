@@ -116,7 +116,7 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
     // shared test number stays legible); an Approved Meta template's body is
     // fixed by Meta and can't be altered, so the real lead is only visible
     // via message_events.payload for those.
-    const testMode = isTestSendMode();
+    const testMode = isTestSendMode(pr.test_send_mode);
     const toPhone = testMode ? testSendWhatsApp() : phone;
     const fillCtx = {
       project: { name: pr.name, brand: pr.brand, senderName: pr.sender_name, website: pr.website, waNumber: pr.wa_number, accent: pr.accent },

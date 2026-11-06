@@ -1,14 +1,24 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Plus } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
+import { createClient } from "@/lib/supabase/client";
 import { TeamSettings } from "@/components/TeamSettings";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+
+// Mirrors the server-side check in apps/api/src/routes/projects.ts — hiding
+// the control here is just so nobody else is confused by a toggle they can't
+// use; the API independently refuses the write regardless of what the UI sends.
+const TEST_SEND_MODE_OPERATOR_EMAIL = "pega2023test@gmail.com";
 
 export default function ProjectSettingsPage() {
   const { pid, project, setPid, refreshProjects } = useWorkspace();
+  const supabase = useMemo(() => createClient(), []);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [senderName, setSenderName] = useState("");
@@ -18,6 +28,14 @@ export default function ProjectSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
+  const [testSendMode, setTestSendMode] = useState(true);
+  const [savingTestSendMode, setSavingTestSendMode] = useState(false);
+  const [testSendModeError, setTestSendModeError] = useState<string | null>(null);
+  const [confirmGoLive, setConfirmGoLive] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserEmail(data.user?.email ?? null));
+  }, [supabase]);
 
   // project loads async (null on first render if this page loads directly,
   // e.g. a refresh) — useState's initial value only applies on the very
@@ -32,6 +50,7 @@ export default function ProjectSettingsPage() {
     setWebsite(project.website ?? "");
     setEmail(project.email ?? "");
     setWaNumber(project.wa_number ?? "");
+    setTestSendMode(project.test_send_mode);
   }, [project]);
 
   if (!project) return <div className="empty">Loading…</div>;
@@ -49,6 +68,32 @@ export default function ProjectSettingsPage() {
       await refreshProjects();
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't edit project settings." : "Save failed.");
+    }
+  }
+
+  // Turning test mode OFF means every subsequent send — automated sequence
+  // steps and manual "Send now" alike — goes to the real lead's actual
+  // email/WhatsApp number instead of the fixed test inbox. That's a real,
+  // hard-to-take-back action (a lead who's already been messaged has been
+  // messaged), so it goes through a confirm dialog; turning it back ON is
+  // the safe direction and applies immediately.
+  async function setLive(next: boolean) {
+    if (!pid) return;
+    setSavingTestSendMode(true);
+    setTestSendModeError(null);
+    try {
+      await apiFetch(`/v1/projects/${pid}`, { method: "PATCH", body: JSON.stringify({ testSendMode: !next }) });
+      setTestSendMode(!next);
+      setConfirmGoLive(false);
+      await refreshProjects();
+    } catch (e) {
+      setTestSendModeError(
+        e instanceof ApiError && e.status === 403
+          ? "Only the platform operator account can change this."
+          : "Couldn't update test send mode."
+      );
+    } finally {
+      setSavingTestSendMode(false);
     }
   }
 
@@ -114,6 +159,72 @@ export default function ProjectSettingsPage() {
           )}
         </div>
       </section>
+
+      {currentUserEmail === TEST_SEND_MODE_OPERATOR_EMAIL && (
+        <section className="panel" style={{ maxWidth: 820 }}>
+          <h2>Sending</h2>
+          <p className="hint" style={{ marginBottom: 14 }}>
+            Visible only to the platform operator account.
+          </p>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Test send mode</div>
+              <p className="small muted" style={{ maxWidth: "48ch", marginTop: 2 }}>
+                {testSendMode
+                  ? "On — every email and WhatsApp send for this project (automated sequence and manual \"Send now\") is redirected to a fixed test inbox/number, never the real lead."
+                  : "Off — this project sends for real. Leads in this project receive actual emails and WhatsApp messages."}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!testSendMode}
+              disabled={savingTestSendMode}
+              onClick={() => (testSendMode ? setConfirmGoLive(true) : setLive(false))}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50",
+                testSendMode ? "border-border bg-muted" : "border-transparent bg-primary"
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                  testSendMode ? "translate-x-1" : "translate-x-6"
+                )}
+              />
+            </button>
+          </div>
+          {testSendModeError && (
+            <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+              {testSendModeError}
+            </p>
+          )}
+        </section>
+      )}
+
+      <Dialog open={confirmGoLive} onOpenChange={(open) => !open && !savingTestSendMode && setConfirmGoLive(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Turn off test send mode?
+            </DialogTitle>
+            <DialogDescription>
+              Every lead in <strong>{project.name}</strong> will start receiving real emails and WhatsApp messages —
+              both the automated sequence and manual &quot;Send now&quot; sends. This can&apos;t be undone for
+              messages already sent.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmGoLive(false)} disabled={savingTestSendMode}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => setLive(true)} disabled={savingTestSendMode}>
+              Send for real
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <TeamSettings orgId={project.org_id} />
     </>

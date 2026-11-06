@@ -1,13 +1,19 @@
 /**
  * Safety valve for the current testing phase: redirects every real send to a
  * fixed test inbox/number instead of the contact's actual email/phone.
- * Defaults to ON (safe by default) — unset TEST_SEND_MODE entirely, or set it
- * to "false", only once this deployment is actually ready to message real
- * leads. Must be set identically on echoline-api and echoline-worker (the
- * same env vars control the automated sequence and this manual send path).
+ * Two-key system: the TEST_SEND_MODE env var is a deployment-wide switch
+ * that defaults to ON (safe) — while it's on (unset, or anything other than
+ * exactly "false"), every project stays in test mode regardless of its own
+ * setting. Only once someone has deliberately turned it off deployment-wide
+ * does each project's own `test_send_mode` column (editable in Project
+ * settings, restricted to one operator account — see projects.ts) take over
+ * as the per-project gate, itself defaulting to true. Must be set identically
+ * on echoline-api and echoline-worker (the same env var controls both the
+ * automated sequence and this manual send path).
  */
-export function isTestSendMode(): boolean {
-  return process.env.TEST_SEND_MODE !== "false";
+export function isTestSendMode(projectTestSendMode: boolean | null | undefined): boolean {
+  if (process.env.TEST_SEND_MODE !== "false") return true;
+  return projectTestSendMode !== false;
 }
 
 export function testSendEmail(): string {
