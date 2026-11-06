@@ -90,6 +90,7 @@ export interface ContactRow {
   wa_track: string | null;
   wa_manual_last: boolean;
   sentiment: string;
+  created_at: string;
 }
 
 export interface StatusLogEntry {

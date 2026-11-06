@@ -2,6 +2,7 @@
 import { useMemo, useState, type ComponentType } from "react";
 import {
   CalendarClock,
+  CalendarPlus,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -15,6 +16,7 @@ import {
   MessageCircle,
   MessagesSquare,
   Plus,
+  RotateCcw,
   Search,
   Send,
   Trash2,
@@ -126,7 +128,7 @@ function BusinessAvatar({ name }: { name: string }) {
   );
 }
 
-type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment" | "next_email" | "next_whatsapp";
+type ColumnKey = "name" | "area" | "em_status" | "wa_status" | "sentiment" | "next_email" | "next_whatsapp" | "created_at";
 
 const EMPTY_FILTERS: Record<ColumnKey, string> = {
   name: "",
@@ -136,6 +138,7 @@ const EMPTY_FILTERS: Record<ColumnKey, string> = {
   sentiment: "",
   next_email: "",
   next_whatsapp: "",
+  created_at: "",
 };
 
 // Fixed buckets rather than the literal relative-time string ("in 3 days" is
@@ -341,6 +344,7 @@ function sortValue(c: ContactRow, key: ColumnKey, dueMaps?: DueMaps): string {
   if (key === "sentiment") return c.sentiment;
   if (key === "next_email") return dueMaps?.emDue.get(c.id)?.at ?? NO_DUE_SENTINEL;
   if (key === "next_whatsapp") return dueMaps?.waDue.get(c.id)?.at ?? NO_DUE_SENTINEL;
+  if (key === "created_at") return c.created_at;
   return c.name;
 }
 
@@ -434,6 +438,9 @@ export default function ContactsPage() {
   const [confirmDelete, setConfirmDelete] = useState<{ ids: string[] } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const kpis = useMemo(() => {
     const total = contacts.length;
@@ -565,6 +572,8 @@ export default function ContactsPage() {
       if (columnFilters.sentiment && c.sentiment !== columnFilters.sentiment) return false;
       if (columnFilters.next_email && dueBucket(dueMaps.emDue.get(c.id) ?? null) !== columnFilters.next_email) return false;
       if (columnFilters.next_whatsapp && dueBucket(dueMaps.waDue.get(c.id) ?? null) !== columnFilters.next_whatsapp) return false;
+      if (columnFilters.created_at && !new Date(c.created_at).toLocaleString().toLowerCase().includes(columnFilters.created_at.toLowerCase()))
+        return false;
       // The Invalid leads tab is its own fixed definition (no valid email AND
       // no valid WhatsApp number) — the per-channel stage tabs don't apply
       // to it and aren't shown in its UI.
@@ -692,6 +701,26 @@ export default function ContactsPage() {
     }
   }
 
+  // Resets every lead's email/WhatsApp status, invalid flags, reply/sentiment,
+  // and send history back to "Not contacted" — for re-running a test campaign
+  // from scratch. Also clears the project's `messages` rows server-side so
+  // the scheduler can actually resend already-"sent" steps once stages reset,
+  // not just show a reset status with no new sends happening.
+  async function resetAllStatus() {
+    if (!pid) return;
+    setResetting(true);
+    setResetError(null);
+    try {
+      await apiFetch(`/v1/projects/${pid}/contacts/reset-status`, { method: "POST" });
+      setConfirmReset(false);
+      await refreshProjectData();
+    } catch (e) {
+      setResetError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't reset lead status." : "Couldn't reset lead status.");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   // contacts defaults to [] before the first fetch completes, which looks
   // identical to a genuinely empty project — loadingProject disambiguates
   // "still loading" from "actually zero leads" (same pattern as dashboard/page.tsx).
@@ -715,6 +744,10 @@ export default function ContactsPage() {
           </span>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setConfirmReset(true)}>
+            <RotateCcw className="h-4 w-4" />
+            Reset status
+          </Button>
           <Button variant="secondary" onClick={() => setImporting(true)}>
             <Upload className="h-4 w-4" />
             Import Excel
@@ -845,6 +878,31 @@ export default function ContactsPage() {
         </Dialog>
       )}
 
+      {confirmReset && (
+        <Dialog open onOpenChange={(open) => !open && !resetting && setConfirmReset(false)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reset status for all {contacts.length} leads?</DialogTitle>
+              <DialogDescription>
+                This sets every lead&apos;s email and WhatsApp status, invalid flags, reply/sentiment, and manual-send
+                markers back to &quot;Not contacted&quot;, and permanently deletes their send history — there&apos;s no
+                undo. The sequence will start over from step 1 for every lead on its next run.
+              </DialogDescription>
+            </DialogHeader>
+            {resetError && <p className="text-sm text-destructive">{resetError}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmReset(false)} disabled={resetting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={resetAllStatus} disabled={resetting}>
+                {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                Reset all status
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {importing && pid && <ImportLeadsDialog pid={pid} onClose={() => setImporting(false)} onImported={refreshProjectData} />}
 
       {statusLogContact && pid && (
@@ -946,6 +1004,16 @@ export default function ContactsPage() {
               )}
               <ColumnHead columnKey="name" label="Business" icon={Users} iconClassName="text-muted-foreground" sort={sort} filterValue={columnFilters.name} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
               <ColumnHead columnKey="area" label="Location" icon={MapPin} iconClassName="text-muted-foreground" sort={sort} filterValue={columnFilters.area} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              <ColumnHead
+                columnKey="created_at"
+                label="Lead added"
+                icon={CalendarPlus}
+                iconClassName="text-muted-foreground"
+                sort={sort}
+                filterValue={columnFilters.created_at}
+                onFilterChange={setColumnFilter}
+                onSortChange={setColumnSort}
+              />
               {activeTab !== "whatsapp" && (
                 <TableHead>
                   <span className="inline-flex items-center gap-1.5">
@@ -1069,6 +1137,15 @@ export default function ContactsPage() {
                     ) : (
                       "—"
                     )}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {new Date(c.created_at).toLocaleString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </TableCell>
                   {activeTab !== "whatsapp" && (
                     <TableCell className="max-w-[180px] truncate text-muted-foreground" title={c.email ?? undefined}>
