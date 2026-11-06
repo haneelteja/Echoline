@@ -4,6 +4,7 @@ import {
   Check,
   ChevronRight,
   File,
+  Folder,
   FolderPlus,
   Globe,
   Home,
@@ -21,6 +22,7 @@ import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useKbAssets } from "@/lib/useKbAssets";
 import { UploadProgress } from "@/components/UploadProgress";
 import { apiFetch, ApiError } from "@/lib/apiClient";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -222,15 +224,15 @@ export default function KbPage() {
           </div>
         </CardContent>
       </Card>
-      <p className="hint" style={{ marginBottom: 16 }}>
+      <p className="hint mb-4">
         SKU management is on the backlog, planned alongside real pgvector retrieval for AI context (see
         docs/ROADMAP.md). AI template generation reads these brand facts as plain text.
       </p>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
-        <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
+      <section className="panel">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2>Files</h2>
-          <div className="row small" style={{ gap: 8 }}>
+          <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setAddingFolder((v) => !v)}>
               <FolderPlus className="h-3.5 w-3.5" />
               New folder
@@ -243,15 +245,21 @@ export default function KbPage() {
           </div>
         </div>
 
-        <div className="row small" style={{ gap: 4, marginBottom: 14, color: "var(--muted)" }}>
-          <button className="row small" style={{ gap: 4, color: currentFolderId ? "var(--muted)" : "var(--ink)" }} onClick={() => goToFolder(null)}>
+        <div className="mb-4 flex flex-wrap items-center gap-1 text-sm">
+          <button
+            className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-accent", currentFolderId ? "text-muted-foreground" : "font-medium text-foreground")}
+            onClick={() => goToFolder(null)}
+          >
             <Home className="h-3.5 w-3.5" />
             Files
           </button>
           {breadcrumb.map((b, i) => (
-            <span key={b.id} className="row small" style={{ gap: 4 }}>
-              <ChevronRight className="h-3 w-3" />
-              <button style={{ color: i === breadcrumb.length - 1 ? "var(--ink)" : "var(--muted)" }} onClick={() => goToFolder(b.id)}>
+            <span key={b.id} className="flex items-center gap-1">
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <button
+                className={cn("rounded-md px-1.5 py-1 hover:bg-accent", i === breadcrumb.length - 1 ? "font-medium text-foreground" : "text-muted-foreground")}
+                onClick={() => goToFolder(b.id)}
+              >
                 {b.name}
               </button>
             </span>
@@ -259,14 +267,14 @@ export default function KbPage() {
         </div>
 
         {addingFolder && (
-          <div className="row" style={{ marginBottom: 14, flexWrap: "nowrap" }}>
+          <div className="mb-4 flex flex-nowrap items-center gap-2">
             <Input
               autoFocus
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               placeholder="Folder name"
               onKeyDown={(e) => e.key === "Enter" && submitNewFolder()}
-              style={{ maxWidth: 240 }}
+              className="max-w-60"
             />
             <Button size="sm" onClick={submitNewFolder} disabled={!newFolderName.trim()}>
               Create
@@ -278,15 +286,10 @@ export default function KbPage() {
         )}
 
         {selected.size > 0 && (
-          <div
-            className="row"
-            style={{ justifyContent: "space-between", marginBottom: 14, padding: "10px 14px", borderRadius: 8, background: "var(--bg)", border: "1px solid var(--line)" }}
-          >
-            <span className="small" style={{ fontWeight: 600 }}>
-              {selected.size} selected
-            </span>
-            <div className="row small" style={{ gap: 8 }}>
-              <Select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} style={{ height: 32, fontSize: 13 }}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-accent px-3.5 py-2.5">
+            <span className="text-sm font-semibold">{selected.size} selected</span>
+            <div className="flex items-center gap-2">
+              <Select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} className="h-8 text-sm">
                 <option value="">Move to…</option>
                 <option value="root">Files (root)</option>
                 {folders.map((f) => (
@@ -311,21 +314,20 @@ export default function KbPage() {
         )}
 
         {uploadQueue.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
+          <div className="mb-4">
             <UploadProgress items={uploadQueue} />
           </div>
         )}
 
-        {error && (
-          <p className="small" style={{ color: "var(--bad)", marginBottom: 12 }}>
-            {error}
-          </p>
-        )}
+        {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
         {loading ? (
           <p className="muted small">Loading…</p>
         ) : !childFolders.length && !childAssets.length ? (
-          <p className="muted small">Nothing here yet. Upload a photo or document, or create a folder.</p>
+          <div className="empty">
+            <FolderPlus className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p>Nothing here yet. Upload a photo or document, or create a folder.</p>
+          </div>
         ) : (
           <div className="grid g3">
             {childFolders.map((f) => {
@@ -333,22 +335,25 @@ export default function KbPage() {
               return (
                 <div
                   key={f.id}
-                  className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
-                  style={{ cursor: "pointer", position: "relative" }}
+                  className="group panel relative cursor-pointer transition-shadow hover:shadow-md"
                   onClick={() => goToFolder(f.id)}
                 >
-                  <b className="small">📁 {f.name}</b>
-                  <div className="small muted">{count ? `${count} item${count === 1 ? "" : "s"}` : "Empty"}</div>
-                  <button
-                    className="btn small danger"
-                    style={{ position: "absolute", top: 10, right: 10 }}
+                  <div className="flex items-center gap-2">
+                    <Folder className="h-5 w-5 shrink-0 text-primary" />
+                    <b className="small truncate">{f.name}</b>
+                  </div>
+                  <div className="small muted mt-1">{count ? `${count} item${count === 1 ? "" : "s"}` : "Empty"}</div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-2 h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (confirm(`Delete folder "${f.name}"? Subfolders are deleted too; files inside become unfiled.`)) deleteFolder(f.id);
                     }}
                   >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               );
             })}
@@ -393,48 +398,39 @@ function AssetCard({
 }) {
   return (
     <div
-      className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md"
-      style={{ position: "relative", cursor: "pointer", outline: selected ? "2px solid var(--email)" : undefined }}
+      className={cn("group panel relative cursor-pointer transition-shadow hover:shadow-md", selected && "ring-2 ring-primary")}
       onClick={onToggle}
     >
       <span
-        style={{
-          position: "absolute",
-          top: 10,
-          left: 10,
-          width: 20,
-          height: 20,
-          borderRadius: 5,
-          border: "1.5px solid " + (selected ? "var(--email)" : "var(--line)"),
-          background: selected ? "var(--email)" : "var(--panel)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
+        className={cn(
+          "absolute left-2.5 top-2.5 z-10 flex h-5 w-5 items-center justify-center rounded border",
+          selected ? "border-primary bg-primary" : "border-border bg-background"
+        )}
       >
-        {selected && <Check className="h-3 w-3" style={{ color: "#fff" }} />}
+        {selected && <Check className="h-3 w-3 text-primary-foreground" />}
       </span>
       {asset.kind === "image" ? (
-        <img src={asset.url} alt={asset.name} style={{ width: "100%", height: 110, objectFit: "cover", borderRadius: 8, marginBottom: 8 }} />
+        <img src={asset.url} alt={asset.name} className="mb-2 h-[110px] w-full rounded-md object-cover" />
       ) : (
-        <div className="row" style={{ height: 110, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-          <File className="h-10 w-10" style={{ color: "var(--muted)" }} />
+        <div className="mb-2 flex h-[110px] items-center justify-center rounded-md bg-muted">
+          <File className="h-10 w-10 text-muted-foreground" />
         </div>
       )}
-      <b className="small" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={asset.name}>
+      <b className="small block truncate" title={asset.name}>
         {asset.name}
       </b>
       <div className="small muted">{formatSize(asset.size_bytes)}</div>
-      <button
-        className="btn small danger"
-        style={{ position: "absolute", top: 10, right: 10 }}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute right-2 top-2 h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
         onClick={(e) => {
           e.stopPropagation();
           onDelete();
         }}
       >
-        <Trash2 className="h-3 w-3" />
-      </button>
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }

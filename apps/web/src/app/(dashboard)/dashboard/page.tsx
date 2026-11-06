@@ -293,7 +293,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="c7 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+        <section className="c7 panel">
           <div className="card-h">
             <div>
               <h2>Channel funnels</h2>
@@ -304,7 +304,7 @@ export default function DashboardPage() {
           <ChannelFunnel ch="wa" label="WhatsApp" contacts={contacts} color="var(--wa)" />
         </section>
 
-        <section className="c5 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+        <section className="c5 panel">
           <div className="card-h">
             <div>
               <h2>Insights</h2>
@@ -330,10 +330,10 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <section className="c8 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+        <section className="c8 panel">
           <TrendChart events={events} />
         </section>
-        <section className="c4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+        <section className="c4 panel">
           <div className="card-h">
             <div>
               <h2>Coming up</h2>
@@ -343,7 +343,7 @@ export default function DashboardPage() {
           <ComingUp contacts={stats.coreContacts} coreSeq={stats.coreSeq} dueE={dueE} dueW={dueW} />
         </section>
 
-        <section className="c7 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+        <section className="c7 panel">
           <div className="card-h">
             <div>
               <h2>Segments</h2>
@@ -381,7 +381,7 @@ export default function DashboardPage() {
             <p className="muted small">Segments appear once leads have categories.</p>
           )}
         </section>
-        <section className="c5 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+        <section className="c5 panel">
           <div className="card-h">
             <div>
               <h2>Data health</h2>
@@ -395,7 +395,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="c12 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+        <section className="c12 panel">
           <div className="card-h">
             <div>
               <h2>Areas</h2>

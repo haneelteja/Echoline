@@ -74,7 +74,7 @@ export default function ProjectSettingsPage() {
           setPid(created.id);
         }}
       />
-      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-all hover:shadow-md" style={{ maxWidth: 680 }}>
+      <section className="panel" style={{ maxWidth: 680 }}>
         <div className="field">
           <label htmlFor="name">Project name</label>
           <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
