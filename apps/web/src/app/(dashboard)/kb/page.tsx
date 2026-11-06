@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronRight,
+  Download,
+  ExternalLink,
   File,
   Folder,
   FolderPlus,
@@ -25,6 +27,7 @@ import { apiFetch, ApiError } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -126,6 +129,7 @@ export default function KbPage() {
   const [newFolderName, setNewFolderName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [moveTarget, setMoveTarget] = useState("");
+  const [previewing, setPreviewing] = useState<KbAssetRow | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const breadcrumb = useMemo(() => {
@@ -374,12 +378,64 @@ export default function KbPage() {
                 asset={a}
                 selected={selected.has(a.id)}
                 onToggle={() => toggleSelected(a.id)}
+                onPreview={() => setPreviewing(a)}
                 onDelete={() => confirm(`Delete "${a.name}"?`) && deleteAsset(a.id)}
               />
             ))}
           </div>
         )}
       </section>
+
+      <Dialog open={!!previewing} onOpenChange={(open) => !open && setPreviewing(null)}>
+        <DialogContent className="max-w-2xl">
+          {previewing && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="truncate pr-6" title={previewing.name}>
+                  {previewing.name}
+                </DialogTitle>
+              </DialogHeader>
+              {previewing.kind === "image" ? (
+                <img src={previewing.url} alt={previewing.name} className="max-h-[60vh] w-full rounded-md border border-border object-contain" />
+              ) : (
+                <div className="flex h-48 items-center justify-center rounded-md border border-border bg-muted">
+                  <File className="h-16 w-16 text-muted-foreground" />
+                </div>
+              )}
+              <p className="text-sm text-muted-foreground">{formatSize(previewing.size_bytes)}</p>
+              <DialogFooter className="sm:justify-between">
+                <Button
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (confirm(`Delete "${previewing.name}"?`)) {
+                      deleteAsset(previewing.id);
+                      setPreviewing(null);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" asChild>
+                    <a href={previewing.url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Open in new tab
+                    </a>
+                  </Button>
+                  <Button asChild>
+                    <a href={downloadUrl(previewing)}>
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </a>
+                  </Button>
+                </div>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -400,11 +456,13 @@ function AssetCard({
   asset,
   selected,
   onToggle,
+  onPreview,
   onDelete,
 }: {
   asset: KbAssetRow;
   selected: boolean;
   onToggle: () => void;
+  onPreview: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -423,13 +481,10 @@ function AssetCard({
       >
         {selected && <Check className="h-3 w-3 text-primary-foreground" />}
       </button>
-      {/* Storage objects are keyed by a random UUID (see uploadFiles in
-          useKbAssets.ts), not the original filename, so the plain public URL's
-          last path segment is that UUID — Supabase Storage's own `download`
-          query param is what tells it to respond with
-          Content-Disposition: ...filename="<name>" instead, so the file opens
-          /saves under the name the user actually uploaded it as. */}
-      <a href={downloadUrl(asset)} target="_blank" rel="noopener noreferrer" className="block cursor-pointer" title={`Open ${asset.name}`}>
+      {/* Opens a preview dialog first (shows the image / file + an open-in-new-
+          tab, download and delete action), rather than jumping straight to a
+          new tab — a wrong click no longer navigates away. */}
+      <button type="button" onClick={onPreview} className="block w-full cursor-pointer text-left" title={`Preview ${asset.name}`}>
         {asset.kind === "image" ? (
           <img src={asset.url} alt={asset.name} className="mb-2 h-[110px] w-full rounded-md object-cover" />
         ) : (
@@ -440,7 +495,7 @@ function AssetCard({
         <b className="small block truncate" title={asset.name}>
           {asset.name}
         </b>
-      </a>
+      </button>
       <div className="small muted">{formatSize(asset.size_bytes)}</div>
       <Button
         variant="ghost"
