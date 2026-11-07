@@ -96,6 +96,144 @@ function StatusBadge({ status, manual, onMarkReplied }: { status: ContactChannel
   );
 }
 
+/** One channel's status, prefixed with a small channel icon instead of
+ * "Email:"/"WhatsApp:" text — used inside the merged Status column so each
+ * channel's real status (including terminal ones like Bounced/Replied/
+ * Invalid, not just sent/not-sent) stays visible once em/wa status share a
+ * single cell. */
+function ChannelStatusLine({
+  icon: Icon,
+  iconClassName,
+  status,
+  manual,
+  onMarkReplied,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  iconClassName: string;
+  status: ContactChannelStatus;
+  manual?: boolean;
+  onMarkReplied: () => void;
+}) {
+  const StatusIcon = statusIcon(status);
+  const isTerminal = TERMINAL_GOOD.includes(status) || TERMINAL_BAD.includes(status);
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <Icon className={cn("h-2.5 w-2.5 shrink-0", iconClassName)} />
+      <Badge variant={statusVariant(status)} className="gap-1 px-1.5 py-0 text-[10px] font-semibold">
+        <StatusIcon className="h-2.5 w-2.5" />
+        {statusLabel(status)}
+      </Badge>
+      {manual && (
+        <Badge variant="outline" className="gap-1 px-1 py-0 text-[9px] text-muted-foreground" title="Most recently sent manually, via Send now">
+          <Hand className="h-2.5 w-2.5" />
+        </Badge>
+      )}
+      {!isTerminal && (
+        <button
+          className="rounded-full border border-dashed border-border px-1 py-0 text-[9px] font-semibold text-muted-foreground transition-colors hover:border-success hover:text-success"
+          title="Mark as replied by hand — stops further follow-ups on this channel. Stand-in until automated reply detection is live for this provider."
+          onClick={onMarkReplied}
+        >
+          Mark replied
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Merged Email+WhatsApp status cell (used whenever both channels are in
+ * view — the Database/Invalid-leads tabs). Collapses the common "nothing's
+ * happened yet" case into one badge; otherwise shows both channels' real
+ * statuses stacked, since a single sent/not-sent summary would lose terminal
+ * states (bounced, replied, invalid, opted out) that matter for filtering. */
+function CombinedStatusCell({
+  emStatus,
+  waStatus,
+  emManual,
+  waManual,
+  onMarkRepliedEmail,
+  onMarkRepliedWhatsapp,
+}: {
+  emStatus: ContactChannelStatus;
+  waStatus: ContactChannelStatus;
+  emManual?: boolean;
+  waManual?: boolean;
+  onMarkRepliedEmail: () => void;
+  onMarkRepliedWhatsapp: () => void;
+}) {
+  if (emStatus === "not_contacted" && waStatus === "not_contacted") {
+    return (
+      <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px] font-semibold">
+        <Clock className="h-2.5 w-2.5" />
+        Not contacted
+      </Badge>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <ChannelStatusLine icon={Mail} iconClassName="text-sky-600" status={emStatus} manual={emManual} onMarkReplied={onMarkRepliedEmail} />
+      <ChannelStatusLine icon={MessageCircle} iconClassName="text-teal-600" status={waStatus} manual={waManual} onMarkReplied={onMarkRepliedWhatsapp} />
+    </div>
+  );
+}
+
+/** Header for the merged Status column — two independent sort+filter
+ * controls (Email, WhatsApp) under one "Status" label, so filtering/sorting
+ * stays per-channel even though the cells below are merged. */
+function CombinedStatusHead({
+  sort,
+  columnFilters,
+  onFilterChange,
+  onSortChange,
+  emOptions,
+  waOptions,
+}: {
+  sort: { key: ColumnKey; dir: "asc" | "desc" }[];
+  columnFilters: Record<ColumnKey, string>;
+  onFilterChange: (key: ColumnKey, value: string) => void;
+  onSortChange: (key: ColumnKey, dir: SortDirection) => void;
+  emOptions: string[];
+  waOptions: string[];
+}) {
+  const emIndex = sort.findIndex((s) => s.key === "em_status");
+  const emDir = emIndex >= 0 ? sort[emIndex].dir : null;
+  const waIndex = sort.findIndex((s) => s.key === "wa_status");
+  const waDir = waIndex >= 0 ? sort[waIndex].dir : null;
+  return (
+    <TableHead>
+      <div className="flex items-center gap-1.5">
+        <span>Status</span>
+        <span className="flex items-center gap-0.5 border-l border-border pl-1.5">
+          <Mail className="h-3 w-3 text-sky-600" />
+          <SortIndicator direction={emDir} priority={emIndex >= 0 ? emIndex + 1 : undefined} />
+          <ColumnFilter
+            label="Email status"
+            dataType="select"
+            options={emOptions}
+            filterValue={columnFilters.em_status}
+            onFilterChange={(v) => onFilterChange("em_status", v)}
+            sortDirection={emDir}
+            onSortChange={(d) => onSortChange("em_status", d)}
+          />
+        </span>
+        <span className="flex items-center gap-0.5">
+          <MessageCircle className="h-3 w-3 text-teal-600" />
+          <SortIndicator direction={waDir} priority={waIndex >= 0 ? waIndex + 1 : undefined} />
+          <ColumnFilter
+            label="WhatsApp status"
+            dataType="select"
+            options={waOptions}
+            filterValue={columnFilters.wa_status}
+            onFilterChange={(v) => onFilterChange("wa_status", v)}
+            sortDirection={waDir}
+            onSortChange={(d) => onSortChange("wa_status", d)}
+          />
+        </span>
+      </div>
+    </TableHead>
+  );
+}
+
 // Deterministic per-business color + initials, purely a scanning aid for a
 // long list of otherwise-identical rows — same name always gets the same
 // color/letters, no state or randomness involved.
@@ -461,6 +599,10 @@ export default function ContactsPage() {
 
   const emStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.em_status)))).sort(), [contacts]);
   const waStatusOptions = useMemo(() => Array.from(new Set(contacts.map((c) => statusLabel(c.wa_status)))).sort(), [contacts]);
+  // Database/Invalid-leads tabs show both channels — merge their status
+  // columns into one. The Email-status/WhatsApp-status tabs already isolate
+  // to a single channel, so they keep their own single status column.
+  const bothChannels = activeTab !== "email" && activeTab !== "whatsapp";
 
   // Next email/WhatsApp send columns — same packages/core nextDue() the
   // scheduler itself uses, so "when will this actually go out" matches
@@ -1059,19 +1201,46 @@ export default function ContactsPage() {
                   </span>
                 </TableHead>
               )}
-              {activeTab !== "whatsapp" && (
-                <ColumnHead
-                  columnKey="em_status"
-                  label="Email status"
-                  icon={Mail}
-                  iconClassName="text-sky-600"
-                  dataType="select"
-                  options={emStatusOptions}
+              {bothChannels ? (
+                <CombinedStatusHead
                   sort={sort}
-                  filterValue={columnFilters.em_status}
+                  columnFilters={columnFilters}
                   onFilterChange={setColumnFilter}
                   onSortChange={setColumnSort}
+                  emOptions={emStatusOptions}
+                  waOptions={waStatusOptions}
                 />
+              ) : (
+                <>
+                  {activeTab !== "whatsapp" && (
+                    <ColumnHead
+                      columnKey="em_status"
+                      label="Email status"
+                      icon={Mail}
+                      iconClassName="text-sky-600"
+                      dataType="select"
+                      options={emStatusOptions}
+                      sort={sort}
+                      filterValue={columnFilters.em_status}
+                      onFilterChange={setColumnFilter}
+                      onSortChange={setColumnSort}
+                    />
+                  )}
+                  {activeTab !== "email" && (
+                    <ColumnHead
+                      columnKey="wa_status"
+                      label="WhatsApp status"
+                      icon={MessageCircle}
+                      iconClassName="text-teal-600"
+                      dataType="select"
+                      options={waStatusOptions}
+                      sort={sort}
+                      filterValue={columnFilters.wa_status}
+                      onFilterChange={setColumnFilter}
+                      onSortChange={setColumnSort}
+                    />
+                  )}
+                </>
               )}
               {activeTab !== "whatsapp" && (
                 <ColumnHead
@@ -1086,20 +1255,6 @@ export default function ContactsPage() {
                   onFilterChange={setColumnFilter}
                   onSortChange={setColumnSort}
                   className="hidden xl:table-cell"
-                />
-              )}
-              {activeTab !== "email" && (
-                <ColumnHead
-                  columnKey="wa_status"
-                  label="WhatsApp status"
-                  icon={MessageCircle}
-                  iconClassName="text-teal-600"
-                  dataType="select"
-                  options={waStatusOptions}
-                  sort={sort}
-                  filterValue={columnFilters.wa_status}
-                  onFilterChange={setColumnFilter}
-                  onSortChange={setColumnSort}
                 />
               )}
               {activeTab !== "email" && (
@@ -1203,19 +1358,34 @@ export default function ContactsPage() {
                       )}
                     </TableCell>
                   )}
-                  {activeTab !== "whatsapp" && (
+                  {bothChannels ? (
                     <TableCell>
-                      <StatusBadge status={c.em_status} manual={c.em_manual_last} onMarkReplied={() => markReplied(c.id, "email")} />
+                      <CombinedStatusCell
+                        emStatus={c.em_status}
+                        waStatus={c.wa_status}
+                        emManual={c.em_manual_last}
+                        waManual={c.wa_manual_last}
+                        onMarkRepliedEmail={() => markReplied(c.id, "email")}
+                        onMarkRepliedWhatsapp={() => markReplied(c.id, "whatsapp")}
+                      />
                     </TableCell>
+                  ) : (
+                    <>
+                      {activeTab !== "whatsapp" && (
+                        <TableCell>
+                          <StatusBadge status={c.em_status} manual={c.em_manual_last} onMarkReplied={() => markReplied(c.id, "email")} />
+                        </TableCell>
+                      )}
+                      {activeTab !== "email" && (
+                        <TableCell>
+                          <StatusBadge status={c.wa_status} manual={c.wa_manual_last} onMarkReplied={() => markReplied(c.id, "whatsapp")} />
+                        </TableCell>
+                      )}
+                    </>
                   )}
                   {activeTab !== "whatsapp" && (
                     <TableCell className="hidden xl:table-cell">
                       <NextSendCell due={dueMaps.emDue.get(c.id) ?? null} withinWindow={withinSendWindow} windowLabel={windowLabel} />
-                    </TableCell>
-                  )}
-                  {activeTab !== "email" && (
-                    <TableCell>
-                      <StatusBadge status={c.wa_status} manual={c.wa_manual_last} onMarkReplied={() => markReplied(c.id, "whatsapp")} />
                     </TableCell>
                   )}
                   {activeTab !== "email" && (
