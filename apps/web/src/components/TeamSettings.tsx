@@ -127,7 +127,7 @@ export function TeamSettings({ orgId }: { orgId: string }) {
   }
 
   return (
-    <Card className="mt-5">
+    <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <div>
           <CardTitle>Team</CardTitle>

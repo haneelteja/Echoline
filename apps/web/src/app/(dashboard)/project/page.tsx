@@ -132,17 +132,6 @@ export default function ProjectSettingsPage() {
 
   return (
     <>
-      <div className="top">
-        <div>
-          <h1>Project settings</h1>
-          <p>Identity used in templates and email branding.</p>
-        </div>
-        <Button variant="secondary" onClick={() => setCreatingProject(true)}>
-          <Plus className="h-4 w-4" />
-          New project
-        </Button>
-      </div>
-
       <CreateProjectDialog
         open={creatingProject}
         onOpenChange={setCreatingProject}
@@ -152,128 +141,148 @@ export default function ProjectSettingsPage() {
           setPid(created.id);
         }}
       />
-      <section className="panel" style={{ maxWidth: 820 }}>
-        <div className="grid g2">
-          <div className="field">
-            <label htmlFor="name">Project name</label>
-            <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="brand">Brand name in messages</label>
-            <input id="brand" value={brand ?? ""} onChange={(e) => setBrand(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="sender">Sender name</label>
-            <input id="sender" value={senderName ?? ""} onChange={(e) => setSenderName(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="website">Website</label>
-            <input id="website" value={website ?? ""} onChange={(e) => setWebsite(e.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input id="email" type="email" value={email ?? ""} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourcompany.com" />
-            <p className="hint">Used to prefill the recipient when testing an email connection under Connections.</p>
-          </div>
-          <div className="field">
-            <label htmlFor="wa">WhatsApp number for click-to-chat</label>
-            <input id="wa" value={waNumber ?? ""} onChange={(e) => setWaNumber(e.target.value)} />
-          </div>
-        </div>
-        <div style={{ marginTop: 20 }}>
-          <button className="btn primary" onClick={save}>
-            Save project
-          </button>
-          {saved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
-          {error && (
-            <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-              {error}
-            </p>
-          )}
-        </div>
-      </section>
 
-      {currentUserEmail === TEST_SEND_MODE_OPERATOR_EMAIL && (
-        <section className="panel" style={{ maxWidth: 820 }}>
-          <h2>Sending</h2>
-          <p className="hint" style={{ marginBottom: 14 }}>
-            Visible only to the platform operator account.
-          </p>
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>Test send mode</div>
-              <p className="small muted" style={{ maxWidth: "48ch", marginTop: 2 }}>
-                {testSendMode
-                  ? "On — every email and WhatsApp send for this project (automated sequence and manual \"Send now\") is redirected to a fixed test inbox/number, never the real lead."
-                  : "Off — this project sends for real. Leads in this project receive actual emails and WhatsApp messages."}
-              </p>
+      {/* Single shared width for every section on this page (header, panels,
+          team card) so their left/right edges all line up — previously each
+          section set its own width independently and drifted out of
+          alignment with the others. */}
+      <div className="flex flex-col gap-6" style={{ maxWidth: 820 }}>
+        <div className="top" style={{ marginBottom: 0 }}>
+          <div>
+            <h1>Project settings</h1>
+            <p>Identity used in templates and email branding.</p>
+          </div>
+          <Button variant="secondary" onClick={() => setCreatingProject(true)}>
+            <Plus className="h-4 w-4" />
+            New project
+          </Button>
+        </div>
+
+        <section className="panel">
+          <div className="grid g2">
+            <div className="field">
+              <label htmlFor="name">Project name</label>
+              <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={!testSendMode}
-              disabled={savingTestSendMode}
-              onClick={() => (testSendMode ? setConfirmGoLive(true) : setLive(false))}
-              className={cn(
-                "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50",
-                testSendMode ? "border-border bg-muted" : "border-transparent bg-primary"
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
-                  testSendMode ? "translate-x-1" : "translate-x-6"
-                )}
-              />
+            <div className="field">
+              <label htmlFor="brand">Brand name in messages</label>
+              <input id="brand" value={brand ?? ""} onChange={(e) => setBrand(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="sender">Sender name</label>
+              <input id="sender" value={senderName ?? ""} onChange={(e) => setSenderName(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="website">Website</label>
+              <input id="website" value={website ?? ""} onChange={(e) => setWebsite(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input id="email" type="email" value={email ?? ""} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourcompany.com" />
+              <p className="hint">Used to prefill the recipient when testing an email connection under Connections.</p>
+            </div>
+            <div className="field">
+              <label htmlFor="wa">WhatsApp number for click-to-chat</label>
+              <input id="wa" value={waNumber ?? ""} onChange={(e) => setWaNumber(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ marginTop: 20 }}>
+            <button className="btn primary" onClick={save}>
+              Save project
             </button>
-          </div>
-          {testSendModeError && (
-            <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-              {testSendModeError}
-            </p>
-          )}
-
-          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>Test send destination</div>
-            <p className="small muted" style={{ maxWidth: "48ch", marginTop: 2, marginBottom: 14 }}>
-              Where test sends for this project go while test send mode is on. Leave blank to use the default
-              (pega2023test@gmail.com / 9642917777).
-            </p>
-            <div className="grid g2">
-              <div className="field">
-                <label htmlFor="testEmail">Test email address</label>
-                <input
-                  id="testEmail"
-                  type="email"
-                  value={testSendEmailAddr}
-                  onChange={(e) => setTestSendEmailAddr(e.target.value)}
-                  placeholder="pega2023test@gmail.com"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="testWhatsapp">Test WhatsApp number</label>
-                <input
-                  id="testWhatsapp"
-                  value={testSendWhatsappNum}
-                  onChange={(e) => setTestSendWhatsappNum(e.target.value)}
-                  placeholder="9642917777"
-                />
-              </div>
-            </div>
-            <div style={{ marginTop: 14 }}>
-              <Button variant="outline" onClick={saveTestTargets} disabled={savingTestTargets}>
-                {savingTestTargets ? "Saving…" : "Save test destination"}
-              </Button>
-              {testTargetsSaved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
-              {testTargetsError && (
-                <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
-                  {testTargetsError}
-                </p>
-              )}
-            </div>
+            {saved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
+            {error && (
+              <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+                {error}
+              </p>
+            )}
           </div>
         </section>
-      )}
+
+        {currentUserEmail === TEST_SEND_MODE_OPERATOR_EMAIL && (
+          <section className="panel">
+            <h2>Sending</h2>
+            <p className="hint" style={{ marginBottom: 14 }}>
+              Visible only to the platform operator account.
+            </p>
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Test send mode</div>
+                <p className="small muted" style={{ maxWidth: "48ch", marginTop: 2 }}>
+                  {testSendMode
+                    ? "On — every email and WhatsApp send for this project (automated sequence and manual \"Send now\") is redirected to a fixed test inbox/number, never the real lead."
+                    : "Off — this project sends for real. Leads in this project receive actual emails and WhatsApp messages."}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!testSendMode}
+                disabled={savingTestSendMode}
+                onClick={() => (testSendMode ? setConfirmGoLive(true) : setLive(false))}
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50",
+                  testSendMode ? "border-border bg-muted" : "border-transparent bg-primary"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                    testSendMode ? "translate-x-1" : "translate-x-6"
+                  )}
+                />
+              </button>
+            </div>
+            {testSendModeError && (
+              <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+                {testSendModeError}
+              </p>
+            )}
+
+            <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Test send destination</div>
+              <p className="small muted" style={{ maxWidth: "48ch", marginTop: 2, marginBottom: 14 }}>
+                Where test sends for this project go while test send mode is on. Leave blank to use the default
+                (pega2023test@gmail.com / 9642917777).
+              </p>
+              <div className="grid g2">
+                <div className="field">
+                  <label htmlFor="testEmail">Test email address</label>
+                  <input
+                    id="testEmail"
+                    type="email"
+                    value={testSendEmailAddr}
+                    onChange={(e) => setTestSendEmailAddr(e.target.value)}
+                    placeholder="pega2023test@gmail.com"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="testWhatsapp">Test WhatsApp number</label>
+                  <input
+                    id="testWhatsapp"
+                    value={testSendWhatsappNum}
+                    onChange={(e) => setTestSendWhatsappNum(e.target.value)}
+                    placeholder="9642917777"
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <Button variant="outline" onClick={saveTestTargets} disabled={savingTestTargets}>
+                  {savingTestTargets ? "Saving…" : "Save test destination"}
+                </Button>
+                {testTargetsSaved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
+                {testTargetsError && (
+                  <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+                    {testTargetsError}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        <TeamSettings orgId={project.org_id} />
+      </div>
 
       <Dialog open={confirmGoLive} onOpenChange={(open) => !open && !savingTestSendMode && setConfirmGoLive(false)}>
         <DialogContent>
@@ -298,8 +307,6 @@ export default function ProjectSettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <TeamSettings orgId={project.org_id} />
     </>
   );
 }
