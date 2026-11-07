@@ -36,7 +36,7 @@ export function SentimentPicker({ value, onChange, disabled }: SentimentPickerPr
           type="button"
           disabled={disabled}
           className={cn(
-            "inline-flex h-7 w-[158px] items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition-colors hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50",
+            "inline-flex h-6 w-[130px] items-center gap-1 rounded-full border px-2 text-[11px] font-semibold transition-colors hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50",
             meta.bg,
             meta.text,
             meta.border

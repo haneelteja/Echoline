@@ -917,3 +917,24 @@
   height: 1px;
   background: var(--line);
 }
+
+/* ---------- Leads & status table: compact density ----------
+   The Leads table has 12 potential columns (even after the responsive
+   hide-by-breakpoint rules on the shared Table/TableHead/TableCell), so
+   trimming cell padding/font-size here lets more of them fit on screen
+   before the overflow scrollbar kicks in. Deliberately placed outside
+   @layer base (unlike nearly everything else in this file): Tailwind's own
+   utility classes (px-4, py-3, h-10, text-sm, …) already applied inline on
+   TableHead/TableCell live in its "utilities" layer, which always wins over
+   anything in "base" regardless of selector specificity — only unlayered
+   CSS like this reliably overrides them. */
+.leads-table th {
+  height: 30px;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+.leads-table td {
+  padding: 5px 8px;
+  font-size: 12px;
+  line-height: 1.3;
+}

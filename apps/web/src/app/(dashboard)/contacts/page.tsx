@@ -72,20 +72,20 @@ function StatusBadge({ status, manual, onMarkReplied }: { status: ContactChannel
   const Icon = statusIcon(status);
   const isTerminal = TERMINAL_GOOD.includes(status) || TERMINAL_BAD.includes(status);
   return (
-    <div className="flex items-center gap-1.5">
-      <Badge variant={statusVariant(status)} className="gap-1 font-semibold">
-        <Icon className="h-3 w-3" />
+    <div className="flex flex-wrap items-center gap-1">
+      <Badge variant={statusVariant(status)} className="gap-1 px-1.5 py-0 text-[10px] font-semibold">
+        <Icon className="h-2.5 w-2.5" />
         {statusLabel(status)}
       </Badge>
       {manual && (
-        <Badge variant="outline" className="gap-1 text-muted-foreground" title="Most recently sent manually, via Send now">
-          <Hand className="h-3 w-3" />
+        <Badge variant="outline" className="gap-1 px-1.5 py-0 text-[10px] text-muted-foreground" title="Most recently sent manually, via Send now">
+          <Hand className="h-2.5 w-2.5" />
           Manual
         </Badge>
       )}
       {!isTerminal && onMarkReplied && (
         <button
-          className="rounded-full border border-dashed border-border px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-success hover:text-success"
+          className="rounded-full border border-dashed border-border px-1 py-0 text-[9px] font-semibold text-muted-foreground transition-colors hover:border-success hover:text-success"
           title="Mark as replied by hand — stops further follow-ups on this channel. Stand-in until automated reply detection is live for this provider."
           onClick={onMarkReplied}
         >
@@ -122,7 +122,7 @@ function BusinessAvatar({ name }: { name: string }) {
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
   const p = AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
   return (
-    <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold", p.bg, p.text)}>
+    <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold", p.bg, p.text)}>
       {initials(name)}
     </span>
   );
@@ -191,24 +191,24 @@ function NextSendCell({
 }) {
   if (!due) return <span className="text-muted-foreground">—</span>;
   if (!due.valid) {
-    return <span className="text-xs font-medium text-rose-600">No valid {due.channel === "em" ? "email" : "number"}</span>;
+    return <span className="text-[11px] font-medium text-rose-600">No valid {due.channel === "em" ? "email" : "number"}</span>;
   }
   const diffMs = new Date(due.at).getTime() - Date.now();
   const overdue = diffMs <= 0;
   if (overdue && !withinWindow) {
     return (
-      <div className="flex flex-col">
-        <span className="text-xs font-semibold text-foreground">Outside send window</span>
-        <span className="text-xs text-muted-foreground">Sends {windowLabel}</span>
+      <div className="flex max-w-[150px] flex-col">
+        <span className="text-[11px] font-semibold text-foreground">Outside send window</span>
+        <span className="text-[11px] text-muted-foreground">Sends {windowLabel}</span>
       </div>
     );
   }
   return (
-    <div className="flex flex-col">
-      <span className={cn("text-xs font-semibold", overdue ? "text-amber-700" : "text-foreground")}>
+    <div className="flex max-w-[150px] flex-col">
+      <span className={cn("text-[11px] font-semibold", overdue ? "text-amber-700" : "text-foreground")}>
         {overdue ? "Due now" : relativeLabel(diffMs)}
       </span>
-      <span className="text-xs text-muted-foreground">
+      <span className="text-[11px] text-muted-foreground">
         {overdue ? "Waiting for the next scheduler run" : new Date(due.at).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
       </span>
     </div>
@@ -387,7 +387,7 @@ function ColumnHead({
   return (
     <TableHead className={className}>
       <div className="flex items-center gap-1">
-        {Icon && <Icon className={cn("h-3.5 w-3.5", iconClassName)} />}
+        {Icon && <Icon className={cn("h-3 w-3", iconClassName)} />}
         <span>{label}</span>
         <SortIndicator direction={dir} priority={index >= 0 ? index + 1 : undefined} />
         <ColumnFilter
@@ -1007,7 +1007,7 @@ export default function ContactsPage() {
       )}
 
       {filtered.length ? (
-        <Table>
+        <Table className="leads-table">
           <TableHeader>
             <TableRow>
               {activeTab === "invalidLeads" && (
@@ -1045,16 +1045,16 @@ export default function ContactsPage() {
               />
               {activeTab !== "whatsapp" && (
                 <TableHead className="hidden lg:table-cell">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Mail className="h-3.5 w-3.5 text-sky-600" />
+                  <span className="inline-flex items-center gap-1">
+                    <Mail className="h-3 w-3 text-sky-600" />
                     Email
                   </span>
                 </TableHead>
               )}
               {activeTab !== "email" && (
                 <TableHead className="hidden lg:table-cell">
-                  <span className="inline-flex items-center gap-1.5">
-                    <MessageCircle className="h-3.5 w-3.5 text-teal-600" />
+                  <span className="inline-flex items-center gap-1">
+                    <MessageCircle className="h-3 w-3 text-teal-600" />
                     WhatsApp
                   </span>
                 </TableHead>
@@ -1131,8 +1131,8 @@ export default function ContactsPage() {
                 className="hidden sm:table-cell"
               />
               <TableHead className="hidden md:table-cell">
-                <span className="inline-flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3 text-muted-foreground" />
                   Status log
                 </span>
               </TableHead>
@@ -1154,8 +1154,8 @@ export default function ContactsPage() {
                       />
                     </TableCell>
                   )}
-                  <TableCell className="font-semibold text-foreground">
-                    <div className="flex items-center gap-2.5">
+                  <TableCell className="max-w-[160px] font-semibold text-foreground">
+                    <div className="flex items-center gap-1.5">
                       <BusinessAvatar name={c.name} />
                       <span className="truncate">{c.name}</span>
                     </div>
@@ -1180,7 +1180,7 @@ export default function ContactsPage() {
                     })}
                   </TableCell>
                   {activeTab !== "whatsapp" && (
-                    <TableCell className="hidden max-w-[180px] truncate text-muted-foreground lg:table-cell" title={c.email ?? undefined}>
+                    <TableCell className="hidden max-w-[140px] truncate text-muted-foreground lg:table-cell" title={c.email ?? undefined}>
                       {c.email ? (
                         <span className="inline-flex items-center gap-1.5">
                           <Mail className="h-3 w-3 shrink-0 opacity-50" />
@@ -1229,7 +1229,7 @@ export default function ContactsPage() {
                   <TableCell className="hidden md:table-cell">
                     <button
                       className={cn(
-                        "group flex max-w-[190px] flex-col items-start gap-0.5 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors",
+                        "group flex max-w-[150px] flex-col items-start gap-0.5 rounded-lg border px-2 py-1 text-left text-[11px] transition-colors",
                         latest
                           ? "border-border bg-muted/40 hover:border-primary/40 hover:bg-accent"
                           : "border-dashed border-border text-muted-foreground hover:border-primary hover:bg-accent hover:text-primary"
@@ -1257,36 +1257,36 @@ export default function ContactsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 rounded-full text-rose-600 hover:bg-rose-100 hover:text-rose-700"
+                        className="h-6 w-6 rounded-full text-rose-600 hover:bg-rose-100 hover:text-rose-700"
                         title="Delete this lead"
                         onClick={() => setConfirmDelete({ ids: [c.id] })}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     ) : (
-                      <div className="flex items-center gap-1 rounded-full border border-border bg-muted/30 p-1">
+                      <div className="flex items-center gap-0.5 rounded-full border border-border bg-muted/30 p-0.5">
                         {activeTab !== "whatsapp" && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-full hover:bg-sky-100 hover:text-sky-700"
+                            className="h-6 w-6 rounded-full hover:bg-sky-100 hover:text-sky-700"
                             title={validEmail(c.email) ? "Send email now" : "No valid email on file"}
                             disabled={!validEmail(c.email)}
                             onClick={() => setSendNow({ contact: c, channel: "email" })}
                           >
-                            <Mail className="h-4 w-4" />
+                            <Mail className="h-3.5 w-3.5" />
                           </Button>
                         )}
                         {activeTab !== "email" && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-full hover:bg-teal-100 hover:text-teal-700"
+                            className="h-6 w-6 rounded-full hover:bg-teal-100 hover:text-teal-700"
                             title={normPhone(c.phone) ? "Send WhatsApp now" : "No valid WhatsApp number on file"}
                             disabled={!normPhone(c.phone)}
                             onClick={() => setSendNow({ contact: c, channel: "whatsapp" })}
                           >
-                            <MessageCircle className="h-4 w-4" />
+                            <MessageCircle className="h-3.5 w-3.5" />
                           </Button>
                         )}
                       </div>
