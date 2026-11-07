@@ -16,10 +16,14 @@ export function isTestSendMode(projectTestSendMode: boolean | null | undefined):
   return projectTestSendMode !== false;
 }
 
-export function testSendEmail(): string {
-  return process.env.TEST_SEND_EMAIL || "pega2023test@gmail.com";
+// projectOverride is the project's own test_send_email/test_send_whatsapp
+// column (editable in Project settings, same operator-only gate as
+// test_send_mode) — takes priority over the deployment-wide env var, which
+// in turn takes priority over the hardcoded fallback.
+export function testSendEmail(projectOverride?: string | null): string {
+  return projectOverride || process.env.TEST_SEND_EMAIL || "pega2023test@gmail.com";
 }
 
-export function testSendWhatsApp(): string {
-  return process.env.TEST_SEND_WHATSAPP || "9642917777";
+export function testSendWhatsApp(projectOverride?: string | null): string {
+  return projectOverride || process.env.TEST_SEND_WHATSAPP || "9642917777";
 }

@@ -32,6 +32,11 @@ export default function ProjectSettingsPage() {
   const [savingTestSendMode, setSavingTestSendMode] = useState(false);
   const [testSendModeError, setTestSendModeError] = useState<string | null>(null);
   const [confirmGoLive, setConfirmGoLive] = useState(false);
+  const [testSendEmailAddr, setTestSendEmailAddr] = useState("");
+  const [testSendWhatsappNum, setTestSendWhatsappNum] = useState("");
+  const [savingTestTargets, setSavingTestTargets] = useState(false);
+  const [testTargetsError, setTestTargetsError] = useState<string | null>(null);
+  const [testTargetsSaved, setTestTargetsSaved] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserEmail(data.user?.email ?? null));
@@ -51,6 +56,8 @@ export default function ProjectSettingsPage() {
     setEmail(project.email ?? "");
     setWaNumber(project.wa_number ?? "");
     setTestSendMode(project.test_send_mode);
+    setTestSendEmailAddr(project.test_send_email ?? "");
+    setTestSendWhatsappNum(project.test_send_whatsapp ?? "");
   }, [project]);
 
   if (!project) return <div className="empty">Loading…</div>;
@@ -94,6 +101,32 @@ export default function ProjectSettingsPage() {
       );
     } finally {
       setSavingTestSendMode(false);
+    }
+  }
+
+  // Where test sends are redirected to while test send mode is on — defaults
+  // to the hardcoded pega2023test@gmail.com / 9642917777 fallback (see
+  // testSendMode.ts) when left blank.
+  async function saveTestTargets() {
+    if (!pid) return;
+    setSavingTestTargets(true);
+    setTestTargetsError(null);
+    setTestTargetsSaved(false);
+    try {
+      await apiFetch(`/v1/projects/${pid}`, {
+        method: "PATCH",
+        body: JSON.stringify({ testSendEmail: testSendEmailAddr, testSendWhatsapp: testSendWhatsappNum }),
+      });
+      setTestTargetsSaved(true);
+      await refreshProjects();
+    } catch (e) {
+      setTestTargetsError(
+        e instanceof ApiError && e.status === 403
+          ? "Only the platform operator account can change this."
+          : "Couldn't save test send targets."
+      );
+    } finally {
+      setSavingTestTargets(false);
     }
   }
 
@@ -199,6 +232,46 @@ export default function ProjectSettingsPage() {
               {testSendModeError}
             </p>
           )}
+
+          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--line)" }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Test send destination</div>
+            <p className="small muted" style={{ maxWidth: "48ch", marginTop: 2, marginBottom: 14 }}>
+              Where test sends for this project go while test send mode is on. Leave blank to use the default
+              (pega2023test@gmail.com / 9642917777).
+            </p>
+            <div className="grid g2">
+              <div className="field">
+                <label htmlFor="testEmail">Test email address</label>
+                <input
+                  id="testEmail"
+                  type="email"
+                  value={testSendEmailAddr}
+                  onChange={(e) => setTestSendEmailAddr(e.target.value)}
+                  placeholder="pega2023test@gmail.com"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="testWhatsapp">Test WhatsApp number</label>
+                <input
+                  id="testWhatsapp"
+                  value={testSendWhatsappNum}
+                  onChange={(e) => setTestSendWhatsappNum(e.target.value)}
+                  placeholder="9642917777"
+                />
+              </div>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <Button variant="outline" onClick={saveTestTargets} disabled={savingTestTargets}>
+                {savingTestTargets ? "Saving…" : "Save test destination"}
+              </Button>
+              {testTargetsSaved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
+              {testTargetsError && (
+                <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+                  {testTargetsError}
+                </p>
+              )}
+            </div>
+          </div>
         </section>
       )}
 

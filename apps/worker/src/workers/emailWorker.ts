@@ -175,7 +175,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     const testMode = isTestSendMode(p.test_send_mode);
     if (testMode) {
       subject = `[TEST → ${c.name} <${c.email}>, step ${step}] ${subject}`;
-      toEmail = testSendEmail();
+      toEmail = testSendEmail(p.test_send_email);
     }
 
     const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as any), masterKey()));

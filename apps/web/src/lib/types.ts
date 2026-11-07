@@ -40,6 +40,8 @@ export interface ProjectRow {
   accent: string | null;
   timezone: string;
   test_send_mode: boolean;
+  test_send_email: string | null;
+  test_send_whatsapp: string | null;
   created_at: string;
 }
 

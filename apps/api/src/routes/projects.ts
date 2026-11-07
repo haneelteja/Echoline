@@ -12,6 +12,8 @@ const projectInput = z.object({
   waNumber: z.string().optional(),
   accent: z.string().optional(),
   testSendMode: z.boolean().optional(),
+  testSendEmail: z.string().optional(),
+  testSendWhatsapp: z.string().optional(),
 });
 
 // Whoever flips a project from test-send mode to actually messaging real
@@ -67,8 +69,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/projects/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = projectInput.partial().parse(req.body);
-    if (body.testSendMode !== undefined && req.userEmail !== TEST_SEND_MODE_OPERATOR_EMAIL) {
-      return reply.code(403).send({ error: "forbidden", message: "Only the platform operator account can change test send mode." });
+    const changesTestSendSettings = body.testSendMode !== undefined || body.testSendEmail !== undefined || body.testSendWhatsapp !== undefined;
+    if (changesTestSendSettings && req.userEmail !== TEST_SEND_MODE_OPERATOR_EMAIL) {
+      return reply.code(403).send({ error: "forbidden", message: "Only the platform operator account can change test send settings." });
     }
     const update: Record<string, unknown> = {};
     if (body.name !== undefined) update.name = body.name;
@@ -79,6 +82,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     if (body.waNumber !== undefined) update.wa_number = body.waNumber;
     if (body.accent !== undefined) update.accent = body.accent;
     if (body.testSendMode !== undefined) update.test_send_mode = body.testSendMode;
+    // Empty string means "clear it, fall back to the env var / hardcoded
+    // default" (see testSendMode.ts) rather than literally sending to "".
+    if (body.testSendEmail !== undefined) update.test_send_email = body.testSendEmail.trim() || null;
+    if (body.testSendWhatsapp !== undefined) update.test_send_whatsapp = body.testSendWhatsapp.trim() || null;
     const { data, error } = await req.supabase.from("projects").update(update).eq("id", id).select().maybeSingle();
     if (error) return sendDbError(reply, error);
     if (!data) return reply.code(404).send({ error: "not_found" });
