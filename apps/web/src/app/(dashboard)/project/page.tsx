@@ -26,6 +26,7 @@ export default function ProjectSettingsPage() {
   const [website, setWebsite] = useState("");
   const [email, setEmail] = useState("");
   const [waNumber, setWaNumber] = useState("");
+  const [replyToEmail, setReplyToEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
@@ -56,6 +57,7 @@ export default function ProjectSettingsPage() {
     setWebsite(project.website ?? "");
     setEmail(project.email ?? "");
     setWaNumber(project.wa_number ?? "");
+    setReplyToEmail(project.reply_to_email ?? "");
     setTestSendMode(project.test_send_mode);
     setTestSendEmailAddr(project.test_send_email ?? "");
     setTestSendWhatsappNum(project.test_send_whatsapp ?? "");
@@ -70,7 +72,7 @@ export default function ProjectSettingsPage() {
     try {
       const updated = await apiFetch<ProjectRow>(`/v1/projects/${pid}`, {
         method: "PATCH",
-        body: JSON.stringify({ name, brand, senderName, website, email, waNumber }),
+        body: JSON.stringify({ name, brand, senderName, website, email, waNumber, replyToEmail }),
       });
       setSaved(true);
       updateProject(updated);
@@ -189,6 +191,20 @@ export default function ProjectSettingsPage() {
             <div className="field">
               <label htmlFor="wa">WhatsApp number for click-to-chat</label>
               <input id="wa" value={waNumber ?? ""} onChange={(e) => setWaNumber(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="replyTo">Reply-to email</label>
+              <input
+                id="replyTo"
+                type="email"
+                value={replyToEmail ?? ""}
+                onChange={(e) => setReplyToEmail(e.target.value)}
+                placeholder="Defaults to the sending address"
+              />
+              <p className="hint">
+                Where replies to outreach emails are routed, if different from the sending address — lets you send from a
+                branded domain while replies land in an inbox you actually check. Leave blank to default to the sending address.
+              </p>
             </div>
           </div>
           <div style={{ marginTop: 20 }}>

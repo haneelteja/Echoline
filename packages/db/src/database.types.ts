@@ -60,6 +60,7 @@ export interface ProjectRow {
   test_send_mode: boolean;
   test_send_email: string | null;
   test_send_whatsapp: string | null;
+  reply_to_email: string | null;
   created_at: string;
 }
 

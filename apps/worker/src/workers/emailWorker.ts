@@ -188,7 +188,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     const fromEmail = emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
     if (!fromEmail) throw new Error("No from-email configured for this project's email connection");
 
-    const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers });
+    const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers, replyTo: p.reply_to_email ?? undefined });
 
     const totalSteps = ((seq as any)?.em?.steps?.length as number) ?? step + 1;
     const newStage = step + 1;

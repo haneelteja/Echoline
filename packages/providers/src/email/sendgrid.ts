@@ -20,6 +20,7 @@ export const sendSendGrid: EmailSender = async (credentials, message) => {
     body: JSON.stringify({
       personalizations: [{ to: [{ email: message.to }], cc: message.cc ? [{ email: message.cc }] : undefined, headers: message.headers }],
       from: { email: message.from },
+      reply_to: message.replyTo ? { email: message.replyTo } : undefined,
       subject: message.subject,
       content: [
         { type: "text/plain", value: message.text },

@@ -22,6 +22,7 @@ export const sendResend: EmailSender = async (credentials, message) => {
       from: message.from,
       to: [message.to],
       cc: message.cc ? [message.cc] : undefined,
+      reply_to: message.replyTo,
       subject: message.subject,
       html: message.html,
       text: message.text,

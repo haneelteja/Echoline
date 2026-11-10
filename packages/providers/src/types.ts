@@ -54,6 +54,13 @@ export interface EmailMessage {
   text: string;
   /** e.g. List-Unsubscribe / List-Unsubscribe-Post */
   headers?: Record<string, string>;
+  /** Where replies should land, if different from `from` — lets a project
+   * send from a branded/verified domain while routing replies to an inbox
+   * that's actually monitored. Each sender below uses whatever mechanism its
+   * provider documents for this (a dedicated API field, not a raw header,
+   * for providers where that's required — SendGrid and Outlook both ignore
+   * or reject a generic "Reply-To" header). */
+  replyTo?: string;
 }
 
 export type EmailSender = (credentials: Record<string, string>, message: EmailMessage) => Promise<SendResult>;

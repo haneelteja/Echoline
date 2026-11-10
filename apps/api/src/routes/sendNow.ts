@@ -316,7 +316,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         const fromEmail = emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
         if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
-        const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers });
+        const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers, replyTo: p.reply_to_email ?? undefined });
 
         await markSent(db, {
           messageId,

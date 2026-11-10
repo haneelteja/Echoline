@@ -21,6 +21,7 @@ export const sendBrevo: EmailSender = async (credentials, message) => {
       sender: { email: message.from },
       to: [{ email: message.to }],
       cc: message.cc ? [{ email: message.cc }] : undefined,
+      replyTo: message.replyTo ? { email: message.replyTo } : undefined,
       subject: message.subject,
       htmlContent: message.html,
       textContent: message.text,

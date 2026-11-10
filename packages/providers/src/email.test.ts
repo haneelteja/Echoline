@@ -15,6 +15,8 @@ const message: EmailMessage = {
   headers: { "List-Unsubscribe": "<https://x.test/u/1>" },
 };
 
+const messageWithReplyTo: EmailMessage = { ...message, replyTo: "monitored@brand.com" };
+
 function mockFetchOnce(status: number, body: unknown, headers: Record<string, string> = {}) {
   const fn = vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
@@ -158,6 +160,14 @@ describe("sendSendGrid", () => {
     mockFetchOnce(401, { errors: [{ message: "bad key" }] });
     await expect(sendSendGrid({ apiKey: "bad" }, message)).rejects.toThrow(/401/);
   });
+
+  it("sets reply_to as a dedicated field, not a header, when replyTo is given", async () => {
+    const fetchSpy = mockFetchOnce(202, {}, { "x-message-id": "sg-msg-123" });
+    await sendSendGrid({ apiKey: "SG.xxx" }, messageWithReplyTo);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.reply_to).toEqual({ email: "monitored@brand.com" });
+  });
 });
 
 describe("sendBrevo", () => {
@@ -165,6 +175,14 @@ describe("sendBrevo", () => {
     mockFetchOnce(201, { messageId: "brevo-msg-456" });
     const result = await sendBrevo({ apiKey: "xkeysib-xxx" }, message);
     expect(result).toEqual({ providerMessageId: "brevo-msg-456" });
+  });
+
+  it("sets replyTo as a dedicated field when given", async () => {
+    const fetchSpy = mockFetchOnce(201, { messageId: "brevo-msg-456" });
+    await sendBrevo({ apiKey: "xkeysib-xxx" }, messageWithReplyTo);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.replyTo).toEqual({ email: "monitored@brand.com" });
   });
 });
 
@@ -178,6 +196,14 @@ describe("sendResend", () => {
   it("throws on a failed send", async () => {
     mockFetchOnce(422, { message: "invalid from address" });
     await expect(sendResend({ apiKey: "re_xxx" }, message)).rejects.toThrow(/422/);
+  });
+
+  it("passes replyTo through as reply_to when given", async () => {
+    const fetchSpy = mockFetchOnce(200, { id: "resend-msg-789" });
+    await sendResend({ apiKey: "re_xxx" }, messageWithReplyTo);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.reply_to).toBe("monitored@brand.com");
   });
 });
 
@@ -194,6 +220,15 @@ describe("sendGmail", () => {
     expect(decoded).toContain("Hi</p>");
     expect(decoded).toContain("List-Unsubscribe:");
   });
+
+  it("includes a Reply-To header in the raw MIME message when replyTo is given", async () => {
+    const fetchSpy = mockFetchOnce(200, { id: "gmail-msg-789" });
+    await sendGmail({ accessToken: "ya29.xxx" }, messageWithReplyTo);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    const decoded = Buffer.from(body.raw, "base64url").toString("utf8");
+    expect(decoded).toContain("Reply-To: monitored@brand.com");
+  });
 });
 
 describe("sendOutlook", () => {
@@ -207,5 +242,17 @@ describe("sendOutlook", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(fetchSpy.mock.calls[0][0]).toBe("https://graph.microsoft.com/v1.0/me/messages");
     expect(fetchSpy.mock.calls[1][0]).toBe("https://graph.microsoft.com/v1.0/me/messages/AAMk-draft-id/send");
+  });
+
+  it("sets replyTo as a dedicated message field, not an internetMessageHeader", async () => {
+    const fetchSpy = mockFetchSequence([
+      { status: 201, body: { id: "AAMk-draft-id" } },
+      { status: 202, body: {} },
+    ]);
+    await sendOutlook({ accessToken: "eyJ.xxx" }, messageWithReplyTo);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.replyTo).toEqual([{ emailAddress: { address: "monitored@brand.com" } }]);
+    expect(body.internetMessageHeaders.some((h: { name: string }) => h.name.toLowerCase() === "reply-to")).toBe(false);
   });
 });

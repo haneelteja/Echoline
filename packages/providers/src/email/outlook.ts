@@ -37,6 +37,10 @@ export const sendOutlook: EmailSender = async (credentials, message) => {
       body: { contentType: "HTML", content: message.html },
       toRecipients: [{ emailAddress: { address: message.to } }],
       ccRecipients: message.cc ? [{ emailAddress: { address: message.cc } }] : undefined,
+      // Graph's `replyTo` is a dedicated message field, not a header — its
+      // internetMessageHeaders below only accepts custom "x-"-prefixed names,
+      // so a generic "Reply-To" entry there would be silently rejected.
+      replyTo: message.replyTo ? [{ emailAddress: { address: message.replyTo } }] : undefined,
       internetMessageHeaders: Object.entries(message.headers ?? {}).map(([name, value]) => ({ name, value })),
     }),
   });

@@ -11,6 +11,7 @@ const projectInput = z.object({
   email: z.string().optional(),
   waNumber: z.string().optional(),
   accent: z.string().optional(),
+  replyToEmail: z.string().optional(),
   testSendMode: z.boolean().optional(),
   testSendEmail: z.string().optional(),
   testSendWhatsapp: z.string().optional(),
@@ -81,6 +82,9 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     if (body.email !== undefined) update.email = body.email;
     if (body.waNumber !== undefined) update.wa_number = body.waNumber;
     if (body.accent !== undefined) update.accent = body.accent;
+    // Blank means "no override, replies go to the From address" (see
+    // packages/providers/src/email/*.ts), not a literal empty string.
+    if (body.replyToEmail !== undefined) update.reply_to_email = body.replyToEmail.trim() || null;
     if (body.testSendMode !== undefined) update.test_send_mode = body.testSendMode;
     // Empty string means "clear it, fall back to the env var / hardcoded
     // default" (see testSendMode.ts) rather than literally sending to "".

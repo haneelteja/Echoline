@@ -6,6 +6,7 @@ export interface RawMimeInput {
   html: string;
   text: string;
   headers?: Record<string, string>;
+  replyTo?: string;
 }
 
 function encodeMimeSubject(subject: string): string {
@@ -22,6 +23,7 @@ export function buildRawMime(input: RawMimeInput): string {
     `From: ${input.from}`,
     `To: ${input.to}`,
     ...(input.cc ? [`Cc: ${input.cc}`] : []),
+    ...(input.replyTo ? [`Reply-To: ${input.replyTo}`] : []),
     `Subject: ${encodeMimeSubject(input.subject)}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,

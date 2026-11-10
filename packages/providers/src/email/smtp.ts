@@ -33,6 +33,7 @@ export const sendSmtp: EmailSender = async (credentials, message) => {
       from: message.from,
       to: message.to,
       cc: message.cc,
+      replyTo: message.replyTo,
       subject: message.subject,
       html: message.html,
       text: message.text,
