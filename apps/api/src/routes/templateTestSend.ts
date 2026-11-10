@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { createAdminClient, decryptCredentials, encryptCredentials, envelopeToRow, loadMasterKey, rowToEnvelope, type ProjectRow } from "@echoline/db";
 import { buildOpenPixelUrl, buildUnsubscribeUrl, getEmailSender, makeRewriteLink, refreshGoogleToken, refreshMicrosoftToken } from "@echoline/providers";
-import { buildUnsubscribeHeaders, emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw } from "@echoline/core";
+import { emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 
 function masterKey() {
@@ -114,7 +114,6 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
         );
     const text = body.isHtml ? fillPlainTextFromRaw(body.body, ctx, { unsubscribeUrl }) : fillPlainText(body.body, ctx, { unsubscribeUrl });
     const subject = `[TEST] ${fill(body.subject, ctx)}`;
-    const headers = buildUnsubscribeHeaders(unsubscribeUrl);
 
     const db = createAdminClient();
     const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn as never), masterKey()));
@@ -125,7 +124,7 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
     try {
-      await sender(credentials, { from: fromEmail, to: body.to, cc: body.cc, subject, html, text, headers });
+      await sender(credentials, { from: fromEmail, to: body.to, cc: body.cc, subject, html, text });
       return { ok: true };
     } catch (err) {
       return reply.code(502).send({ error: "send_failed", message: err instanceof Error ? err.message : String(err) });

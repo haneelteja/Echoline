@@ -23,7 +23,7 @@ import {
   TEXT_ONLY_WHATSAPP_PROVIDERS,
   type WhatsAppProviderId,
 } from "@echoline/providers";
-import { buildUnsubscribeHeaders, emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw, normPhone, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
+import { emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw, normPhone, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 import { isTestSendMode, testSendEmail, testSendWhatsApp } from "../testSendMode.js";
 import { checkProviderRateLimit } from "../rateLimit.js";
@@ -300,7 +300,6 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
             );
         const text = t.body_is_html ? fillPlainTextFromRaw(t.body, ctx, { unsubscribeUrl }) : fillPlainText(t.body ?? "", ctx, { unsubscribeUrl });
         let subject = fill(t.subject, ctx);
-        const headers = buildUnsubscribeHeaders(unsubscribeUrl);
 
         // Testing-phase safety valve: redirect to a fixed test inbox instead
         // of the real lead — see testSendMode.ts.
@@ -325,7 +324,6 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
           subject,
           html,
           text,
-          headers,
           replyTo: p.reply_to_email ?? undefined,
         });
 

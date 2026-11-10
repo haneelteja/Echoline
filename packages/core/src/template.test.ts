@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildUnsubscribeHeaders, deriveMetaTemplateComponents, emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw } from "./template";
+import { deriveMetaTemplateComponents, emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw } from "./template";
 import type { ProjectBrand } from "./types";
 
 const project: ProjectBrand = {
@@ -118,7 +118,7 @@ describe("emailHTMLFromRaw", () => {
     expect(html).toContain('<a href="https://x.test/book" style="background:#000;color:#fff;padding:10px">Book a call</a>');
   });
 
-  it("still appends the compliance unsubscribe footer", () => {
+  it("still appends the compliance opt-out footer", () => {
     const html = emailHTMLFromRaw("<p>Hi</p>", { project, contact: { name: "Acme" } }, { unsubscribeUrl: "https://x.test/u/1" });
     expect(html).toContain("https://x.test/u/1");
     expect(html).toContain(`Not relevant? Reply "no"`);
@@ -133,38 +133,25 @@ describe("fillPlainTextFromRaw", () => {
     expect(text).not.toContain("<");
   });
 
-  it("includes the unsubscribe line when given", () => {
+  it("includes the opt-out line when given", () => {
     const text = fillPlainTextFromRaw("<p>Hi</p>", { project, contact: { name: "Acme" } }, { unsubscribeUrl: "https://x.test/u/1" });
-    expect(text).toContain("Unsubscribe: https://x.test/u/1");
+    expect(text).toContain("Stop future emails: https://x.test/u/1");
   });
 });
 
 describe("fillPlainText", () => {
-  it("includes the body, sign-off, and unsubscribe instructions", () => {
+  it("includes the body, sign-off, and opt-out instructions", () => {
     const text = fillPlainText("Hi {{company}}, nice to meet you.", { project, contact: { name: "Acme" } }, { unsubscribeUrl: "https://x.test/u/1" });
     expect(text).toContain("Hi Acme, nice to meet you.");
     expect(text).toContain("Haneel");
     expect(text).toContain("Elma Industries");
     expect(text).toContain("https://elmawaterindustries.in/");
-    expect(text).toContain("Unsubscribe: https://x.test/u/1");
+    expect(text).toContain("Stop future emails: https://x.test/u/1");
   });
 
-  it("omits the unsubscribe line when no URL is given", () => {
+  it("omits the opt-out line when no URL is given", () => {
     const text = fillPlainText("Hi there", { project, contact: { name: "Acme" } });
-    expect(text).not.toContain("Unsubscribe:");
+    expect(text).not.toContain("Stop future emails:");
     expect(text).toContain(`Not relevant? Reply "no"`);
-  });
-});
-
-describe("buildUnsubscribeHeaders", () => {
-  it("builds RFC 8058 one-click headers from a URL only", () => {
-    const headers = buildUnsubscribeHeaders("https://x.test/u/1");
-    expect(headers["List-Unsubscribe"]).toBe("<https://x.test/u/1>");
-    expect(headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
-  });
-
-  it("includes a mailto target first when provided", () => {
-    const headers = buildUnsubscribeHeaders("https://x.test/u/1", "unsub@echoline.app");
-    expect(headers["List-Unsubscribe"]).toBe("<mailto:unsub@echoline.app>, <https://x.test/u/1>");
   });
 });

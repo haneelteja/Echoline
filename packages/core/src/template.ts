@@ -81,7 +81,7 @@ export function fillPlainText(
   const p = ctx.project;
   const body = fill(text, ctx).trim();
   const signOff = [p.senderName, p.brand || p.name, p.website].filter(Boolean).join("\n");
-  const footer = [`Not relevant? Reply "no" and we won't follow up.`, opts.unsubscribeUrl ? `Unsubscribe: ${opts.unsubscribeUrl}` : null]
+  const footer = [`Not relevant? Reply "no" and we won't follow up.`, opts.unsubscribeUrl ? `Stop future emails: ${opts.unsubscribeUrl}` : null]
     .filter(Boolean)
     .join("\n");
   return [body, signOff, footer].filter(Boolean).join("\n\n");
@@ -99,23 +99,10 @@ export function fillPlainTextFromRaw(rawBody: string | null | undefined, ctx: Fi
     .replace(/[ \t]+/g, " ")
     .replace(/\s*\n\s*/g, "\n")
     .trim();
-  const footer = [`Not relevant? Reply "no" and we won't follow up.`, opts.unsubscribeUrl ? `Unsubscribe: ${opts.unsubscribeUrl}` : null]
+  const footer = [`Not relevant? Reply "no" and we won't follow up.`, opts.unsubscribeUrl ? `Stop future emails: ${opts.unsubscribeUrl}` : null]
     .filter(Boolean)
     .join("\n");
   return [stripped, footer].filter(Boolean).join("\n\n");
-}
-
-/**
- * RFC 8058 one-click unsubscribe headers. Mail clients (Gmail, Outlook, etc.)
- * use these to show a native "Unsubscribe" button instead of requiring the
- * recipient to find a link in the body.
- */
-export function buildUnsubscribeHeaders(unsubscribeUrl: string, unsubscribeMailto?: string): Record<string, string> {
-  const targets = [unsubscribeMailto ? `<mailto:${unsubscribeMailto}>` : null, `<${unsubscribeUrl}>`].filter(Boolean);
-  return {
-    "List-Unsubscribe": targets.join(", "),
-    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-  };
 }
 
 export interface EmailAssets {
@@ -134,14 +121,20 @@ function escapeHtml(v: unknown): string {
 }
 
 // Shared by emailHTML() and emailHTMLFromRaw() — the compliance footer
-// (an unsubscribe path) always gets appended regardless of how the rest of
-// the email was authored, so a hand-written raw-HTML template can't
-// accidentally ship without one.
+// (an opt-out path) always gets appended regardless of how the rest of the
+// email was authored, so a hand-written raw-HTML template can't accidentally
+// ship without one. Deliberately avoids the literal word "unsubscribe" and
+// the List-Unsubscribe/List-Unsubscribe-Post headers (callers no longer send
+// those) — confirmed live (2026-11-10) that even a fully plain-text email
+// with those headers/wording still landed in Gmail's Promotions tab; both
+// are near-direct "this is bulk mail" signals to Gmail's classifier. Opt-out
+// still works via this plain link or replying "no" — just without the
+// native one-click button mail clients render for List-Unsubscribe.
 function emailShell(contentHtml: string, opts: EmailRenderOptions): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">
 ${contentHtml}
-<p style="margin:16px 0 0;font-size:12px;color:#767676">Not relevant? Reply "no" and we won't follow up.${opts.unsubscribeUrl ? ` Or <a href="${opts.unsubscribeUrl}">unsubscribe</a>.` : ""}</p>
+<p style="margin:16px 0 0;font-size:12px;color:#767676">Not relevant? Reply "no" and we won't follow up.${opts.unsubscribeUrl ? ` Or <a href="${opts.unsubscribeUrl}">click here</a> and we'll stop.` : ""}</p>
 </body></html>`;
 }
 

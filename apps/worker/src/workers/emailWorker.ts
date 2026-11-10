@@ -12,7 +12,7 @@ import {
   type TemplateRow,
 } from "@echoline/db";
 import { getEmailSender, makeRewriteLink, buildOpenPixelUrl, buildUnsubscribeUrl, refreshGoogleToken, refreshMicrosoftToken } from "@echoline/providers";
-import { fill, fillPlainText, fillPlainTextFromRaw, emailHTML, emailHTMLFromRaw, buildUnsubscribeHeaders, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
+import { fill, fillPlainText, fillPlainTextFromRaw, emailHTML, emailHTMLFromRaw, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
 import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
@@ -168,7 +168,6 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
         );
     const text = tRow.body_is_html ? fillPlainTextFromRaw(t.body, ctx, { unsubscribeUrl }) : fillPlainText(t.body, ctx, { unsubscribeUrl });
     let subject = fill(tRow.subject, ctx);
-    const headers = buildUnsubscribeHeaders(unsubscribeUrl);
 
     // Testing-phase safety valve: redirect to a fixed test inbox instead of
     // the real lead, with the subject tagged so a shared test inbox stays
@@ -199,7 +198,6 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
       subject,
       html,
       text,
-      headers,
       replyTo: p.reply_to_email ?? undefined,
     });
 
