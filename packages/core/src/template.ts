@@ -116,10 +116,17 @@ function escapeHtml(v: unknown): string {
 }
 
 /**
- * Ported from the prototype's emailHTML(). Adds a footer unsubscribe link and
- * (when provided) an open-tracking pixel. `opts.rewriteLink` — built by the
- * caller (packages/providers' Node-only signing logic; this stays pure/web-safe)
- * — wraps the website and WhatsApp CTA links for click tracking when provided.
+ * Renders as a plain, personal-looking message rather than the branded-
+ * newsletter look this used to have. Confirmed live (2026-11-10): the old
+ * version's combination of signals — branded logo header, inline image
+ * gallery, a big colored CTA button, and an invisible open-tracking pixel —
+ * is close to a checklist for Gmail's Promotions-tab classifier, and every
+ * Initial-step send was landing there regardless of sender reputation.
+ * `assets` and `opts.trackingPixelUrl`/`opts.rewriteLink` are still accepted
+ * (callers still compute a gallery fetch and signed pixel/click URLs) but
+ * deliberately have no effect on the rendered HTML anymore — only
+ * `opts.unsubscribeUrl` still surfaces, as a plain footer link, since an
+ * unsubscribe path is a compliance requirement, not a marketing signal.
  */
 export function emailHTML(
   template: Pick<Template, "body">,
@@ -127,32 +134,28 @@ export function emailHTML(
   assets: EmailAssets,
   opts: EmailRenderOptions = {}
 ): string {
+  void assets;
   const p = ctx.project;
-  const accent = p.accent || "#3d1a5c";
-  const rewrite = opts.rewriteLink ?? ((url: string) => url);
   const wa = p.waNumber
-    ? rewrite(`https://wa.me/${p.waNumber.replace(/\D/g, "")}?text=${encodeURIComponent("Hi " + (p.brand || p.name) + ", I'm interested")}`)
-    : "#";
+    ? `https://wa.me/${p.waNumber.replace(/\D/g, "")}?text=${encodeURIComponent("Hi " + (p.brand || p.name) + ", I'm interested")}`
+    : null;
 
   const paras = fill(template.body, ctx)
     .split(/\n{2,}/)
     .map((x) => x.trim())
     .filter(Boolean)
-    .map((x) =>
-      x.startsWith("•") || x.startsWith("- ")
-        ? `<table role="presentation" width="100%"><tr><td style="border-left:3px solid ${accent};background:#f8f6fb;padding:14px 18px;font-size:15px;line-height:1.9">${escapeHtml(x).replace(/\n/g, "<br>")}</td></tr></table><br>`
-        : `<p style="margin:0 0 16px;font-size:15px;line-height:1.7">${escapeHtml(x).replace(/\n/g, "<br>")}</p>`
-    )
+    .map((x) => `<p style="margin:0 0 14px">${escapeHtml(x).replace(/\n/g, "<br>")}</p>`)
     .join("");
 
-  const imgs = assets.galleryUrls.slice(0, 3);
+  const websiteLink = p.website ? `<a href="${escapeHtml(p.website)}">${escapeHtml(p.website.replace(/^https?:\/\//, ""))}</a>` : "";
+  const brandLine = [escapeHtml(p.brand || p.name), websiteLink].filter(Boolean).join(" &middot; ");
+  const signature = [p.senderName ? escapeHtml(p.senderName) : null, brandLine || null].filter(Boolean).join("<br>");
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#f4f4f4;font-family:Arial,sans-serif;color:#1a1a1a">
-  <table role="presentation" width="100%" style="padding:20px 0"><tr><td align="center"><table role="presentation" width="100%" style="max-width:680px;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e0e0e0">
-  <tr><td style="background:${accent};padding:16px 24px;text-align:center">${assets.logoUrl ? `<img src="${assets.logoUrl}" width="100" style="background:#fff;border-radius:8px;padding:6px 12px">` : `<span style="color:#fff;font-weight:700;font-size:18px">${escapeHtml(p.brand || p.name)}</span>`}</td></tr>
-  <tr><td style="padding:22px 24px 30px">${paras}
-  ${imgs.length ? `<table role="presentation" width="100%"><tr>${imgs.map((src) => `<td style="padding:4px"><img src="${src}" width="100%" style="border-radius:6px;display:block"></td>`).join("")}</tr></table><br>` : ""}
-  ${p.waNumber ? `<p style="text-align:center"><a href="${wa}" style="background:#25D366;color:#fff;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:24px;display:inline-block">💬 Chat with us on WhatsApp</a></p>` : ""}
-  <p style="margin:18px 0 2px;font-weight:600">${escapeHtml(p.senderName || "")}</p><p style="margin:0;color:#6b7280;font-size:14px">${escapeHtml(p.brand || p.name)}${p.website ? ` · <a href="${escapeHtml(rewrite(p.website))}" style="color:${accent}">${escapeHtml(p.website.replace(/^https?:\/\//, ""))}</a>` : ""}</p>
-  <p style="margin:16px 0 0;font-size:11px;color:#9ca3af">Not relevant? Reply "no" and we won't follow up.${opts.unsubscribeUrl ? ` Or <a href="${opts.unsubscribeUrl}" style="color:#9ca3af">unsubscribe</a>.` : ""}</p></td></tr></table></td></tr></table>${opts.trackingPixelUrl ? `<img src="${opts.trackingPixelUrl}" width="1" height="1" alt="" style="display:none">` : ""}</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">
+${paras}
+${wa ? `<p style="margin:0 0 14px">Or message us on WhatsApp: <a href="${wa}">${escapeHtml(p.waNumber || "")}</a></p>` : ""}
+${signature ? `<p style="margin:18px 0 0">${signature}</p>` : ""}
+<p style="margin:16px 0 0;font-size:12px;color:#767676">Not relevant? Reply "no" and we won't follow up.${opts.unsubscribeUrl ? ` Or <a href="${opts.unsubscribeUrl}">unsubscribe</a>.` : ""}</p>
+</body></html>`;
 }

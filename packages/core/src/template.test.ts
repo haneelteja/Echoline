@@ -77,42 +77,37 @@ describe("fill", () => {
 });
 
 describe("emailHTML", () => {
-  it("includes the unsubscribe link and tracking pixel when provided", () => {
-    const html = emailHTML(
-      { body: "Hi {{company}}" },
-      { project, contact: { name: "Acme" } },
-      { galleryUrls: [] },
-      { unsubscribeUrl: "https://x.test/u/1", trackingPixelUrl: "https://x.test/p/1" }
-    );
+  it("includes the unsubscribe link and the message body", () => {
+    const html = emailHTML({ body: "Hi {{company}}" }, { project, contact: { name: "Acme" } }, { galleryUrls: [] }, { unsubscribeUrl: "https://x.test/u/1" });
     expect(html).toContain("https://x.test/u/1");
-    expect(html).toContain("https://x.test/p/1");
     expect(html).toContain("Acme");
   });
 
-  it("rewrites the website link through rewriteLink when provided (click tracking)", () => {
+  it("never embeds a tracking pixel, gallery images, logo, or a styled CTA button, even when provided", () => {
+    const html = emailHTML(
+      { body: "Hi {{company}}" },
+      { project, contact: { name: "Acme" } },
+      { logoUrl: "https://x.test/logo.png", galleryUrls: ["https://x.test/a.png", "https://x.test/b.png"] },
+      { unsubscribeUrl: "https://x.test/u/1", trackingPixelUrl: "https://x.test/p/1", rewriteLink: (url) => `https://track.test/c?u=${encodeURIComponent(url)}` }
+    );
+    expect(html).not.toContain("https://x.test/p/1");
+    expect(html).not.toContain("https://x.test/logo.png");
+    expect(html).not.toContain("https://x.test/a.png");
+    expect(html).not.toContain("https://x.test/b.png");
+    expect(html).not.toContain("track.test");
+    expect(html).not.toContain("<img");
+  });
+
+  it("leaves the website and WhatsApp links as plain, untracked hrefs", () => {
     const html = emailHTML(
       { body: "Hi {{company}}" },
       { project, contact: { name: "Acme" } },
       { galleryUrls: [] },
       { rewriteLink: (url) => `https://track.test/c?u=${encodeURIComponent(url)}` }
     );
-    expect(html).toContain(`https://track.test/c?u=${encodeURIComponent(project.website!)}`);
-    expect(html).not.toContain(`href="${project.website}"`);
-  });
-
-  it("rewrites the WhatsApp CTA link through rewriteLink too", () => {
-    const html = emailHTML(
-      { body: "Hi {{company}}" },
-      { project, contact: { name: "Acme" } },
-      { galleryUrls: [] },
-      { rewriteLink: (url) => `https://track.test/c?u=${encodeURIComponent(url)}` }
-    );
-    expect(html).toContain("https://track.test/c?u=https%3A%2F%2Fwa.me%2F916309060777");
-  });
-
-  it("leaves links untouched when no rewriteLink is given", () => {
-    const html = emailHTML({ body: "Hi {{company}}" }, { project, contact: { name: "Acme" } }, { galleryUrls: [] });
     expect(html).toContain(`href="${project.website}"`);
+    expect(html).toContain('href="https://wa.me/916309060777');
+    expect(html).not.toContain("track.test");
   });
 });
 
