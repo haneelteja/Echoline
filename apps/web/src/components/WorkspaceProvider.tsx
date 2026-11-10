@@ -26,6 +26,13 @@ interface WorkspaceState {
   statusLog: StatusLogEntry[];
   refreshProjects: () => Promise<void>;
   refreshProjectData: () => Promise<void>;
+  // Merges a single already-fetched project row (e.g. a PATCH /projects/:id
+  // response) into `projects` in place — unlike refreshProjects(), this
+  // never touches loadingProjects, so it doesn't trigger the dashboard
+  // shell's full-page loading state (see layout.tsx's `loadingProjects ?
+  // <loading> : children` branch) just to reflect a settings save that
+  // already told us the new row.
+  updateProject: (updated: ProjectRow) => void;
 }
 
 const Ctx = createContext<WorkspaceState | null>(null);
@@ -164,6 +171,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const project = projects.find((p) => p.id === pid) ?? null;
 
+  const updateProject = useCallback((updated: ProjectRow) => {
+    setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  }, []);
+
   // Memoized so a single slice updating (e.g. a debounced realtime status-log
   // refresh) doesn't rebuild this object and re-render every consumer of
   // useWorkspace() across every page — only components reading the slice
@@ -188,6 +199,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       statusLog,
       refreshProjects,
       refreshProjectData,
+      updateProject,
     }),
     [
       loadingProjects,
@@ -207,6 +219,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       statusLog,
       refreshProjects,
       refreshProjectData,
+      updateProject,
     ]
   );
 

@@ -9,6 +9,7 @@ import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import type { ProjectRow } from "@/lib/types";
 
 // Mirrors the server-side check in apps/api/src/routes/projects.ts — hiding
 // the control here is just so nobody else is confused by a toggle they can't
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils";
 const TEST_SEND_MODE_OPERATOR_EMAIL = "pega2023test@gmail.com";
 
 export default function ProjectSettingsPage() {
-  const { pid, project, setPid, refreshProjects } = useWorkspace();
+  const { pid, project, setPid, refreshProjects, updateProject } = useWorkspace();
   const supabase = useMemo(() => createClient(), []);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -67,12 +68,12 @@ export default function ProjectSettingsPage() {
     setError(null);
     setSaved(false);
     try {
-      await apiFetch(`/v1/projects/${pid}`, {
+      const updated = await apiFetch<ProjectRow>(`/v1/projects/${pid}`, {
         method: "PATCH",
         body: JSON.stringify({ name, brand, senderName, website, email, waNumber }),
       });
       setSaved(true);
-      await refreshProjects();
+      updateProject(updated);
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't edit project settings." : "Save failed.");
     }
@@ -89,10 +90,10 @@ export default function ProjectSettingsPage() {
     setSavingTestSendMode(true);
     setTestSendModeError(null);
     try {
-      await apiFetch(`/v1/projects/${pid}`, { method: "PATCH", body: JSON.stringify({ testSendMode: !next }) });
+      const updated = await apiFetch<ProjectRow>(`/v1/projects/${pid}`, { method: "PATCH", body: JSON.stringify({ testSendMode: !next }) });
       setTestSendMode(!next);
       setConfirmGoLive(false);
-      await refreshProjects();
+      updateProject(updated);
     } catch (e) {
       setTestSendModeError(
         e instanceof ApiError && e.status === 403
@@ -113,12 +114,12 @@ export default function ProjectSettingsPage() {
     setTestTargetsError(null);
     setTestTargetsSaved(false);
     try {
-      await apiFetch(`/v1/projects/${pid}`, {
+      const updated = await apiFetch<ProjectRow>(`/v1/projects/${pid}`, {
         method: "PATCH",
         body: JSON.stringify({ testSendEmail: testSendEmailAddr, testSendWhatsapp: testSendWhatsappNum }),
       });
       setTestTargetsSaved(true);
-      await refreshProjects();
+      updateProject(updated);
     } catch (e) {
       setTestTargetsError(
         e instanceof ApiError && e.status === 403
@@ -272,7 +273,7 @@ export default function ProjectSettingsPage() {
               </div>
               <div style={{ marginTop: 14 }}>
                 <Button variant="outline" onClick={saveTestTargets} disabled={savingTestTargets}>
-                  {savingTestTargets ? "Saving…" : "Save test destination"}
+                  {savingTestTargets ? "Saving…" : "Save test details"}
                 </Button>
                 {testTargetsSaved && <span className="small muted" style={{ marginLeft: 10 }}>Saved.</span>}
                 {testTargetsError && (
