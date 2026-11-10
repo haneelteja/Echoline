@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { createAdminClient, decryptCredentials, encryptCredentials, envelopeToRow, loadMasterKey, rowToEnvelope, type ProjectRow } from "@echoline/db";
 import { buildOpenPixelUrl, buildUnsubscribeUrl, getEmailSender, makeRewriteLink, refreshGoogleToken, refreshMicrosoftToken } from "@echoline/providers";
-import { buildUnsubscribeHeaders, emailHTML, fill, fillPlainText } from "@echoline/core";
+import { buildUnsubscribeHeaders, emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 
 function masterKey() {
@@ -48,6 +48,8 @@ const input = z.object({
   body: z.string().min(1),
   categoryLines: z.record(z.string()).optional(),
   galleryAssetIds: z.array(z.string().uuid()).optional(),
+  cc: z.string().email().optional(),
+  isHtml: z.boolean().optional(),
 });
 
 const SAMPLE_CONTACT = { name: "Acme Corp", contactPerson: null as string | null, area: "Gachibowli", category: "Restaurant" };
@@ -102,13 +104,15 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     const trackingKey = `test-${id}-${Date.now()}`;
     const tc = trackingConfig();
     const unsubscribeUrl = buildUnsubscribeUrl(tc, trackingKey);
-    const html = emailHTML(
-      { body: body.body },
-      ctx,
-      { logoUrl: null, galleryUrls },
-      { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, trackingKey), rewriteLink: makeRewriteLink(tc, trackingKey) }
-    );
-    const text = fillPlainText(body.body, ctx, { unsubscribeUrl });
+    const html = body.isHtml
+      ? emailHTMLFromRaw(body.body, ctx, { unsubscribeUrl })
+      : emailHTML(
+          { body: body.body },
+          ctx,
+          { logoUrl: null, galleryUrls },
+          { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, trackingKey), rewriteLink: makeRewriteLink(tc, trackingKey) }
+        );
+    const text = body.isHtml ? fillPlainTextFromRaw(body.body, ctx, { unsubscribeUrl }) : fillPlainText(body.body, ctx, { unsubscribeUrl });
     const subject = `[TEST] ${fill(body.subject, ctx)}`;
     const headers = buildUnsubscribeHeaders(unsubscribeUrl);
 
@@ -121,7 +125,7 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
     try {
-      await sender(credentials, { from: fromEmail, to: body.to, subject, html, text, headers });
+      await sender(credentials, { from: fromEmail, to: body.to, cc: body.cc, subject, html, text, headers });
       return { ok: true };
     } catch (err) {
       return reply.code(502).send({ error: "send_failed", message: err instanceof Error ? err.message : String(err) });

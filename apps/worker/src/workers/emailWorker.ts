@@ -12,7 +12,7 @@ import {
   type TemplateRow,
 } from "@echoline/db";
 import { getEmailSender, makeRewriteLink, buildOpenPixelUrl, buildUnsubscribeUrl, refreshGoogleToken, refreshMicrosoftToken } from "@echoline/providers";
-import { fill, fillPlainText, emailHTML, buildUnsubscribeHeaders, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
+import { fill, fillPlainText, fillPlainTextFromRaw, emailHTML, emailHTMLFromRaw, buildUnsubscribeHeaders, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
 import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
 import { getRedisConnection } from "../redis.js";
@@ -158,19 +158,23 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     const tc = trackingConfig();
     const unsubscribeUrl = buildUnsubscribeUrl(tc, messageId);
     const galleryUrls = await fetchGalleryUrls(db, tRow.gallery_asset_ids);
-    const html = emailHTML(
-      t,
-      ctx,
-      { logoUrl: null, galleryUrls },
-      { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, messageId), rewriteLink: makeRewriteLink(tc, messageId) }
-    );
-    const text = fillPlainText(t.body, ctx, { unsubscribeUrl });
+    const html = tRow.body_is_html
+      ? emailHTMLFromRaw(t.body, ctx, { unsubscribeUrl })
+      : emailHTML(
+          t,
+          ctx,
+          { logoUrl: null, galleryUrls },
+          { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, messageId), rewriteLink: makeRewriteLink(tc, messageId) }
+        );
+    const text = tRow.body_is_html ? fillPlainTextFromRaw(t.body, ctx, { unsubscribeUrl }) : fillPlainText(t.body, ctx, { unsubscribeUrl });
     let subject = fill(tRow.subject, ctx);
     const headers = buildUnsubscribeHeaders(unsubscribeUrl);
 
     // Testing-phase safety valve: redirect to a fixed test inbox instead of
     // the real lead, with the subject tagged so a shared test inbox stays
-    // legible across many different leads/steps.
+    // legible across many different leads/steps. Suppress cc_email in test
+    // mode too — it names a real external inbox (e.g. a sales rep), and test
+    // mode's whole point is that nothing goes to anyone but the test inbox.
     let toEmail = c.email!;
     const testMode = isTestSendMode(p.test_send_mode);
     if (testMode) {
@@ -188,7 +192,16 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     const fromEmail = emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
     if (!fromEmail) throw new Error("No from-email configured for this project's email connection");
 
-    const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers, replyTo: p.reply_to_email ?? undefined });
+    const result = await sender(credentials, {
+      from: fromEmail,
+      to: toEmail,
+      cc: testMode ? undefined : tRow.cc_email ?? undefined,
+      subject,
+      html,
+      text,
+      headers,
+      replyTo: p.reply_to_email ?? undefined,
+    });
 
     const totalSteps = ((seq as any)?.em?.steps?.length as number) ?? step + 1;
     const newStage = step + 1;

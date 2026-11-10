@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildUnsubscribeHeaders, deriveMetaTemplateComponents, emailHTML, fill, fillPlainText } from "./template";
+import { buildUnsubscribeHeaders, deriveMetaTemplateComponents, emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw } from "./template";
 import type { ProjectBrand } from "./types";
 
 const project: ProjectBrand = {
@@ -108,6 +108,34 @@ describe("emailHTML", () => {
     expect(html).toContain(`href="${project.website}"`);
     expect(html).toContain('href="https://wa.me/916309060777');
     expect(html).not.toContain("track.test");
+  });
+});
+
+describe("emailHTMLFromRaw", () => {
+  it("passes hand-written HTML through as-is, only substituting placeholders", () => {
+    const html = emailHTMLFromRaw('<p>Hi {{company}}</p><a href="https://x.test/book" style="background:#000;color:#fff;padding:10px">Book a call</a>', { project, contact: { name: "Acme" } });
+    expect(html).toContain("<p>Hi Acme</p>");
+    expect(html).toContain('<a href="https://x.test/book" style="background:#000;color:#fff;padding:10px">Book a call</a>');
+  });
+
+  it("still appends the compliance unsubscribe footer", () => {
+    const html = emailHTMLFromRaw("<p>Hi</p>", { project, contact: { name: "Acme" } }, { unsubscribeUrl: "https://x.test/u/1" });
+    expect(html).toContain("https://x.test/u/1");
+    expect(html).toContain(`Not relevant? Reply "no"`);
+  });
+});
+
+describe("fillPlainTextFromRaw", () => {
+  it("strips tags and substitutes placeholders for the text/plain fallback", () => {
+    const text = fillPlainTextFromRaw("<p>Hi {{company}},</p><a href=\"https://x.test/book\">Book a call</a>", { project, contact: { name: "Acme" } });
+    expect(text).toContain("Hi Acme,");
+    expect(text).toContain("Book a call");
+    expect(text).not.toContain("<");
+  });
+
+  it("includes the unsubscribe line when given", () => {
+    const text = fillPlainTextFromRaw("<p>Hi</p>", { project, contact: { name: "Acme" } }, { unsubscribeUrl: "https://x.test/u/1" });
+    expect(text).toContain("Unsubscribe: https://x.test/u/1");
   });
 });
 

@@ -23,7 +23,7 @@ import {
   TEXT_ONLY_WHATSAPP_PROVIDERS,
   type WhatsAppProviderId,
 } from "@echoline/providers";
-import { buildUnsubscribeHeaders, emailHTML, fill, fillPlainText, normPhone, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
+import { buildUnsubscribeHeaders, emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw, normPhone, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 import { isTestSendMode, testSendEmail, testSendWhatsApp } from "../testSendMode.js";
 import { checkProviderRateLimit } from "../rateLimit.js";
@@ -290,13 +290,15 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         const tc = trackingConfig();
         const unsubscribeUrl = buildUnsubscribeUrl(tc, messageId);
         const galleryUrls = await fetchGalleryUrls(db, t.gallery_asset_ids);
-        const html = emailHTML(
-          { body: t.body ?? "" },
-          ctx,
-          { logoUrl: null, galleryUrls },
-          { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, messageId), rewriteLink: makeRewriteLink(tc, messageId) }
-        );
-        const text = fillPlainText(t.body ?? "", ctx, { unsubscribeUrl });
+        const html = t.body_is_html
+          ? emailHTMLFromRaw(t.body, ctx, { unsubscribeUrl })
+          : emailHTML(
+              { body: t.body ?? "" },
+              ctx,
+              { logoUrl: null, galleryUrls },
+              { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, messageId), rewriteLink: makeRewriteLink(tc, messageId) }
+            );
+        const text = t.body_is_html ? fillPlainTextFromRaw(t.body, ctx, { unsubscribeUrl }) : fillPlainText(t.body ?? "", ctx, { unsubscribeUrl });
         let subject = fill(t.subject, ctx);
         const headers = buildUnsubscribeHeaders(unsubscribeUrl);
 
@@ -316,7 +318,16 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         const fromEmail = emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
         if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
-        const result = await sender(credentials, { from: fromEmail, to: toEmail, subject, html, text, headers, replyTo: p.reply_to_email ?? undefined });
+        const result = await sender(credentials, {
+          from: fromEmail,
+          to: toEmail,
+          cc: testMode ? undefined : t.cc_email ?? undefined,
+          subject,
+          html,
+          text,
+          headers,
+          replyTo: p.reply_to_email ?? undefined,
+        });
 
         await markSent(db, {
           messageId,

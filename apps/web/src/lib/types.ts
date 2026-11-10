@@ -119,6 +119,8 @@ export interface TemplateRow {
   ai: boolean;
   header_asset_id: string | null;
   gallery_asset_ids: string[];
+  cc_email: string | null;
+  body_is_html: boolean;
 }
 
 export interface KbFolderRow {

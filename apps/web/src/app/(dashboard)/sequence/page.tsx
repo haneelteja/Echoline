@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Clock, File, Pencil, Send, X } from "lucide-react";
-import { emailHTML, fill } from "@echoline/core";
+import { emailHTML, emailHTMLFromRaw, fill } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { useKbAssets } from "@/lib/useKbAssets";
@@ -38,6 +38,8 @@ interface TemplateDraft {
   metaCategory: "MARKETING" | "UTILITY" | "AUTHENTICATION";
   headerAssetId: string | null;
   galleryAssetIds: string[];
+  ccEmail: string;
+  isHtml: boolean;
 }
 
 export default function SequencePage() {
@@ -112,6 +114,8 @@ export default function SequencePage() {
       metaCategory: "MARKETING",
       headerAssetId: t.header_asset_id,
       galleryAssetIds: t.gallery_asset_ids ?? [],
+      ccEmail: t.cc_email ?? "",
+      isHtml: t.body_is_html ?? false,
     });
     setTplError(null);
     setTestEmailTo("");
@@ -159,6 +163,8 @@ export default function SequencePage() {
           category_lines: draftTpl.categoryLines,
           header_asset_id: draftTpl.headerAssetId,
           gallery_asset_ids: draftTpl.galleryAssetIds,
+          cc_email: draftTpl.ccEmail.trim() || null,
+          body_is_html: draftTpl.isHtml,
         }),
       });
       setEditing(null);
@@ -259,6 +265,8 @@ export default function SequencePage() {
           body: draftTpl.body,
           categoryLines: draftTpl.categoryLines,
           galleryAssetIds: draftTpl.galleryAssetIds,
+          cc: draftTpl.ccEmail.trim() || undefined,
+          isHtml: draftTpl.isHtml,
         }),
       });
       setTestEmailStatus("sent");
@@ -276,15 +284,21 @@ export default function SequencePage() {
 
   const previewHtml =
     editing && draftTpl && editing.channel === "email" && project
-      ? emailHTML(
-          { body: draftTpl.body },
-          {
+      ? draftTpl.isHtml
+        ? emailHTMLFromRaw(draftTpl.body, {
             project: { name: project.name, brand: project.brand, senderName: project.sender_name, website: project.website, waNumber: project.wa_number, accent: project.accent },
             contact: { name: "Acme Corp", area: "Gachibowli", category: "Restaurant" },
             template: { categoryLines: draftTpl.categoryLines },
-          },
-          { galleryUrls: draftTpl.galleryAssetIds.map((aid) => assets.find((a) => a.id === aid)?.url).filter((u): u is string => Boolean(u)) }
-        )
+          })
+        : emailHTML(
+            { body: draftTpl.body },
+            {
+              project: { name: project.name, brand: project.brand, senderName: project.sender_name, website: project.website, waNumber: project.wa_number, accent: project.accent },
+              contact: { name: "Acme Corp", area: "Gachibowli", category: "Restaurant" },
+              template: { categoryLines: draftTpl.categoryLines },
+            },
+            { galleryUrls: draftTpl.galleryAssetIds.map((aid) => assets.find((a) => a.id === aid)?.url).filter((u): u is string => Boolean(u)) }
+          )
       : null;
 
   const waPreviewText =
@@ -492,9 +506,45 @@ export default function SequencePage() {
                       <input id="ts" value={draftTpl.subject} onChange={(e) => setDraftTpl({ ...draftTpl, subject: e.target.value })} />
                     </div>
                   )}
+                  {editing.channel === "email" && (
+                    <div className="field">
+                      <label htmlFor="tcc">CC</label>
+                      <input
+                        id="tcc"
+                        type="email"
+                        value={draftTpl.ccEmail}
+                        onChange={(e) => setDraftTpl({ ...draftTpl, ccEmail: e.target.value })}
+                        placeholder="e.g. sales-rep@yourcompany.com"
+                      />
+                      <p className="hint">CCs this address on every send of this step. Leave blank for no CC.</p>
+                    </div>
+                  )}
                   <div className="field">
-                    <label htmlFor="tb">Body</label>
-                    <textarea id="tb" style={{ minHeight: 320 }} value={draftTpl.body} onChange={(e) => setDraftTpl({ ...draftTpl, body: e.target.value })} />
+                    <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+                      <label htmlFor="tb">Body</label>
+                      {editing.channel === "email" && (
+                        <div className="row" style={{ gap: 4 }}>
+                          <Button type="button" size="sm" variant={draftTpl.isHtml ? "outline" : "default"} onClick={() => setDraftTpl({ ...draftTpl, isHtml: false })}>
+                            Plain text
+                          </Button>
+                          <Button type="button" size="sm" variant={draftTpl.isHtml ? "default" : "outline"} onClick={() => setDraftTpl({ ...draftTpl, isHtml: true })}>
+                            Raw HTML
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <textarea
+                      id="tb"
+                      style={{ minHeight: 320, fontFamily: draftTpl.isHtml ? "monospace" : undefined }}
+                      value={draftTpl.body}
+                      onChange={(e) => setDraftTpl({ ...draftTpl, body: e.target.value })}
+                    />
+                    {editing.channel === "email" && draftTpl.isHtml && (
+                      <p className="hint">
+                        Sent close to as-is (after {"{{placeholders}}"} are filled in) — write your own markup, including custom buttons or links. An unsubscribe
+                        footer is still added automatically.
+                      </p>
+                    )}
                   </div>
                   <div className="field">
                     <label htmlFor="tcl">Default category line</label>

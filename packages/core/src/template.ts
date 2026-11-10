@@ -88,6 +88,24 @@ export function fillPlainText(
 }
 
 /**
+ * Plain-text fallback for a raw-HTML template body: a rough tag-strip, not a
+ * full HTML-to-text conversion — good enough for the rare mail client that
+ * prefers text/plain, which is what this alternative part is for either way.
+ */
+export function fillPlainTextFromRaw(rawBody: string | null | undefined, ctx: FillContext, opts: { unsubscribeUrl?: string } = {}): string {
+  const stripped = fill(rawBody, ctx)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .trim();
+  const footer = [`Not relevant? Reply "no" and we won't follow up.`, opts.unsubscribeUrl ? `Unsubscribe: ${opts.unsubscribeUrl}` : null]
+    .filter(Boolean)
+    .join("\n");
+  return [stripped, footer].filter(Boolean).join("\n\n");
+}
+
+/**
  * RFC 8058 one-click unsubscribe headers. Mail clients (Gmail, Outlook, etc.)
  * use these to show a native "Unsubscribe" button instead of requiring the
  * recipient to find a link in the body.
@@ -113,6 +131,18 @@ export interface EmailRenderOptions {
 
 function escapeHtml(v: unknown): string {
   return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+// Shared by emailHTML() and emailHTMLFromRaw() — the compliance footer
+// (an unsubscribe path) always gets appended regardless of how the rest of
+// the email was authored, so a hand-written raw-HTML template can't
+// accidentally ship without one.
+function emailShell(contentHtml: string, opts: EmailRenderOptions): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">
+${contentHtml}
+<p style="margin:16px 0 0;font-size:12px;color:#767676">Not relevant? Reply "no" and we won't follow up.${opts.unsubscribeUrl ? ` Or <a href="${opts.unsubscribeUrl}">unsubscribe</a>.` : ""}</p>
+</body></html>`;
 }
 
 /**
@@ -151,11 +181,21 @@ export function emailHTML(
   const brandLine = [escapeHtml(p.brand || p.name), websiteLink].filter(Boolean).join(" &middot; ");
   const signature = [p.senderName ? escapeHtml(p.senderName) : null, brandLine || null].filter(Boolean).join("<br>");
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">
-${paras}
+  const content = `${paras}
 ${wa ? `<p style="margin:0 0 14px">Or message us on WhatsApp: <a href="${wa}">${escapeHtml(p.waNumber || "")}</a></p>` : ""}
-${signature ? `<p style="margin:18px 0 0">${signature}</p>` : ""}
-<p style="margin:16px 0 0;font-size:12px;color:#767676">Not relevant? Reply "no" and we won't follow up.${opts.unsubscribeUrl ? ` Or <a href="${opts.unsubscribeUrl}">unsubscribe</a>.` : ""}</p>
-</body></html>`;
+${signature ? `<p style="margin:18px 0 0">${signature}</p>` : ""}`;
+
+  return emailShell(content, opts);
+}
+
+/**
+ * For a template whose body is hand-written HTML (e.g. a custom CTA button
+ * the plain-paragraph mode can't express) rather than plain text to be
+ * auto-wrapped. Only {{placeholder}} substitution runs on it — no escaping,
+ * no paragraph-splitting, no auto-signature — since the author's markup is
+ * trusted content from their own template editor, not untrusted input. The
+ * same compliance footer still gets appended via emailShell().
+ */
+export function emailHTMLFromRaw(rawBody: string | null | undefined, ctx: FillContext, opts: EmailRenderOptions = {}): string {
+  return emailShell(fill(rawBody, ctx), opts);
 }
