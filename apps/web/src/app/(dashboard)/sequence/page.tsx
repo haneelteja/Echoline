@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Clock, File, Pencil, Send, X } from "lucide-react";
-import { emailHTML, emailHTMLFromRaw, fill } from "@echoline/core";
+import { analyzeTemplate, emailHTML, emailHTMLFromRaw, fill, optimizeTemplate } from "@echoline/core";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { useKbAssets } from "@/lib/useKbAssets";
@@ -310,6 +310,17 @@ export default function SequencePage() {
         })
       : null;
 
+  // Only meaningful for email — these heuristics target Gmail's Promotions-
+  // tab classifier specifically, not WhatsApp.
+  const deliverabilityFindings =
+    editing && draftTpl && editing.channel === "email" ? analyzeTemplate({ subject: draftTpl.subject, body: draftTpl.body, isHtml: draftTpl.isHtml }) : [];
+
+  function applyOptimize() {
+    if (!draftTpl) return;
+    const { subject, body } = optimizeTemplate({ subject: draftTpl.subject, body: draftTpl.body, isHtml: draftTpl.isHtml });
+    setDraftTpl({ ...draftTpl, subject, body });
+  }
+
   function column(ch: ChannelKey) {
     const steps = draft![ch].steps;
     return (
@@ -541,11 +552,36 @@ export default function SequencePage() {
                     />
                     {editing.channel === "email" && draftTpl.isHtml && (
                       <p className="hint">
-                        Sent close to as-is (after {"{{placeholders}}"} are filled in) — write your own markup, including custom buttons or links. An unsubscribe
-                        footer is still added automatically.
+                        Sent close to as-is (after {"{{placeholders}}"} are filled in) — write your own markup, including custom buttons or links. A plain
+                        opt-out footer is still added automatically.
                       </p>
                     )}
                   </div>
+                  {editing.channel === "email" && deliverabilityFindings.length > 0 && (
+                    <div className="field" style={{ background: "var(--bad-soft)", borderRadius: 8, padding: "10px 14px" }}>
+                      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                        <label style={{ margin: 0, color: "var(--bad)" }}>Inbox placement check — {deliverabilityFindings.length} issue(s) found</label>
+                        {deliverabilityFindings.some((f) => f.fixable) && (
+                          <Button type="button" size="sm" onClick={applyOptimize}>
+                            Optimize
+                          </Button>
+                        )}
+                      </div>
+                      <ul style={{ margin: "8px 0 0", paddingLeft: 18, display: "flex", flexDirection: "column", gap: 6 }}>
+                        {deliverabilityFindings.map((f) => (
+                          <li key={f.id} className="hint">
+                            {f.message}
+                            {!f.fixable && " (not auto-fixable — needs a manual rewrite.)"}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {editing.channel === "email" && deliverabilityFindings.length === 0 && (draftTpl.subject.trim() || draftTpl.body.trim()) && (
+                    <p className="hint" style={{ color: "var(--ok)" }}>
+                      ✓ No known Promotions-tab signals detected in this template.
+                    </p>
+                  )}
                   <div className="field">
                     <label htmlFor="tcl">Default category line</label>
                     <input
