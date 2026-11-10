@@ -145,8 +145,12 @@ export default function ProjectSettingsPage() {
       {/* Single shared width for every section on this page (header, panels,
           team card) so their left/right edges all line up — previously each
           section set its own width independently and drifted out of
-          alignment with the others. */}
-      <div className="flex flex-col gap-6" style={{ maxWidth: 820 }}>
+          alignment with the others. Capped via Tailwind breakpoints (not a
+          fixed px value) so it scales with the viewport instead of sitting
+          at one static width regardless of screen resolution: full width on
+          small screens, progressively narrower relative to the screen as it
+          grows, so fields never stretch edge-to-edge on a wide monitor. */}
+      <div className="flex w-full flex-col gap-6 md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-5xl">
         <div className="top" style={{ marginBottom: 0 }}>
           <div>
             <h1>Project settings</h1>
