@@ -306,7 +306,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         const testMode = isTestSendMode(p.test_send_mode);
         let toEmail = c.email!;
         if (testMode) {
-          subject = `[TEST → ${c.name} <${c.email}>] ${subject}`;
+          subject = `${subject} (test, would go to ${c.name} <${c.email}>)`;
           toEmail = testSendEmail(p.test_send_email);
         }
 

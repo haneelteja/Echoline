@@ -177,7 +177,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     let toEmail = c.email!;
     const testMode = isTestSendMode(p.test_send_mode);
     if (testMode) {
-      subject = `[TEST → ${c.name} <${c.email}>, step ${step}] ${subject}`;
+      subject = `${subject} (test, would go to ${c.name} <${c.email}>, step ${step})`;
       toEmail = testSendEmail(p.test_send_email);
     }
 
