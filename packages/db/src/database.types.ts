@@ -120,6 +120,7 @@ export interface TemplateRow {
   header_asset_id: string | null;
   gallery_asset_ids: string[];
   cc_email: string | null;
+  reply_to_email: string | null;
   body_is_html: boolean;
   created_at: string;
   updated_at: string;

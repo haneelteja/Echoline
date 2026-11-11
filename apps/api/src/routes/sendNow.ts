@@ -357,7 +357,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
           subject,
           html,
           text,
-          replyTo: p.reply_to_email ?? undefined,
+          replyTo: t.reply_to_email ?? p.reply_to_email ?? undefined,
           attachments,
         });
 

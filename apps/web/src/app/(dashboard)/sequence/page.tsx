@@ -39,6 +39,7 @@ interface TemplateDraft {
   headerAssetId: string | null;
   galleryAssetIds: string[];
   ccEmail: string;
+  replyToEmail: string;
   isHtml: boolean;
 }
 
@@ -115,6 +116,7 @@ export default function SequencePage() {
       headerAssetId: t.header_asset_id,
       galleryAssetIds: t.gallery_asset_ids ?? [],
       ccEmail: t.cc_email ?? "",
+      replyToEmail: t.reply_to_email ?? "",
       isHtml: t.body_is_html ?? false,
     });
     setTplError(null);
@@ -164,6 +166,7 @@ export default function SequencePage() {
           header_asset_id: draftTpl.headerAssetId,
           gallery_asset_ids: draftTpl.galleryAssetIds,
           cc_email: draftTpl.ccEmail.trim() || null,
+          reply_to_email: draftTpl.replyToEmail.trim() || null,
           body_is_html: draftTpl.isHtml,
         }),
       });
@@ -266,6 +269,7 @@ export default function SequencePage() {
           categoryLines: draftTpl.categoryLines,
           galleryAssetIds: draftTpl.galleryAssetIds,
           cc: draftTpl.ccEmail.trim() || undefined,
+          replyTo: draftTpl.replyToEmail.trim() || undefined,
           isHtml: draftTpl.isHtml,
         }),
       });
@@ -535,6 +539,21 @@ export default function SequencePage() {
                         placeholder="e.g. sales-rep@yourcompany.com"
                       />
                       <p className="hint">CCs this address on every send of this step. Leave blank for no CC.</p>
+                    </div>
+                  )}
+                  {editing.channel === "email" && (
+                    <div className="field">
+                      <label htmlFor="trt">Reply to</label>
+                      <input
+                        id="trt"
+                        type="email"
+                        value={draftTpl.replyToEmail}
+                        onChange={(e) => setDraftTpl({ ...draftTpl, replyToEmail: e.target.value })}
+                        placeholder="e.g. sales-rep@yourcompany.com"
+                      />
+                      <p className="hint">
+                        Replies to this step land here instead of the project&apos;s default reply-to. Leave blank to use the project default.
+                      </p>
                     </div>
                   )}
                   <div className="field">

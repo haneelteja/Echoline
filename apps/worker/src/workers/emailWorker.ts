@@ -225,7 +225,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
       subject,
       html,
       text,
-      replyTo: p.reply_to_email ?? undefined,
+      replyTo: tRow.reply_to_email ?? p.reply_to_email ?? undefined,
       attachments,
     });
 

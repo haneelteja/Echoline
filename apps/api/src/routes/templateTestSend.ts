@@ -49,6 +49,7 @@ const input = z.object({
   categoryLines: z.record(z.string()).optional(),
   galleryAssetIds: z.array(z.string().uuid()).optional(),
   cc: z.string().email().optional(),
+  replyTo: z.string().email().optional(),
   isHtml: z.boolean().optional(),
 });
 
@@ -141,7 +142,7 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
     try {
-      await sender(credentials, { from: fromEmail, to: body.to, cc: body.cc, subject, html, text, attachments });
+      await sender(credentials, { from: fromEmail, to: body.to, cc: body.cc, replyTo: body.replyTo ?? p.reply_to_email ?? undefined, subject, html, text, attachments });
       return { ok: true };
     } catch (err) {
       return reply.code(502).send({ error: "send_failed", message: err instanceof Error ? err.message : String(err) });
