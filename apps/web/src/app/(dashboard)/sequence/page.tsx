@@ -282,24 +282,31 @@ export default function SequencePage() {
     }
   }
 
-  const previewHtml =
+  // Shared by previewHtml and previewSubject below so the subject line shown
+  // in the mock inbox header above the iframe is filled with the exact same
+  // sample contact/project data as the body — otherwise a stray {{company}}
+  // left in the subject wouldn't be caught until a real test send.
+  const previewCtx =
     editing && draftTpl && editing.channel === "email" && project
+      ? {
+          project: { name: project.name, brand: project.brand, senderName: project.sender_name, website: project.website, waNumber: project.wa_number, accent: project.accent },
+          contact: { name: "Acme Corp", area: "Gachibowli", category: "Restaurant" },
+          template: { categoryLines: draftTpl.categoryLines },
+        }
+      : null;
+
+  const previewHtml =
+    previewCtx && draftTpl
       ? draftTpl.isHtml
-        ? emailHTMLFromRaw(draftTpl.body, {
-            project: { name: project.name, brand: project.brand, senderName: project.sender_name, website: project.website, waNumber: project.wa_number, accent: project.accent },
-            contact: { name: "Acme Corp", area: "Gachibowli", category: "Restaurant" },
-            template: { categoryLines: draftTpl.categoryLines },
-          })
+        ? emailHTMLFromRaw(draftTpl.body, previewCtx)
         : emailHTML(
             { body: draftTpl.body },
-            {
-              project: { name: project.name, brand: project.brand, senderName: project.sender_name, website: project.website, waNumber: project.wa_number, accent: project.accent },
-              contact: { name: "Acme Corp", area: "Gachibowli", category: "Restaurant" },
-              template: { categoryLines: draftTpl.categoryLines },
-            },
+            previewCtx,
             { galleryUrls: draftTpl.galleryAssetIds.map((aid) => assets.find((a) => a.id === aid)?.url).filter((u): u is string => Boolean(u)) }
           )
       : null;
+
+  const previewSubject = previewCtx && draftTpl ? fill(draftTpl.subject, previewCtx) : "";
 
   const waPreviewText =
     editing && draftTpl && editing.channel === "whatsapp" && project
@@ -711,7 +718,42 @@ export default function SequencePage() {
                   <div className="field" style={{ marginBottom: 0 }}>
                     <label>Preview</label>
                     {editing.channel === "email" && previewHtml ? (
-                      <iframe title="Email preview" srcDoc={previewHtml} style={{ width: "100%", height: 460, border: "1px solid var(--line)", borderRadius: 8 }} />
+                      <div style={{ border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+                        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 14px", borderBottom: "1px solid #ececec" }}>
+                          <div
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: "50%",
+                              background: project?.accent || "#4f46e5",
+                              color: "#fff",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 13,
+                              fontWeight: 600,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {(project?.sender_name || project?.brand || project?.name || "?").trim().charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>
+                                {project?.sender_name || project?.brand || project?.name}
+                              </span>
+                              <span style={{ fontSize: 11, color: "#8a8a8a", flexShrink: 0 }}>now</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: "#8a8a8a" }}>to Acme Corp</div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a", marginTop: 6, overflowWrap: "anywhere" }}>{previewSubject}</div>
+                          </div>
+                        </div>
+                        <iframe
+                          title="Email preview"
+                          srcDoc={previewHtml}
+                          style={{ width: "100%", height: 420, border: "none", display: "block", padding: "18px 16px", boxSizing: "border-box", background: "#fff" }}
+                        />
+                      </div>
                     ) : (
                       <div className="panel" style={{ background: "#dcf8c6", fontSize: 14 }}>
                         {draftTpl.headerAssetId &&
