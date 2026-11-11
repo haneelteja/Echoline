@@ -43,6 +43,25 @@ interface TemplateDraft {
   isHtml: boolean;
 }
 
+/** Maps a saved template row to its editable draft shape — shared by
+ * openEditor (initial load) and saveTemplate (to reset the dirty-check
+ * baseline after a successful save, without closing the editor). */
+function toDraft(t: TemplateRow): TemplateDraft {
+  return {
+    name: t.name ?? "",
+    subject: t.subject ?? "",
+    body: t.body ?? "",
+    categoryLines: t.category_lines ?? {},
+    metaName: t.meta_name ?? "",
+    metaCategory: "MARKETING",
+    headerAssetId: t.header_asset_id,
+    galleryAssetIds: t.gallery_asset_ids ?? [],
+    ccEmail: t.cc_email ?? "",
+    replyToEmail: t.reply_to_email ?? "",
+    isHtml: t.body_is_html ?? false,
+  };
+}
+
 export default function SequencePage() {
   const { pid, project, seq, templates, refreshProjectData } = useWorkspace();
 
@@ -67,6 +86,17 @@ export default function SequencePage() {
   const { assets } = useKbAssets(pid);
   const [picking, setPicking] = useState<"header" | "gallery" | null>(null);
   const [editingWait, setEditingWait] = useState<{ ch: ChannelKey; index: number } | null>(null);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+
+  // True whenever the open template editor's draft differs from the
+  // last-saved row — gates the "save or discard?" prompt so a plain close
+  // with no edits doesn't interrupt the user for nothing.
+  const isTplDirty = !!editing && !!draftTpl && JSON.stringify(draftTpl) !== JSON.stringify(toDraft(editing));
+
+  function requestCloseEditor() {
+    if (isTplDirty) setShowUnsavedConfirm(true);
+    else setEditing(null);
+  }
 
   // Syncs the local draft once seq finishes loading (it's null on first
   // render — WorkspaceProvider fetches it async). Calling setState directly
@@ -106,19 +136,7 @@ export default function SequencePage() {
 
   function openEditor(t: TemplateRow) {
     setEditing(t);
-    setDraftTpl({
-      name: t.name ?? "",
-      subject: t.subject ?? "",
-      body: t.body ?? "",
-      categoryLines: t.category_lines ?? {},
-      metaName: t.meta_name ?? "",
-      metaCategory: "MARKETING",
-      headerAssetId: t.header_asset_id,
-      galleryAssetIds: t.gallery_asset_ids ?? [],
-      ccEmail: t.cc_email ?? "",
-      replyToEmail: t.reply_to_email ?? "",
-      isHtml: t.body_is_html ?? false,
-    });
+    setDraftTpl(toDraft(t));
     setTplError(null);
     setTestEmailTo("");
     setTestEmailStatus("idle");
@@ -151,12 +169,17 @@ export default function SequencePage() {
     }
   }
 
-  async function saveTemplate() {
-    if (!pid || !editing || !draftTpl) return;
+  /** Saves and keeps the editor open (resetting the dirty-check baseline to
+   * the just-saved values) — closing is a separate, explicit action now, not
+   * a side effect of Save. Returns whether the save succeeded, so the
+   * unsaved-changes confirm dialog's "Save & close" can know whether it's
+   * safe to also close afterward. */
+  async function saveTemplate(): Promise<boolean> {
+    if (!pid || !editing || !draftTpl) return false;
     setBusy(true);
     setTplError(null);
     try {
-      await apiFetch(`/v1/projects/${pid}/templates/${editing.id}`, {
+      const updated = await apiFetch<TemplateRow>(`/v1/projects/${pid}/templates/${editing.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           name: draftTpl.name,
@@ -170,10 +193,13 @@ export default function SequencePage() {
           body_is_html: draftTpl.isHtml,
         }),
       });
-      setEditing(null);
+      setEditing(updated);
+      setDraftTpl(toDraft(updated));
       await refreshProjectData();
+      return true;
     } catch (e) {
       setTplError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't edit templates." : "Couldn't save");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -509,7 +535,7 @@ export default function SequencePage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!(editing && draftTpl)} onOpenChange={(open) => !open && setEditing(null)}>
+      <Dialog open={!!(editing && draftTpl)} onOpenChange={(open) => !open && requestCloseEditor()}>
         <DialogContent className="max-w-6xl max-h-[92vh]">
           {editing && draftTpl && (
             <>
@@ -853,8 +879,14 @@ export default function SequencePage() {
                   )}
                 </div>
               </div>
+              {tplError && (
+                <p className="small" style={{ color: "var(--bad)" }}>
+                  {tplError}
+                </p>
+              )}
               <DialogFooter>
-                <Button variant="outline" onClick={() => setEditing(null)}>
+                {isTplDirty && <span className="small muted" style={{ marginRight: "auto", alignSelf: "center" }}>Unsaved changes</span>}
+                <Button variant="outline" onClick={requestCloseEditor}>
                   Cancel
                 </Button>
                 <Button onClick={saveTemplate} disabled={busy}>
@@ -863,6 +895,36 @@ export default function SequencePage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showUnsavedConfirm} onOpenChange={(open) => !open && setShowUnsavedConfirm(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Unsaved changes</DialogTitle>
+            <DialogDescription>Save your changes to this template before closing, or discard them?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowUnsavedConfirm(false);
+                setEditing(null);
+              }}
+            >
+              Discard changes
+            </Button>
+            <Button
+              onClick={async () => {
+                const ok = await saveTemplate();
+                setShowUnsavedConfirm(false);
+                if (ok) setEditing(null);
+              }}
+              disabled={busy}
+            >
+              {busy ? "Saving…" : "Save & close"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

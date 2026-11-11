@@ -21,7 +21,7 @@ const DialogOverlay = React.forwardRef<React.ElementRef<typeof DialogPrimitive.O
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>>(
-  ({ className, children, ...props }, ref) => (
+  ({ className, children, onPointerDownOutside, onInteractOutside, onEscapeKeyDown, ...props }, ref) => (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
@@ -30,6 +30,23 @@ const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.C
           "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border border-border bg-popover text-popover-foreground p-6 shadow-lg max-h-[85vh] overflow-y-auto",
           className
         )}
+        // Every dialog in the app closes only via an explicit action (its own
+        // Close/X button, or a Cancel/Save button a page wires up itself) —
+        // never by clicking the overlay or pressing Escape. Still forwards to
+        // a caller-supplied handler (none exist today) so a future dialog can
+        // add its own side effect without losing this default.
+        onPointerDownOutside={(e) => {
+          e.preventDefault();
+          onPointerDownOutside?.(e);
+        }}
+        onInteractOutside={(e) => {
+          e.preventDefault();
+          onInteractOutside?.(e);
+        }}
+        onEscapeKeyDown={(e) => {
+          e.preventDefault();
+          onEscapeKeyDown?.(e);
+        }}
         {...props}
       >
         {children}
