@@ -98,9 +98,11 @@ export default function ProjectSettingsPage() {
       updateProject(updated);
     } catch (e) {
       setTestSendModeError(
-        e instanceof ApiError && e.status === 403
-          ? "Only the platform operator account can change this."
-          : "Couldn't update test send mode."
+        e instanceof ApiError
+          ? e.status === 403
+            ? "Only the platform operator account can change this."
+            : `Couldn't update test send mode: ${e.message} (HTTP ${e.status}).`
+          : "Couldn't update test send mode — request failed before reaching the server. Check your connection and try again."
       );
     } finally {
       setSavingTestSendMode(false);
