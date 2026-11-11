@@ -238,18 +238,18 @@ export default function ProjectSettingsPage() {
               <button
                 type="button"
                 role="switch"
-                aria-checked={!testSendMode}
+                aria-checked={testSendMode}
                 disabled={savingTestSendMode}
                 onClick={() => (testSendMode ? setConfirmGoLive(true) : setLive(false))}
                 className={cn(
                   "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50",
-                  testSendMode ? "border-border bg-muted" : "border-transparent bg-primary"
+                  testSendMode ? "border-transparent bg-primary" : "border-border bg-muted"
                 )}
               >
                 <span
                   className={cn(
                     "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
-                    testSendMode ? "translate-x-1" : "translate-x-6"
+                    testSendMode ? "translate-x-6" : "translate-x-1"
                   )}
                 />
               </button>
