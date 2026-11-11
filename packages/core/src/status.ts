@@ -51,6 +51,7 @@ export const SENTIMENT_VALUES = [
   "Contacted",
   "Cold Call Done",
   "Interested",
+  "Quote Requested",
   "Offer Made",
   "Converted",
   "Not Interested",

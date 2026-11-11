@@ -12,6 +12,7 @@ const SENTIMENT_META: Record<string, { dot: string; text: string; bg: string; bo
   Contacted: { dot: "bg-sky-500", text: "text-sky-700", bg: "bg-sky-50", border: "border-sky-200" },
   "Cold Call Done": { dot: "bg-indigo-500", text: "text-indigo-700", bg: "bg-indigo-50", border: "border-indigo-200" },
   Interested: { dot: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" },
+  "Quote Requested": { dot: "bg-cyan-500", text: "text-cyan-700", bg: "bg-cyan-50", border: "border-cyan-200" },
   "Offer Made": { dot: "bg-orange-500", text: "text-orange-700", bg: "bg-orange-50", border: "border-orange-200" },
   Converted: { dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
   "Not Interested": { dot: "bg-rose-400", text: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200" },

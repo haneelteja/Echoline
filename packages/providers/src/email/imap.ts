@@ -1,5 +1,19 @@
 import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
 import type { ConnectionTester } from "../types";
+
+/** Crude tag-stripping fallback for HTML-only replies (no text/plain part) —
+ * good enough for intent classification, not meant to render. */
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const MAX_BODY_CHARS = 4000;
 
 function buildClient(credentials: Record<string, string>): ImapFlow {
   const { host, port, user, pass } = credentials;
@@ -27,6 +41,9 @@ export const testImap: ConnectionTester = async (credentials) => {
 export interface ImapReply {
   fromAddress: string;
   subject: string;
+  /** Plain-text body (HTML-stripped fallback if no text/plain part), capped
+   * at MAX_BODY_CHARS — only used for reply-intent classification, not display. */
+  bodyText: string;
 }
 
 /**
@@ -45,10 +62,21 @@ export async function fetchAndConsumeUnseenImapMessages(credentials: Record<stri
     try {
       const uids = await client.search({ seen: false }, { uid: true });
       if (uids && uids.length) {
-        const messages = await client.fetchAll(uids, { envelope: true }, { uid: true });
+        const messages = await client.fetchAll(uids, { envelope: true, source: true }, { uid: true });
         for (const message of messages) {
           const fromAddress = message.envelope?.from?.[0]?.address;
-          if (fromAddress) replies.push({ fromAddress: fromAddress.toLowerCase(), subject: message.envelope?.subject ?? "" });
+          if (!fromAddress) continue;
+          let bodyText = "";
+          if (message.source) {
+            try {
+              const parsed = await simpleParser(message.source);
+              bodyText = (parsed.text || (parsed.html ? htmlToPlainText(parsed.html) : "")).slice(0, MAX_BODY_CHARS);
+            } catch {
+              // Malformed MIME — still worth recording the reply itself,
+              // just without body text to classify intent from.
+            }
+          }
+          replies.push({ fromAddress: fromAddress.toLowerCase(), subject: message.envelope?.subject ?? "", bodyText });
         }
         await client.messageFlagsAdd(uids, ["\\Seen"], { uid: true });
       }
