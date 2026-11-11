@@ -11,7 +11,7 @@ import {
   type ContactRow,
   type TemplateRow,
 } from "@echoline/db";
-import { getEmailSender, makeRewriteLink, buildOpenPixelUrl, buildUnsubscribeUrl, refreshGoogleToken, refreshMicrosoftToken } from "@echoline/providers";
+import { getEmailSender, makeRewriteLink, buildOpenPixelUrl, buildUnsubscribeUrl, refreshGoogleToken, refreshMicrosoftToken, type EmailAttachment } from "@echoline/providers";
 import { fill, fillPlainText, fillPlainTextFromRaw, emailHTML, emailHTMLFromRaw, STAGE_STATUS_KEYS, validEmail } from "@echoline/core";
 import { reportIfExhausted } from "../sentry.js";
 import { deadLetterIfExhausted } from "../deadLetter.js";
@@ -30,11 +30,38 @@ function trackingConfig() {
   return { secret: process.env.TRACKING_SIGNING_SECRET ?? "", baseUrl: process.env.API_PUBLIC_URL ?? "" };
 }
 
-async function fetchGalleryUrls(db: ReturnType<typeof createAdminClient>, assetIds: string[] | null | undefined): Promise<string[]> {
+// Well under every connected provider's own attachment-size limit (Gmail
+// 25MB total MIME-encoded, SendGrid 30MB, Resend 40MB) — a per-file safety
+// cap so one oversized knowledge-base upload can't blow up a send.
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Fetches the selected gallery assets as real email attachments (filename +
+ * mime type + base64 bytes) — not the inline/embedded images emailHTML()
+ * deliberately stopped rendering (see template.ts's Promotions-tab comment).
+ * A broken/unreachable/oversized asset is skipped rather than failing the
+ * whole send, since a missing attachment is recoverable but a failed send
+ * to a real lead isn't.
+ */
+async function fetchGalleryAttachments(db: ReturnType<typeof createAdminClient>, assetIds: string[] | null | undefined): Promise<EmailAttachment[]> {
   if (!assetIds?.length) return [];
-  const { data } = await db.from("kb_assets").select("id, url").in("id", assetIds);
-  const byId = new Map(((data as { id: string; url: string }[]) ?? []).map((a) => [a.id, a.url]));
-  return assetIds.map((aid) => byId.get(aid)).filter((u): u is string => Boolean(u));
+  const { data } = await db.from("kb_assets").select("id, name, mime_type, url").in("id", assetIds);
+  const byId = new Map(((data as { id: string; name: string; mime_type: string; url: string }[]) ?? []).map((a) => [a.id, a]));
+  const attachments: EmailAttachment[] = [];
+  for (const aid of assetIds) {
+    const a = byId.get(aid);
+    if (!a) continue;
+    try {
+      const res = await fetch(a.url);
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.byteLength > MAX_ATTACHMENT_BYTES) continue;
+      attachments.push({ filename: a.name, contentType: a.mime_type, content: buf.toString("base64") });
+    } catch {
+      continue;
+    }
+  }
+  return attachments;
 }
 
 /**
@@ -157,13 +184,13 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
 
     const tc = trackingConfig();
     const unsubscribeUrl = buildUnsubscribeUrl(tc, messageId);
-    const galleryUrls = await fetchGalleryUrls(db, tRow.gallery_asset_ids);
+    const attachments = await fetchGalleryAttachments(db, tRow.gallery_asset_ids);
     const html = tRow.body_is_html
       ? emailHTMLFromRaw(t.body, ctx, { unsubscribeUrl })
       : emailHTML(
           t,
           ctx,
-          { logoUrl: null, galleryUrls },
+          { logoUrl: null, galleryUrls: [] },
           { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, messageId), rewriteLink: makeRewriteLink(tc, messageId) }
         );
     const text = tRow.body_is_html ? fillPlainTextFromRaw(t.body, ctx, { unsubscribeUrl }) : fillPlainText(t.body, ctx, { unsubscribeUrl });
@@ -199,6 +226,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
       html,
       text,
       replyTo: p.reply_to_email ?? undefined,
+      attachments,
     });
 
     const totalSteps = ((seq as any)?.em?.steps?.length as number) ?? step + 1;

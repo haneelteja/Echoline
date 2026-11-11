@@ -27,6 +27,7 @@ export const sendResend: EmailSender = async (credentials, message) => {
       html: message.html,
       text: message.text,
       headers: message.headers,
+      attachments: message.attachments?.map((a) => ({ filename: a.filename, content: a.content })),
     }),
   });
   if (!res.ok) {

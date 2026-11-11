@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { createAdminClient, decryptCredentials, encryptCredentials, envelopeToRow, loadMasterKey, rowToEnvelope, type ProjectRow } from "@echoline/db";
-import { buildOpenPixelUrl, buildUnsubscribeUrl, getEmailSender, makeRewriteLink, refreshGoogleToken, refreshMicrosoftToken } from "@echoline/providers";
+import { buildOpenPixelUrl, buildUnsubscribeUrl, getEmailSender, makeRewriteLink, refreshGoogleToken, refreshMicrosoftToken, type EmailAttachment } from "@echoline/providers";
 import { emailHTML, emailHTMLFromRaw, fill, fillPlainText, fillPlainTextFromRaw } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 
@@ -94,11 +94,28 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     const projectBrand = { name: p.name, brand: p.brand, senderName: p.sender_name, website: p.website, waNumber: p.wa_number, accent: p.accent };
     const ctx = { project: projectBrand, contact: SAMPLE_CONTACT, template: { body: body.body, categoryLines: body.categoryLines ?? {} } };
 
-    let galleryUrls: string[] = [];
+    // Real file attachments, not the inline/embedded images emailHTML()
+    // deliberately stopped rendering (see template.ts's Promotions-tab
+    // comment) — a broken/unreachable/oversized asset is skipped rather than
+    // failing the whole test send. 8MB/file cap mirrors emailWorker.ts/
+    // sendNow.ts, well under every connected provider's own limit.
+    const attachments: EmailAttachment[] = [];
     if (body.galleryAssetIds?.length) {
-      const { data: assets } = await req.supabase.from("kb_assets").select("id, url").in("id", body.galleryAssetIds);
-      const byId = new Map(((assets as { id: string; url: string }[]) ?? []).map((a) => [a.id, a.url]));
-      galleryUrls = body.galleryAssetIds.map((aid) => byId.get(aid)).filter((u): u is string => Boolean(u));
+      const { data: assetRows } = await req.supabase.from("kb_assets").select("id, name, mime_type, url").in("id", body.galleryAssetIds);
+      const byId = new Map(((assetRows as { id: string; name: string; mime_type: string; url: string }[]) ?? []).map((a) => [a.id, a]));
+      for (const aid of body.galleryAssetIds) {
+        const a = byId.get(aid);
+        if (!a) continue;
+        try {
+          const res = await fetch(a.url);
+          if (!res.ok) continue;
+          const buf = Buffer.from(await res.arrayBuffer());
+          if (buf.byteLength > 8 * 1024 * 1024) continue;
+          attachments.push({ filename: a.name, contentType: a.mime_type, content: buf.toString("base64") });
+        } catch {
+          continue;
+        }
+      }
     }
 
     const trackingKey = `test-${id}-${Date.now()}`;
@@ -109,7 +126,7 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
       : emailHTML(
           { body: body.body },
           ctx,
-          { logoUrl: null, galleryUrls },
+          { logoUrl: null, galleryUrls: [] },
           { unsubscribeUrl, trackingPixelUrl: buildOpenPixelUrl(tc, trackingKey), rewriteLink: makeRewriteLink(tc, trackingKey) }
         );
     const text = body.isHtml ? fillPlainTextFromRaw(body.body, ctx, { unsubscribeUrl }) : fillPlainText(body.body, ctx, { unsubscribeUrl });
@@ -124,7 +141,7 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
     try {
-      await sender(credentials, { from: fromEmail, to: body.to, cc: body.cc, subject, html, text });
+      await sender(credentials, { from: fromEmail, to: body.to, cc: body.cc, subject, html, text, attachments });
       return { ok: true };
     } catch (err) {
       return reply.code(502).send({ error: "send_failed", message: err instanceof Error ? err.message : String(err) });

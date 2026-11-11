@@ -17,6 +17,9 @@ const message: EmailMessage = {
 
 const messageWithReplyTo: EmailMessage = { ...message, replyTo: "monitored@brand.com" };
 
+const sampleAttachment = { filename: "logo.png", content: Buffer.from("fake-png-bytes").toString("base64"), contentType: "image/png" };
+const messageWithAttachment: EmailMessage = { ...message, attachments: [sampleAttachment] };
+
 function mockFetchOnce(status: number, body: unknown, headers: Record<string, string> = {}) {
   const fn = vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
@@ -168,6 +171,14 @@ describe("sendSendGrid", () => {
     const body = JSON.parse(init.body as string);
     expect(body.reply_to).toEqual({ email: "monitored@brand.com" });
   });
+
+  it("passes attachments through with disposition: attachment", async () => {
+    const fetchSpy = mockFetchOnce(202, {}, { "x-message-id": "sg-msg-123" });
+    await sendSendGrid({ apiKey: "SG.xxx" }, messageWithAttachment);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.attachments).toEqual([{ content: sampleAttachment.content, filename: "logo.png", type: "image/png", disposition: "attachment" }]);
+  });
 });
 
 describe("sendBrevo", () => {
@@ -183,6 +194,14 @@ describe("sendBrevo", () => {
     const [, init] = fetchSpy.mock.calls[0];
     const body = JSON.parse(init.body as string);
     expect(body.replyTo).toEqual({ email: "monitored@brand.com" });
+  });
+
+  it("passes attachments through as name/content pairs", async () => {
+    const fetchSpy = mockFetchOnce(201, { messageId: "brevo-msg-456" });
+    await sendBrevo({ apiKey: "xkeysib-xxx" }, messageWithAttachment);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.attachment).toEqual([{ name: "logo.png", content: sampleAttachment.content }]);
   });
 });
 
@@ -204,6 +223,14 @@ describe("sendResend", () => {
     const [, init] = fetchSpy.mock.calls[0];
     const body = JSON.parse(init.body as string);
     expect(body.reply_to).toBe("monitored@brand.com");
+  });
+
+  it("passes attachments through as filename/content pairs", async () => {
+    const fetchSpy = mockFetchOnce(200, { id: "resend-msg-789" });
+    await sendResend({ apiKey: "re_xxx" }, messageWithAttachment);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.attachments).toEqual([{ filename: "logo.png", content: sampleAttachment.content }]);
   });
 });
 
@@ -228,6 +255,17 @@ describe("sendGmail", () => {
     const body = JSON.parse(init.body as string);
     const decoded = Buffer.from(body.raw, "base64url").toString("utf8");
     expect(decoded).toContain("Reply-To: monitored@brand.com");
+  });
+
+  it("includes the attachment as a multipart/mixed part in the raw MIME message", async () => {
+    const fetchSpy = mockFetchOnce(200, { id: "gmail-msg-789" });
+    await sendGmail({ accessToken: "ya29.xxx" }, messageWithAttachment);
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    const decoded = Buffer.from(body.raw, "base64url").toString("utf8");
+    expect(decoded).toContain("multipart/mixed");
+    expect(decoded).toContain('Content-Disposition: attachment; filename="logo.png"');
+    expect(decoded.replace(/\r\n/g, "")).toContain(sampleAttachment.content);
   });
 });
 
@@ -254,5 +292,25 @@ describe("sendOutlook", () => {
     const body = JSON.parse(init.body as string);
     expect(body.replyTo).toEqual([{ emailAddress: { address: "monitored@brand.com" } }]);
     expect(body.internetMessageHeaders.some((h: { name: string }) => h.name.toLowerCase() === "reply-to")).toBe(false);
+  });
+
+  it("uploads each attachment to the draft before sending it", async () => {
+    const fetchSpy = mockFetchSequence([
+      { status: 201, body: { id: "AAMk-draft-id" } },
+      { status: 201, body: {} },
+      { status: 202, body: {} },
+    ]);
+    const result = await sendOutlook({ accessToken: "eyJ.xxx" }, messageWithAttachment);
+    expect(result).toEqual({ providerMessageId: "AAMk-draft-id" });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(fetchSpy.mock.calls[1][0]).toBe("https://graph.microsoft.com/v1.0/me/messages/AAMk-draft-id/attachments");
+    const attachmentBody = JSON.parse(fetchSpy.mock.calls[1][1].body as string);
+    expect(attachmentBody).toEqual({
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      name: "logo.png",
+      contentType: "image/png",
+      contentBytes: sampleAttachment.content,
+    });
+    expect(fetchSpy.mock.calls[2][0]).toBe("https://graph.microsoft.com/v1.0/me/messages/AAMk-draft-id/send");
   });
 });

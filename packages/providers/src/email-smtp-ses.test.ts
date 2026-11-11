@@ -9,6 +9,9 @@ const message: EmailMessage = {
   text: "Hi",
 };
 
+const sampleAttachment = { filename: "logo.png", content: Buffer.from("fake-png-bytes").toString("base64"), contentType: "image/png" };
+const messageWithAttachment: EmailMessage = { ...message, attachments: [sampleAttachment] };
+
 const verifyMock = vi.fn();
 const sendMailMock = vi.fn();
 const closeMock = vi.fn();
@@ -96,6 +99,14 @@ describe("sendSmtp", () => {
     );
     expect(closeMock).toHaveBeenCalled();
   });
+
+  it("decodes base64 attachment content into a Buffer for nodemailer", async () => {
+    sendMailMock.mockResolvedValueOnce({ messageId: "<smtp-msg-1@test>" });
+    const { sendSmtp } = await import("./email/smtp");
+    await sendSmtp({ host: "smtp.test.com", port: "587", user: "me@test.com", pass: "secret" }, messageWithAttachment);
+    const call = sendMailMock.mock.calls.at(-1)![0];
+    expect(call.attachments).toEqual([{ filename: "logo.png", content: Buffer.from(sampleAttachment.content, "base64"), contentType: "image/png" }]);
+  });
 });
 
 describe("sendSes", () => {
@@ -107,5 +118,16 @@ describe("sendSes", () => {
     const [sentCommand] = sendMock.mock.calls.at(-1)!;
     const rawBytes: Buffer = (sentCommand as { input: { Content: { Raw: { Data: Buffer } } } }).input.Content.Raw.Data;
     expect(rawBytes.toString("utf8")).toContain("Hi</p>");
+  });
+
+  it("includes the attachment as a multipart/mixed part in the raw MIME message", async () => {
+    sendMock.mockResolvedValueOnce({ MessageId: "ses-msg-1" });
+    const { sendSes } = await import("./email/ses");
+    await sendSes({ accessKeyId: "AKIA", secretAccessKey: "secret", region: "ap-south-1" }, messageWithAttachment);
+    const [sentCommand] = sendMock.mock.calls.at(-1)!;
+    const rawBytes: Buffer = (sentCommand as { input: { Content: { Raw: { Data: Buffer } } } }).input.Content.Raw.Data;
+    const raw = rawBytes.toString("utf8");
+    expect(raw).toContain("multipart/mixed");
+    expect(raw).toContain('Content-Disposition: attachment; filename="logo.png"');
   });
 });

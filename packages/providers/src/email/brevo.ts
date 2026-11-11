@@ -26,6 +26,7 @@ export const sendBrevo: EmailSender = async (credentials, message) => {
       htmlContent: message.html,
       textContent: message.text,
       headers: message.headers,
+      attachment: message.attachments?.map((a) => ({ name: a.filename, content: a.content })),
     }),
   });
   if (!res.ok) {

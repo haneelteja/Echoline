@@ -638,7 +638,7 @@ export default function SequencePage() {
                     </div>
                     <p className="hint">
                       {editing.channel === "email"
-                        ? "Up to 3 shown in the email, selected from the knowledge base."
+                        ? "Sent as real file attachments, not embedded in the email body — inline images are a known Promotions-tab signal, so they're kept out of the rendered HTML."
                         : "Only sent by free-text providers (e.g. 360Messenger) — Meta's official template header is capped at one image/document, so these are ignored for Meta sends. Sent as the first item + text together, then one message per remaining item."}
                     </p>
                   </div>

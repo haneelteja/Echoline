@@ -46,6 +46,13 @@ export const sendOutlook: EmailSender = async (credentials, message) => {
   });
   const draft = (await draftRes.json()) as { id: string };
 
+  for (const a of message.attachments ?? []) {
+    await graphFetch(accessToken, `/me/messages/${draft.id}/attachments`, {
+      method: "POST",
+      body: JSON.stringify({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.filename, contentType: a.contentType, contentBytes: a.content }),
+    });
+  }
+
   await graphFetch(accessToken, `/me/messages/${draft.id}/send`, { method: "POST" });
   return { providerMessageId: draft.id };
 };

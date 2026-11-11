@@ -45,6 +45,13 @@ export interface SendResult {
   providerMessageId: string;
 }
 
+export interface EmailAttachment {
+  filename: string;
+  /** Base64-encoded file content. */
+  content: string;
+  contentType: string;
+}
+
 export interface EmailMessage {
   from: string;
   to: string;
@@ -61,6 +68,11 @@ export interface EmailMessage {
    * for providers where that's required — SendGrid and Outlook both ignore
    * or reject a generic "Reply-To" header). */
   replyTo?: string;
+  /** True file attachments (as opposed to the inline/embedded images emailHTML()
+   * deliberately stopped rendering — see template.ts's emailShell comment on
+   * the Promotions-tab fix). A real attachment doesn't carry the same
+   * bulk-mail signal an inline branded image does. */
+  attachments?: EmailAttachment[];
 }
 
 export type EmailSender = (credentials: Record<string, string>, message: EmailMessage) => Promise<SendResult>;

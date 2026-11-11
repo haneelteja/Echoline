@@ -26,6 +26,7 @@ export const sendSendGrid: EmailSender = async (credentials, message) => {
         { type: "text/plain", value: message.text },
         { type: "text/html", value: message.html },
       ],
+      attachments: message.attachments?.map((a) => ({ content: a.content, filename: a.filename, type: a.contentType, disposition: "attachment" })),
     }),
   });
   if (!res.ok) {
