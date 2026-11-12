@@ -1,8 +1,16 @@
 import type { OAuthConfig, OAuthTokens } from "./types";
 
 // Scopes per the Phase 2 spec: send + readonly (readonly needed for reply
-// detection in Phase 4's Gmail history API / watch).
-export const GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"];
+// detection in Phase 4's Gmail history API / watch), plus userinfo.email —
+// gmail.send/gmail.readonly alone don't grant identity access, so without it
+// testGmail()'s own userinfo lookup (packages/providers/src/email/gmail.ts)
+// fails outright: the connection lands as "needs_reconnect" with no
+// account_label, never "connected", confirmed live 2026-11-12.
+export const GMAIL_SCOPES = [
+  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/userinfo.email",
+];
 // Read-only is deliberate — this is a lead *source*, we only ever read rows
 // from a sheet the user already owns, never write back to it.
 // drive.metadata.readonly lets the Sources UI list the account's actual
