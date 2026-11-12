@@ -1,6 +1,6 @@
 "use client";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Archive, ArchiveRestore, Clock, Loader2, Pause, Pencil, Play, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, Clock, KeyRound, Loader2, Pause, Pencil, Play, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import type { ConnectionRow, LeadSourceRow } from "@/lib/types";
@@ -959,9 +959,9 @@ export default function SourcesPage() {
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {s.last_sync ? (
-                      <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1.5" title={new Date(s.last_sync).toLocaleString()}>
                         <Clock className="h-3 w-3 shrink-0 opacity-50" />
-                        {new Date(s.last_sync).toLocaleString()}
+                        {new Date(s.last_sync).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
                       </span>
                     ) : (
                       "—"
@@ -971,31 +971,58 @@ export default function SourcesPage() {
                   <TableCell className="tabular-nums text-muted-foreground">{s.rows_skipped}</TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">{s.rows_failed}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => startEdit(s)}>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="icon" className="h-8 w-8" title="Edit" aria-label="Edit" onClick={() => startEdit(s)}>
                         <Pencil className="h-3.5 w-3.5" />
-                        Edit
                       </Button>
                       {(s.type === "webhook" || s.type === "form") && (
-                        <Button variant="outline" size="sm" onClick={() => generateToken(s.id)}>
-                          {s.last_sync ? "Rotate token" : "Generate token"}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          title={s.last_sync ? "Rotate token" : "Generate token"}
+                          aria-label={s.last_sync ? "Rotate token" : "Generate token"}
+                          onClick={() => generateToken(s.id)}
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
                         </Button>
                       )}
                       {(s.type === "onedrive" || s.type === "google_sheets") && (
                         <>
-                          <Button variant="outline" size="sm" disabled={syncingId === s.id} onClick={() => syncNow(s.id)}>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={syncingId === s.id}
+                            title={syncingId === s.id ? "Syncing…" : "Sync now"}
+                            aria-label="Sync now"
+                            onClick={() => syncNow(s.id)}
+                          >
                             {syncingId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                            {syncingId === s.id ? "Syncing…" : "Sync now"}
                           </Button>
-                          <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => togglePaused(s)}>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={busyId === s.id}
+                            title={s.paused ? "Resume" : "Pause"}
+                            aria-label={s.paused ? "Resume" : "Pause"}
+                            onClick={() => togglePaused(s)}
+                          >
                             {s.paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-                            {s.paused ? "Resume" : "Pause"}
                           </Button>
                         </>
                       )}
-                      <Button variant="outline" size="sm" disabled={busyId === s.id} onClick={() => toggleArchived(s)}>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        disabled={busyId === s.id}
+                        title="Archive"
+                        aria-label="Archive"
+                        onClick={() => toggleArchived(s)}
+                      >
                         <Archive className="h-3.5 w-3.5" />
-                        Archive
                       </Button>
                     </div>
                   </TableCell>
