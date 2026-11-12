@@ -40,6 +40,7 @@ export function TeamSettings({ orgId }: { orgId: string }) {
   const [inviteRole, setInviteRole] = useState<MembershipRole>("admin");
   const [sendingInvite, setSendingInvite] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteEmailError, setInviteEmailError] = useState<string | null>(null);
   const [inviteSent, setInviteSent] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -69,19 +70,28 @@ export function TeamSettings({ orgId }: { orgId: string }) {
     if (!inviteEmail.trim()) return;
     setSendingInvite(true);
     setInviteError(null);
+    setInviteEmailError(null);
     try {
       await apiFetch(`/v1/orgs/${orgId}/invites`, { method: "POST", body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }) });
       setInviteSent(inviteEmail.trim());
       setInviteEmail("");
       await refresh();
     } catch (e) {
-      setInviteError(
-        e instanceof ApiError && e.status === 403
-          ? "Only an owner or admin can invite teammates."
-          : e instanceof ApiError
-            ? e.message
-            : "Couldn't send the invite."
-      );
+      const issues = e instanceof ApiError && Array.isArray((e.body as { issues?: unknown })?.issues)
+        ? ((e.body as { issues: { path: string; message: string }[] }).issues)
+        : null;
+      const emailIssue = issues?.find((i) => i.path === "email");
+      if (emailIssue) {
+        setInviteEmailError(emailIssue.message);
+      } else {
+        setInviteError(
+          e instanceof ApiError && e.status === 403
+            ? "Only an owner or admin can invite teammates."
+            : e instanceof ApiError
+              ? e.message
+              : "Couldn't send the invite."
+        );
+      }
     } finally {
       setSendingInvite(false);
     }
@@ -138,6 +148,7 @@ export function TeamSettings({ orgId }: { orgId: string }) {
           onClick={() => {
             setInviting(true);
             setInviteError(null);
+            setInviteEmailError(null);
             setInviteSent(null);
           }}
         >
@@ -246,7 +257,19 @@ export function TeamSettings({ orgId }: { orgId: string }) {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="invite-email">Email</Label>
-              <Input id="invite-email" type="email" placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} autoFocus />
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="teammate@company.com"
+                value={inviteEmail}
+                onChange={(e) => {
+                  setInviteEmail(e.target.value);
+                  if (inviteEmailError) setInviteEmailError(null);
+                }}
+                aria-invalid={inviteEmailError ? true : undefined}
+                autoFocus
+              />
+              {inviteEmailError && <p className="text-sm text-destructive">{inviteEmailError}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="invite-role">Role</Label>

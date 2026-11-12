@@ -65,7 +65,12 @@ export async function buildApp(): Promise<FastifyInstance> {
     // (e.g. a client PATCHing an out-of-range number) instead of just
     // rejecting it with a 400.
     if (err instanceof ZodError) {
-      return reply.code(400).send({ error: "validation_error", message: err.message });
+      // err.message defaults to JSON.stringify(err.issues) — unreadable raw
+      // JSON dumped straight into a toast/banner. Reduce to a short human
+      // message, plus structured `issues` so a form can show it per-field.
+      const issues = err.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
+      const message = issues.map((i) => (i.path ? `${i.path}: ${i.message}` : i.message)).join("; ");
+      return reply.code(400).send({ error: "validation_error", message, issues });
     }
     if (err.validation) {
       return reply.code(400).send({ error: "validation_error", message: err.message });
