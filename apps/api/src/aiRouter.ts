@@ -1,8 +1,47 @@
+import Redis from "ioredis";
 import { decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
 import { pickModel, TASK_PROFILES, buildCandidates, parseCandidateId, type AiProviderId, type CatalogRow, type TaskType } from "@echoline/providers";
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
+}
+
+// A separate connection from rateLimit.ts/schedulerQueue.ts's — same
+// reasoning as those: each consumer in this app keeps its own small
+// connection rather than sharing one module-wide.
+let redis: Redis | null = null;
+function getRedisConnection(): Redis {
+  if (redis) return redis;
+  const url = process.env.REDIS_URL;
+  if (!url) throw new Error("REDIS_URL is not set");
+  redis = new Redis(url, { maxRetriesPerRequest: null });
+  return redis;
+}
+
+const CATALOG_CACHE_KEY = "ai_model_catalog:v1";
+const CATALOG_CACHE_TTL_SECONDS = 600;
+
+/**
+ * ai_model_catalog is near-static reference data — apps/worker's
+ * aiCatalogSync only refreshes it at most once a day — but was being
+ * re-queried from Postgres on every single AI-router call. Cached in Redis
+ * instead (shared with apps/worker/src/imapPoll.ts's identical query, same
+ * REDIS_URL/key, same cache); aiCatalogSync deletes this key right after it
+ * writes a fresh catalog so a refresh is visible immediately rather than
+ * waiting out the TTL. Any Redis failure here just falls through to the
+ * Postgres query — caching is purely additive, never a new failure mode.
+ */
+async function getModelCatalog(supabase: any): Promise<any[]> {
+  const cached = await getRedisConnection()
+    .get(CATALOG_CACHE_KEY)
+    .catch(() => null);
+  if (cached) return JSON.parse(cached);
+  const { data: catalog } = await supabase.from("ai_model_catalog").select("*");
+  const rows = catalog ?? [];
+  await getRedisConnection()
+    .set(CATALOG_CACHE_KEY, JSON.stringify(rows), "EX", CATALOG_CACHE_TTL_SECONDS)
+    .catch(() => {});
+  return rows;
 }
 
 export interface AiConnection {
@@ -60,8 +99,8 @@ export async function selectProviderAndModel(
   const fallback = connections[0];
   if (!fallback) throw new Error("selectProviderAndModel called with no connections");
 
-  const { data: catalog } = await supabase.from("ai_model_catalog").select("*");
-  if (!catalog?.length) return fallback;
+  const catalog = await getModelCatalog(supabase);
+  if (!catalog.length) return fallback;
 
   const connectedProviders = connections.map((c) => c.provider as AiProviderId);
   const candidates = buildCandidates(connectedProviders, catalog.map(toCatalogRow));

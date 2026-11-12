@@ -9,9 +9,29 @@ import {
   type CatalogRow,
 } from "@echoline/providers";
 import type { Logger } from "pino";
+import { getRedisConnection } from "./redis.js";
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
+}
+
+const CATALOG_CACHE_KEY = "ai_model_catalog:v1";
+const CATALOG_CACHE_TTL_SECONDS = 600;
+
+/** Same cache as apps/api/src/aiRouter.ts's getModelCatalog — identical
+ * query, same REDIS_URL, same key, so a cache populated by either process
+ * serves the other too. See that file for the full rationale. */
+async function getModelCatalog(db: ReturnType<typeof createAdminClient>): Promise<any[]> {
+  const cached = await getRedisConnection()
+    .get(CATALOG_CACHE_KEY)
+    .catch(() => null);
+  if (cached) return JSON.parse(cached);
+  const { data: catalog } = await db.from("ai_model_catalog").select("*");
+  const rows = catalog ?? [];
+  await getRedisConnection()
+    .set(CATALOG_CACHE_KEY, JSON.stringify(rows), "EX", CATALOG_CACHE_TTL_SECONDS)
+    .catch(() => {});
+  return rows;
 }
 
 const OPT_OUT_KEYWORDS = new Set(["stop", "unsubscribe", "cancel", "end", "quit", "opt out", "optout"]);
@@ -93,8 +113,8 @@ async function classifyReplyIntent(
 
   let provider: AiProviderId = connections[0]!.provider;
   let credentials = connections[0]!.credentials;
-  const { data: catalog } = await db.from("ai_model_catalog").select("*");
-  if (catalog?.length) {
+  const catalog = await getModelCatalog(db);
+  if (catalog.length) {
     const candidates = buildCandidates(
       connections.map((c) => c.provider),
       (catalog as any[]).map((row) => ({

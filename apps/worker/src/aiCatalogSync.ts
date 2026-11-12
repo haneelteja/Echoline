@@ -1,6 +1,9 @@
 import { createAdminClient, decryptCredentials, loadMasterKey, rowToEnvelope } from "@echoline/db";
 import { fetchOpenRouterCatalog, type OpenRouterCatalogEntry } from "@echoline/providers";
 import type { Logger } from "pino";
+import { getRedisConnection } from "./redis.js";
+
+const CATALOG_CACHE_KEY = "ai_model_catalog:v1";
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -62,6 +65,12 @@ export async function runAiCatalogSyncTick(log: Logger): Promise<void> {
     if (deleteErr) throw deleteErr;
     const { error } = await db.from("ai_model_catalog").insert(entries.map(toRow));
     if (error) throw error;
+    // Invalidate the Redis cache (apps/api/src/aiRouter.ts and this file's
+    // own imapPoll.ts both read through it) so the refresh is visible
+    // immediately instead of waiting out its TTL.
+    await getRedisConnection()
+      .del(CATALOG_CACHE_KEY)
+      .catch((err) => log.warn({ err }, "ai catalog sync: failed to invalidate cache"));
     log.info({ count: entries.length }, "ai catalog sync: refreshed");
   } catch (err) {
     // Not reconnect-worthy — a transient OpenRouter hiccup just means the
