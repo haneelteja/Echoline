@@ -66,6 +66,10 @@ export default function OrganizationPage() {
   const orgId = project?.org_id ?? null;
 
   const [org, setOrg] = useState<OrganizationRow | null>(null);
+  const [editingOrgName, setEditingOrgName] = useState(false);
+  const [orgNameValue, setOrgNameValue] = useState("");
+  const [orgNameBusy, setOrgNameBusy] = useState(false);
+  const [orgNameError, setOrgNameError] = useState<string | null>(null);
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -107,6 +111,30 @@ export default function OrganizationPage() {
       .then(setOrg)
       .catch(() => setOrg(null));
   }, [orgId]);
+
+  function startEditingOrgName() {
+    setOrgNameValue(org?.name ?? "");
+    setOrgNameError(null);
+    setEditingOrgName(true);
+  }
+
+  async function saveOrgName() {
+    if (!orgId || !orgNameValue.trim()) return;
+    setOrgNameBusy(true);
+    setOrgNameError(null);
+    try {
+      const updated = await apiFetch<OrganizationRow>(`/v1/orgs/${orgId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: orgNameValue.trim() }),
+      });
+      setOrg(updated);
+      setEditingOrgName(false);
+    } catch (e) {
+      setOrgNameError(e instanceof ApiError && e.status === 404 ? "You need admin access to rename this organization." : "Couldn't save.");
+    } finally {
+      setOrgNameBusy(false);
+    }
+  }
 
   async function refresh() {
     if (!orgId) return;
@@ -492,7 +520,39 @@ export default function OrganizationPage() {
     <div className="flex flex-col gap-10">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Organization</p>
-        <h1 className="font-display text-2xl font-bold text-foreground">{org?.name ?? "…"}</h1>
+        {editingOrgName ? (
+          <div className="flex items-center gap-2 pt-1">
+            <Input
+              autoFocus
+              value={orgNameValue}
+              onChange={(e) => setOrgNameValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveOrgName()}
+              className="h-9 max-w-xs text-lg font-semibold"
+            />
+            <Button size="sm" onClick={saveOrgName} disabled={orgNameBusy || !orgNameValue.trim()}>
+              {orgNameBusy ? "Saving…" : "Save"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setEditingOrgName(false)} disabled={orgNameBusy}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-2xl font-bold text-foreground">{org?.name ?? "…"}</h1>
+            {org && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={startEditingOrgName}
+                title="Rename organization"
+                aria-label="Rename organization"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+        {orgNameError && <p className="text-sm text-destructive">{orgNameError}</p>}
       </div>
 
       <div className="flex flex-col gap-6">

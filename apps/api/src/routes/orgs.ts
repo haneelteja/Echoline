@@ -43,6 +43,23 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     return data;
   });
 
+  // Renaming is admin+ only — RLS's org_update policy (can_admin_org) is the
+  // actual gate; a non-admin's update affects zero rows under RLS rather
+  // than erroring, so the 404 below also covers "you don't have access."
+  app.patch("/orgs/:orgId", async (req, reply) => {
+    const { orgId } = req.params as { orgId: string };
+    const body = createOrgInput.parse(req.body);
+    const { data, error } = await req.supabase
+      .from("organizations")
+      .update({ name: body.name })
+      .eq("id", orgId)
+      .select("id, name, created_at")
+      .maybeSingle();
+    if (error) return sendDbError(reply, error);
+    if (!data) return reply.code(404).send({ error: "not_found" });
+    return data;
+  });
+
   // Member list, with each row's email resolved via the admin client —
   // auth.users isn't exposed to a regular PostgREST client at all, so every
   // caller needs this regardless of their own role. Relies on `memberships`
