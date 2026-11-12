@@ -25,7 +25,19 @@ async function getModelCatalog(db: ReturnType<typeof createAdminClient>): Promis
   const cached = await getRedisConnection()
     .get(CATALOG_CACHE_KEY)
     .catch(() => null);
-  if (cached) return JSON.parse(cached);
+  // A parse failure here must NOT throw: this function is only ever called
+  // from classifyReplyIntent, which runImapReplyPollTick wraps in a
+  // try/catch that marks the IMAP *connection* as needs_reconnect on any
+  // thrown error (see that function) — a corrupted cache value would
+  // otherwise wrongly flag a perfectly healthy inbox as broken. Treat a bad
+  // cache value as a miss, same as no value at all.
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch {
+      // fall through to the live query below
+    }
+  }
   const { data: catalog } = await db.from("ai_model_catalog").select("*");
   const rows = catalog ?? [];
   await getRedisConnection()

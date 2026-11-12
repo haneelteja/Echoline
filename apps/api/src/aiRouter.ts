@@ -35,7 +35,15 @@ async function getModelCatalog(supabase: any): Promise<any[]> {
   const cached = await getRedisConnection()
     .get(CATALOG_CACHE_KEY)
     .catch(() => null);
-  if (cached) return JSON.parse(cached);
+  // A parse failure must fall through to the live query, not throw — same
+  // reasoning as apps/worker/src/imapPoll.ts's identical cache reader.
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch {
+      // fall through to the live query below
+    }
+  }
   const { data: catalog } = await supabase.from("ai_model_catalog").select("*");
   const rows = catalog ?? [];
   await getRedisConnection()
