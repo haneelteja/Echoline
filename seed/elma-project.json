@@ -17,6 +17,11 @@
     "stopOnReply": true,
     "em": {
       "enabled": true,
+      "dailyCap": 50,
+      "window": {
+        "start": "10:00",
+        "end": "18:00"
+      },
       "steps": [
         {
           "delayDays": 0
@@ -31,6 +36,11 @@
     },
     "wa": {
       "enabled": true,
+      "dailyCap": 50,
+      "window": {
+        "start": "10:00",
+        "end": "18:00"
+      },
       "steps": [
         {
           "delayDays": 0

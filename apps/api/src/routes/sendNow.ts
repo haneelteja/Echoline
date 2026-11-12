@@ -291,8 +291,8 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: "rate_limited", message: `This ${kind} provider is capped at ${rl.limit} sends/minute — try again in a moment.` });
     }
     if (seqErr) return sendDbError(reply, seqErr);
-    const seq = seqRow as { daily_cap: number; em: { steps: unknown[] }; wa: { steps: unknown[] } } | null;
-    const dailyCap = seq?.daily_cap ?? 50;
+    const seq = seqRow as { daily_cap: number; em: { steps: unknown[]; dailyCap?: number }; wa: { steps: unknown[]; dailyCap?: number } } | null;
+    const dailyCap = seq?.[channelKind]?.dailyCap ?? seq?.daily_cap ?? 50;
     const totalSteps = seq?.[channelKind]?.steps?.length ?? t.step + 1;
 
     const claim = await checkDailyCapAndClaim(db, { orgId: p.org_id, projectId, contactId, channel: channelKind, step: t.step, dailyCap });

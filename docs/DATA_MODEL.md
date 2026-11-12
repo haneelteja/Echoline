@@ -5,7 +5,7 @@ All data is scoped under `projects/{projectId}`.
 | Path | Purpose | Key fields |
 |---|---|---|
 | `projects/{pid}` | Project | name, brand, senderName, website, waNumber, accent |
-| `.../settings/sequence` | Sequence rules | em/wa: {enabled, steps[{delayDays}]}, dailyCap, window{start,end}, stopOnReply |
+| `.../settings/sequence` | Sequence rules | em/wa: {enabled, dailyCap, window{start,end}, steps[{delayDays}]}, stopOnReply |
 | `.../settings/channels` | Provider config (no secrets) | email{provider, fromName, fromEmail, replyTo, tracking}, wa{provider, number, phoneId, waba, lang, tracking} |
 | `.../settings/brand` | Knowledge base facts | about, offer, pricing, tone, cta, skus[{code,name,size,price,moq}] |
 | `.../kb/{id}` | Images and notes | title, assetId?, tags[email\|whatsapp\|logo], text? |

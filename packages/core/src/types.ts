@@ -11,12 +11,16 @@ export interface SequenceStep {
 
 export interface SequenceChannelConfig {
   enabled: boolean;
+  /** Per-channel — email and WhatsApp often need different cadences/hours,
+   * so these aren't shared project-wide settings. */
+  dailyCap: number;
+  window: { start: string; end: string }; // "HH:MM", evaluated in project timezone
   steps: SequenceStep[];
 }
 
 export interface SequenceSettings {
-  dailyCap: number;
-  window: { start: string; end: string }; // "HH:MM", evaluated in project timezone
+  /** Shared across channels on purpose — a reply or opt-out on one channel
+   * should stop outreach everywhere, not just on the channel it came from. */
   stopOnReply: boolean;
   em: SequenceChannelConfig;
   wa: SequenceChannelConfig;

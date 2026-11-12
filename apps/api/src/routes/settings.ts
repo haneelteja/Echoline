@@ -16,9 +16,6 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     const { data, error } = await req.supabase
       .from("sequence_settings")
       .update({
-        daily_cap: body.dailyCap,
-        window_start: (body.window as any)?.start,
-        window_end: (body.window as any)?.end,
         stop_on_reply: body.stopOnReply,
         em: body.em,
         wa: body.wa,

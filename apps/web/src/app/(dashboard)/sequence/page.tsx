@@ -43,6 +43,32 @@ interface TemplateDraft {
   isHtml: boolean;
 }
 
+interface ChannelDraft {
+  enabled: boolean;
+  dailyCap: number;
+  window: { start: string; end: string };
+  steps: { delayDays: number; delayMinutes?: number; delaySeconds?: number }[];
+}
+
+interface SeqDraft {
+  stop_on_reply: boolean;
+  em: ChannelDraft;
+  wa: ChannelDraft;
+}
+
+/** Fills in a channel's dailyCap/window from the row's legacy shared columns
+ * when a row predates migration 0038 and hasn't backfilled them yet — lets
+ * the editable draft always treat these as present, never undefined. */
+function withDefaults(s: SequenceSettingsRow): SeqDraft {
+  const fill = (cfg: SequenceSettingsRow["em"]): ChannelDraft => ({
+    enabled: cfg.enabled,
+    steps: cfg.steps,
+    dailyCap: cfg.dailyCap ?? s.daily_cap,
+    window: cfg.window ?? { start: s.window_start.slice(0, 5), end: s.window_end.slice(0, 5) },
+  });
+  return { stop_on_reply: s.stop_on_reply, em: fill(s.em), wa: fill(s.wa) };
+}
+
 /** Maps a saved template row to its editable draft shape — shared by
  * openEditor (initial load) and saveTemplate (to reset the dirty-check
  * baseline after a successful save, without closing the editor). */
@@ -65,7 +91,7 @@ function toDraft(t: TemplateRow): TemplateDraft {
 export default function SequencePage() {
   const { pid, project, seq, templates, refreshProjectData } = useWorkspace();
 
-  const [draft, setDraft] = useState<SequenceSettingsRow | null>(seq);
+  const [draft, setDraft] = useState<SeqDraft | null>(seq ? withDefaults(seq) : null);
   const [seqSaved, setSeqSaved] = useState(false);
   const [seqError, setSeqError] = useState<string | null>(null);
 
@@ -103,7 +129,7 @@ export default function SequencePage() {
   // during render worked but is a React anti-pattern and wouldn't re-sync
   // if seq changed again later; this effect does, correctly.
   useEffect(() => {
-    if (seq) setDraft(seq);
+    if (seq) setDraft(withDefaults(seq));
   }, [seq]);
 
   if (!draft) return <div className="empty">Loading…</div>;
@@ -116,8 +142,6 @@ export default function SequencePage() {
       await apiFetch(`/v1/projects/${pid}/sequence`, {
         method: "PUT",
         body: JSON.stringify({
-          dailyCap: draft.daily_cap,
-          window: { start: draft.window_start.slice(0, 5), end: draft.window_end.slice(0, 5) },
           stopOnReply: draft.stop_on_reply,
           em: draft.em,
           wa: draft.wa,
@@ -359,7 +383,63 @@ export default function SequencePage() {
   }
 
   function column(ch: ChannelKey) {
-    const steps = draft![ch].steps;
+    const chDraft = draft![ch];
+    const steps = chDraft.steps;
+
+    // Horizontal flow: each step is a card, with a wait-time connector
+    // between consecutive cards — Initial, then a connector, then Follow-up
+    // 1, and so on. flex-wrap lets it fold onto multiple rows on narrower
+    // screens instead of forcing horizontal scroll.
+    const flowNodes = steps.flatMap((s, i) => {
+      const tpl = templateFor(ch, i);
+      const nodes = [];
+      if (i > 0) {
+        nodes.push(
+          <div key={`wait-${i}`} className="flex flex-col items-center justify-center" style={{ minWidth: 64, padding: "0 4px" }}>
+            <div style={{ height: 1, width: "100%", minWidth: 24, background: "var(--line)" }} />
+            <button
+              type="button"
+              className="row small"
+              style={{ gap: 6, margin: "6px 0", padding: "4px 10px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--bg)", whiteSpace: "nowrap" }}
+              onClick={() => setEditingWait({ ch, index: i })}
+            >
+              <Clock className="h-3 w-3" />
+              wait {formatWait(s)}
+              <Pencil className="h-3 w-3" style={{ opacity: 0.6 }} />
+            </button>
+            <div style={{ height: 1, width: "100%", minWidth: 24, background: "var(--line)" }} />
+          </div>
+        );
+      }
+      nodes.push(
+        <div
+          key={`step-${i}`}
+          className="flex flex-col"
+          style={{ gap: 6, minWidth: 190, maxWidth: 230, flex: "1 1 190px", padding: 12, border: "1px solid var(--border, #e8e8e8)", borderRadius: 10 }}
+        >
+          <b className="small">{STEP_LABEL[i] ?? `Step ${i + 1}`}</b>
+          <span className="small muted">{i === 0 ? "sent immediately" : `${formatWait(s)} after the previous step`}</span>
+          {tpl ? (
+            <>
+              <div className="small">
+                <b>{tpl.name || "Untitled"}</b>
+                {tpl.ai ? " · AI" : ""}
+                {ch === "wa" && tpl.meta_status ? ` · ${tpl.meta_status}` : ""}
+              </div>
+              <button className="btn small" onClick={() => openEditor(tpl)}>
+                Edit template
+              </button>
+            </>
+          ) : (
+            <button className="btn small" disabled={busy} onClick={() => createTemplate(ch, i)}>
+              Choose / create template
+            </button>
+          )}
+        </div>
+      );
+      return nodes;
+    });
+
     return (
       <section className="panel" key={ch}>
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
@@ -368,8 +448,8 @@ export default function SequencePage() {
             <label className="row small">
               <input
                 type="checkbox"
-                checked={draft![ch].enabled}
-                onChange={(e) => setDraft({ ...draft!, [ch]: { ...draft![ch], enabled: e.target.checked } })}
+                checked={chDraft.enabled}
+                onChange={(e) => setDraft({ ...draft!, [ch]: { ...chDraft, enabled: e.target.checked } })}
               />
               Active
             </label>
@@ -379,61 +459,45 @@ export default function SequencePage() {
           </div>
         </div>
 
-        {steps.map((s, i) => {
-          const tpl = templateFor(ch, i);
-          return (
-            <div
-              key={i}
-              className="row"
-              style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid var(--border, #e8e8e8)" }}
-            >
-              <div style={{ minWidth: 230 }}>
-                <b className="small">{STEP_LABEL[i] ?? `Step ${i + 1}`}</b>
-                <div className="small muted">
-                  {i === 0 ? (
-                    "sent immediately"
-                  ) : (
-                    <button
-                      type="button"
-                      className="row small"
-                      style={{
-                        gap: 6,
-                        marginTop: 4,
-                        padding: "4px 10px",
-                        borderRadius: 999,
-                        border: "1px solid var(--line)",
-                        background: "var(--bg)",
-                      }}
-                      onClick={() => setEditingWait({ ch, index: i })}
-                    >
-                      <Clock className="h-3 w-3" />
-                      wait {formatWait(s)}
-                      <Pencil className="h-3 w-3" style={{ opacity: 0.6 }} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div style={{ flex: 1, textAlign: "right" }}>
-                {tpl ? (
-                  <>
-                    <div className="small" style={{ marginBottom: 4 }}>
-                      <b>{tpl.name || "Untitled"}</b>
-                      {tpl.ai ? " · AI" : ""}
-                      {ch === "wa" && tpl.meta_status ? ` · ${tpl.meta_status}` : ""}
-                    </div>
-                    <button className="btn small" onClick={() => openEditor(tpl)}>
-                      Edit template
-                    </button>
-                  </>
-                ) : (
-                  <button className="btn small" disabled={busy} onClick={() => createTemplate(ch, i)}>
-                    Choose / create template
-                  </button>
-                )}
-              </div>
+        <div className="flex flex-wrap items-start" style={{ gap: 4, marginBottom: 20 }}>
+          {flowNodes}
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--border, #e8e8e8)", paddingTop: 14 }}>
+          <h3 className="small" style={{ marginBottom: 10, fontWeight: 600 }}>
+            {CH_LABEL[ch]} sending rules
+          </h3>
+          <div className="grid g3">
+            <div className="field">
+              <label htmlFor={`cap-${ch}`}>Daily cap</label>
+              <input
+                id={`cap-${ch}`}
+                type="number"
+                min={1}
+                value={chDraft.dailyCap}
+                onChange={(e) => setDraft({ ...draft!, [ch]: { ...chDraft, dailyCap: Math.max(1, Number(e.target.value) || 1) } })}
+              />
             </div>
-          );
-        })}
+            <div className="field">
+              <label htmlFor={`ws-${ch}`}>Send window start</label>
+              <input
+                id={`ws-${ch}`}
+                type="time"
+                value={chDraft.window.start}
+                onChange={(e) => setDraft({ ...draft!, [ch]: { ...chDraft, window: { ...chDraft.window, start: e.target.value } } })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor={`we-${ch}`}>Send window end</label>
+              <input
+                id={`we-${ch}`}
+                type="time"
+                value={chDraft.window.end}
+                onChange={(e) => setDraft({ ...draft!, [ch]: { ...chDraft, window: { ...chDraft.window, end: e.target.value } } })}
+              />
+            </div>
+          </div>
+        </div>
       </section>
     );
   }
@@ -458,38 +522,21 @@ export default function SequencePage() {
         </p>
       )}
 
-      <div className="grid g2" style={{ marginBottom: 16 }}>
+      {/* Stacked, not side-by-side — each channel's horizontal step flow
+          needs the full page width to read well and wrap sensibly. */}
+      <div className="flex flex-col" style={{ gap: 16, marginBottom: 16 }}>
         {column("em")}
         {column("wa")}
       </div>
 
       <section className="panel">
-        <h2>Sending rules</h2>
-        <div className="grid g3" style={{ marginTop: 12 }}>
-          <div className="field">
-            <label htmlFor="cap">Daily cap per channel</label>
-            <input
-              id="cap"
-              type="number"
-              min={1}
-              value={draft.daily_cap}
-              onChange={(e) => setDraft({ ...draft, daily_cap: Math.max(1, Number(e.target.value) || 1) })}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="ws">Send window start</label>
-            <input id="ws" type="time" value={draft.window_start.slice(0, 5)} onChange={(e) => setDraft({ ...draft, window_start: e.target.value })} />
-          </div>
-          <div className="field">
-            <label htmlFor="we">Send window end</label>
-            <input id="we" type="time" value={draft.window_end.slice(0, 5)} onChange={(e) => setDraft({ ...draft, window_end: e.target.value })} />
-          </div>
-          <div className="field">
-            <label className="row">
-              <input type="checkbox" checked={draft.stop_on_reply} onChange={(e) => setDraft({ ...draft, stop_on_reply: e.target.checked })} />
-              Stop both channels when a lead replies or opts out
-            </label>
-          </div>
+        <h2>Stop conditions</h2>
+        <div className="field" style={{ marginTop: 12 }}>
+          <label className="row">
+            <input type="checkbox" checked={draft.stop_on_reply} onChange={(e) => setDraft({ ...draft, stop_on_reply: e.target.checked })} />
+            Stop both channels when a lead replies or opts out
+          </label>
+          <p className="hint">Applies across both channels together — a reply or opt-out on one stops outreach on the other too.</p>
         </div>
         <button className="btn primary" onClick={saveSequence}>
           Save sequence

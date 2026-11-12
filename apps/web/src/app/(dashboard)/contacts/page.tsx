@@ -625,12 +625,18 @@ export default function ContactsPage() {
   // worker checks separately before ever calling dueList(). Without this, a
   // step due at 11pm Saturday would show "Due now" here even though it
   // genuinely won't send until the window next opens — exactly the kind of
-  // thing this column exists to get right.
-  const withinSendWindow = useMemo(
-    () => (coreSeq && project ? isWithinSendWindow(new Date(), coreSeq.window, project.timezone) : true),
+  // thing this column exists to get right. Email and WhatsApp can each have
+  // their own window, so this is computed per channel.
+  const withinSendWindowEm = useMemo(
+    () => (coreSeq && project ? isWithinSendWindow(new Date(), coreSeq.em.window, project.timezone) : true),
     [coreSeq, project]
   );
-  const windowLabel = coreSeq ? `${coreSeq.window.start}–${coreSeq.window.end}, business days` : "";
+  const withinSendWindowWa = useMemo(
+    () => (coreSeq && project ? isWithinSendWindow(new Date(), coreSeq.wa.window, project.timezone) : true),
+    [coreSeq, project]
+  );
+  const windowLabelEm = coreSeq ? `${coreSeq.em.window.start}–${coreSeq.em.window.end}, business days` : "";
+  const windowLabelWa = coreSeq ? `${coreSeq.wa.window.start}–${coreSeq.wa.window.end}, business days` : "";
 
   // Per-stage counts shown as little badges on the StageTabs pills — the
   // sequence-progress states plus "invalid" get their own count; the
@@ -1385,12 +1391,12 @@ export default function ContactsPage() {
                   )}
                   {activeTab !== "whatsapp" && (
                     <TableCell className="hidden xl:table-cell">
-                      <NextSendCell due={dueMaps.emDue.get(c.id) ?? null} withinWindow={withinSendWindow} windowLabel={windowLabel} />
+                      <NextSendCell due={dueMaps.emDue.get(c.id) ?? null} withinWindow={withinSendWindowEm} windowLabel={windowLabelEm} />
                     </TableCell>
                   )}
                   {activeTab !== "email" && (
                     <TableCell className="hidden xl:table-cell">
-                      <NextSendCell due={dueMaps.waDue.get(c.id) ?? null} withinWindow={withinSendWindow} windowLabel={windowLabel} />
+                      <NextSendCell due={dueMaps.waDue.get(c.id) ?? null} withinWindow={withinSendWindowWa} windowLabel={windowLabelWa} />
                     </TableCell>
                   )}
                   <TableCell className="hidden sm:table-cell">

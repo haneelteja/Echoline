@@ -24,12 +24,19 @@ export function toCoreContact(c: ContactRow): CoreContact {
   };
 }
 
+function toCoreChannel(cfg: SequenceSettingsRow["em"], s: SequenceSettingsRow) {
+  return {
+    enabled: cfg.enabled,
+    steps: cfg.steps,
+    dailyCap: cfg.dailyCap ?? s.daily_cap,
+    window: cfg.window ?? { start: s.window_start.slice(0, 5), end: s.window_end.slice(0, 5) },
+  };
+}
+
 export function toCoreSequence(s: SequenceSettingsRow): CoreSequenceSettings {
   return {
-    dailyCap: s.daily_cap,
-    window: { start: s.window_start.slice(0, 5), end: s.window_end.slice(0, 5) },
     stopOnReply: s.stop_on_reply,
-    em: s.em,
-    wa: s.wa,
+    em: toCoreChannel(s.em, s),
+    wa: toCoreChannel(s.wa, s),
   };
 }

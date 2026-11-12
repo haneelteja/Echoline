@@ -56,8 +56,6 @@ async function processProject(
   const seq = toCoreSequence(seqRow as SequenceSettingsRow);
   if (!seq.em.enabled && !seq.wa.enabled) return { enqueued: 0 };
 
-  if (!opts.force && !isWithinSendWindow(new Date(), seq.window, project.timezone)) return { enqueued: 0 };
-
   const { data: contactRows } = await db.from("contacts").select("*").eq("project_id", project.id);
   const contacts = ((contactRows ?? []) as ContactRow[]).map(toCoreContact);
   const due = dueList(contacts, seq);
@@ -89,7 +87,11 @@ async function processProject(
       await markInvalid(db, project.org_id, project.id, d.contactId, d.channel);
       continue;
     }
-    if (counts[d.channel] >= seq.dailyCap) continue;
+    // Send window is per-channel now (email and WhatsApp can run different
+    // hours) — checked here, per due step, rather than once for the whole
+    // project tick.
+    if (!opts.force && !isWithinSendWindow(new Date(), seq[d.channel].window, project.timezone)) continue;
+    if (counts[d.channel] >= seq[d.channel].dailyCap) continue;
     counts[d.channel]++;
 
     const queue = d.channel === "em" ? emailQueue : whatsappQueue;

@@ -3,11 +3,9 @@ import { dueList, isWithinSendWindow, nextDue } from "./sequence";
 import type { Contact, SequenceSettings } from "./types";
 
 const seq: SequenceSettings = {
-  dailyCap: 50,
-  window: { start: "10:00", end: "18:00" },
   stopOnReply: true,
-  em: { enabled: true, steps: [{ delayDays: 0 }, { delayDays: 2 }, { delayDays: 5 }] },
-  wa: { enabled: true, steps: [{ delayDays: 0 }, { delayDays: 2 }, { delayDays: 5 }] },
+  em: { enabled: true, dailyCap: 50, window: { start: "10:00", end: "18:00" }, steps: [{ delayDays: 0 }, { delayDays: 2 }, { delayDays: 5 }] },
+  wa: { enabled: true, dailyCap: 50, window: { start: "10:00", end: "18:00" }, steps: [{ delayDays: 0 }, { delayDays: 2 }, { delayDays: 5 }] },
 };
 
 function makeContact(overrides: Partial<Contact> = {}): Contact {

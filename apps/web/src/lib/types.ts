@@ -46,14 +46,26 @@ export interface ProjectRow {
   created_at: string;
 }
 
+export interface SequenceChannelSettings {
+  enabled: boolean;
+  /** Optional only because a row written before migration 0038 may not have
+   * these yet — callers fall back to the legacy daily_cap/window_start/
+   * window_end fields below when absent. */
+  dailyCap?: number;
+  window?: { start: string; end: string };
+  steps: { delayDays: number; delayMinutes?: number; delaySeconds?: number }[];
+}
+
 export interface SequenceSettingsRow {
   project_id: string;
+  /** Legacy shared values, superseded by em.dailyCap/em.window and
+   * wa.dailyCap/wa.window — kept only as a fallback for unmigrated rows. */
   daily_cap: number;
   window_start: string;
   window_end: string;
   stop_on_reply: boolean;
-  em: { enabled: boolean; steps: { delayDays: number; delayMinutes?: number; delaySeconds?: number }[] };
-  wa: { enabled: boolean; steps: { delayDays: number; delayMinutes?: number; delaySeconds?: number }[] };
+  em: SequenceChannelSettings;
+  wa: SequenceChannelSettings;
 }
 
 export interface ChannelSettingsRow {
