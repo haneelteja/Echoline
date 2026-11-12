@@ -234,5 +234,5 @@ export interface MessageEventRow {
   event_type: string;
   payload: Record<string, unknown>;
   occurred_at: string;
-  contacts: { name: string } | null;
+  contacts: { name: string; email: string | null; phone: string | null } | null;
 }

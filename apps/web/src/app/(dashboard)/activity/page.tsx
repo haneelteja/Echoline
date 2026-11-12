@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  Download,
   Eye,
   Loader2,
   Mail,
@@ -117,15 +118,58 @@ function ChannelBadge({ channel }: { channel: "em" | "wa" | null }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-type ColumnKey = "occurred_at" | "channel" | "contact" | "event_type" | "detail";
-const EMPTY_FILTERS: Record<ColumnKey, string> = { occurred_at: "", channel: "", contact: "", event_type: "", detail: "" };
+type ColumnKey = "occurred_at" | "channel" | "contact" | "to" | "event_type" | "detail";
+const EMPTY_FILTERS: Record<ColumnKey, string> = { occurred_at: "", channel: "", contact: "", to: "", event_type: "", detail: "" };
+
+/** The address a given event actually went to — the contact's email for an
+ * email event, their WhatsApp number for a WhatsApp event. A contact can
+ * have both on file, so this can't just be "whichever one is set". */
+function contactTarget(ev: MessageEventRow): string {
+  if (ev.channel === "em") return ev.contacts?.email ?? "";
+  if (ev.channel === "wa") return ev.contacts?.phone ?? "";
+  return "";
+}
 
 function sortValue(ev: MessageEventRow, key: ColumnKey): string {
   if (key === "occurred_at") return ev.occurred_at;
   if (key === "channel") return ev.channel === "em" ? "Email" : ev.channel === "wa" ? "WhatsApp" : "";
   if (key === "contact") return ev.contacts?.name ?? "";
+  if (key === "to") return contactTarget(ev);
   if (key === "event_type") return eventLabel(ev.event_type);
   return eventSummary(ev) ?? "";
+}
+
+/** CSV cell escaping — only quotes a value when it actually needs it. */
+function csvCell(v: string): string {
+  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+function exportCsv(rows: MessageEventRow[]) {
+  const header = ["When", "Channel", "Contact", "To", "Event", "Detail"];
+  const lines = [header.join(",")];
+  for (const ev of rows) {
+    lines.push(
+      [
+        new Date(ev.occurred_at).toLocaleString(),
+        ev.channel === "em" ? "Email" : ev.channel === "wa" ? "WhatsApp" : "",
+        ev.contacts?.name ?? "",
+        contactTarget(ev),
+        eventLabel(ev.event_type),
+        eventSummary(ev) ?? "",
+      ]
+        .map(csvCell)
+        .join(",")
+    );
+  }
+  // Leading BOM so Excel (which otherwise guesses the system codepage) opens
+  // this as UTF-8 instead of mangling non-ASCII contact names.
+  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `activity-log-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** Same reasoning as contacts/page.tsx's ColumnHead — defined at module scope
@@ -262,11 +306,13 @@ export default function ActivityPage() {
         if (label !== columnFilters.channel) return false;
       }
       if (columnFilters.contact && !(ev.contacts?.name ?? "").toLowerCase().includes(columnFilters.contact.toLowerCase())) return false;
+      if (columnFilters.to && !contactTarget(ev).toLowerCase().includes(columnFilters.to.toLowerCase())) return false;
       if (columnFilters.event_type && eventLabel(ev.event_type) !== columnFilters.event_type) return false;
       if (columnFilters.detail && !(eventSummary(ev) ?? "").toLowerCase().includes(columnFilters.detail.toLowerCase())) return false;
       if (!q) return true;
       return (
         (ev.contacts?.name ?? "").toLowerCase().includes(q) ||
+        contactTarget(ev).toLowerCase().includes(q) ||
         eventLabel(ev.event_type).toLowerCase().includes(q) ||
         (eventSummary(ev) ?? "").toLowerCase().includes(q)
       );
@@ -300,6 +346,10 @@ export default function ActivityPage() {
             <X className="h-3.5 w-3.5" />
             Clear filters
           </Button>
+          <Button variant="outline" size="sm" className="rounded-full" onClick={() => exportCsv(filtered)} disabled={!filtered.length}>
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </Button>
           <p className="text-xs text-muted-foreground sm:ml-auto sm:text-right">
             {filtered.length} of {events.length} events — use the ⋮ menu on a column to sort or filter it.
           </p>
@@ -327,6 +377,7 @@ export default function ActivityPage() {
                 onSortChange={setColumnSort}
               />
               <ColumnHead columnKey="contact" label="Contact" sort={sort} filterValue={columnFilters.contact} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              <ColumnHead columnKey="to" label="To" sort={sort} filterValue={columnFilters.to} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
               <ColumnHead
                 columnKey="event_type"
                 label="Event"
@@ -353,6 +404,7 @@ export default function ActivityPage() {
                   <ChannelBadge channel={ev.channel} />
                 </TableCell>
                 <TableCell className="font-medium text-foreground">{ev.contacts?.name ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{contactTarget(ev) || "—"}</TableCell>
                 <TableCell>
                   <EventBadge eventType={ev.event_type} />
                 </TableCell>

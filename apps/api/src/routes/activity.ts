@@ -17,7 +17,7 @@ export const activityRoutes: FastifyPluginAsync = async (app) => {
 
     let query = req.supabase
       .from("message_events")
-      .select("id, message_id, contact_id, channel, event_type, payload, occurred_at, contacts(name)")
+      .select("id, message_id, contact_id, channel, event_type, payload, occurred_at, contacts(name, email, phone)")
       .eq("project_id", id)
       .order("occurred_at", { ascending: false })
       .limit(PAGE_SIZE);
