@@ -33,6 +33,13 @@
   --color-destructive-foreground: #ffffff;
   --color-success: var(--ok);
   --color-success-foreground: #ffffff;
+  /* Darker text-on-soft-background pairs, for badges/pills only — the plain
+     --color-primary/-destructive/-success above stay the true accent color
+     (used for buttons/borders/rings, where white-on-solid is the pairing,
+     not text-on-soft-tint), so this doesn't touch anything else. */
+  --color-primary-ink: var(--email-ink);
+  --color-success-ink: var(--wa-ink);
+  --color-destructive-ink: var(--bad-ink);
   --color-border: var(--line);
   --color-input: var(--line);
   --color-ring: var(--email);
@@ -62,6 +69,16 @@
   --bad: #ef4444;
   --bad-soft: #fee2e2;
   --ok: #10b981;
+  /* Darker variants of the four tokens above, used ONLY as text color paired
+     with that same token's own *-soft background (badges, pills, insight
+     icons) — the plain tokens at ~2.2-3.1:1 on their own soft tint fail
+     WCAG AA (4.5:1), confirmed by computing real contrast ratios against
+     these exact hex pairs. Each -ink value is picked to clear 4.5:1 against
+     its *-soft background with headroom (4.8-6.4:1), not just barely pass. */
+  --email-ink: #0e7490;
+  --wa-ink: #047857;
+  --warn-ink: #92400e;
+  --bad-ink: #b91c1c;
   --side: #0f172a;
   --hero: #0f172a;
   --hero-ink: #ffffff;
@@ -99,6 +116,13 @@
     --bad: #f87171;
     --bad-soft: #3a1414;
     --ok: #34d399;
+    /* Dark mode's own token/soft pairs already clear 4.5:1 (computed:
+       email 6.8:1, wa 6.5:1) — the darkening these exist for is a
+       light-mode-only problem, so here each -ink is just its plain token. */
+    --email-ink: var(--email);
+    --wa-ink: var(--wa);
+    --warn-ink: var(--warn);
+    --bad-ink: var(--bad);
     --side: #020617;
     --hero: #020617;
     --hero-ink: #ffffff;
@@ -414,27 +438,27 @@
   }
   .pill.e {
     background: var(--email-soft);
-    color: var(--email);
+    color: var(--email-ink);
     border-color: transparent;
   }
   .pill.w {
     background: var(--wa-soft);
-    color: var(--wa);
+    color: var(--wa-ink);
     border-color: transparent;
   }
   .pill.warn {
     background: var(--warn-soft);
-    color: var(--warn);
+    color: var(--warn-ink);
     border-color: transparent;
   }
   .pill.bad {
     background: var(--bad-soft);
-    color: var(--bad);
+    color: var(--bad-ink);
     border-color: transparent;
   }
   .pill.ok {
     background: var(--wa-soft);
-    color: var(--ok);
+    color: var(--wa-ink);
     border-color: transparent;
   }
   .dot {
@@ -688,19 +712,19 @@
   }
   .ic.g {
     background: var(--wa-soft);
-    color: var(--wa);
+    color: var(--wa-ink);
   }
   .ic.e {
     background: var(--email-soft);
-    color: var(--email);
+    color: var(--email-ink);
   }
   .ic.w {
     background: var(--warn-soft);
-    color: var(--warn);
+    color: var(--warn-ink);
   }
   .ic.b {
     background: var(--bad-soft);
-    color: var(--bad);
+    color: var(--bad-ink);
   }
   .ai-box {
     margin-top: 14px;

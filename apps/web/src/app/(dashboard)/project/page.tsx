@@ -201,7 +201,9 @@ export default function ProjectSettingsPage() {
         <section className="panel">
           <div className="grid g2">
             <div className="field">
-              <label htmlFor="name">Project name</label>
+              <label htmlFor="name">
+                Project name<span className="text-destructive"> *</span>
+              </label>
               <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="field">

@@ -29,7 +29,13 @@ export function ColumnFilter({ label, dataType = "text", options = [], filterVal
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className={cn("h-6 w-6", active && "text-primary")}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("h-6 w-6", active && "text-primary")}
+          aria-label={`Sort or filter ${label}`}
+          title={`Sort or filter ${label}`}
+        >
           <MoreVertical className="h-3.5 w-3.5" />
         </Button>
       </DropdownMenuTrigger>

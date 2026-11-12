@@ -74,10 +74,10 @@ function eventSummary(ev: MessageEventRow): string | null {
 }
 
 const TONE_CLASSNAME: Record<"ok" | "e" | "warn" | "bad", string> = {
-  ok: "border-transparent bg-success/15 text-success",
+  ok: "border-transparent bg-success/15 text-success-ink",
   e: "border-transparent bg-sky-500/15 text-sky-700",
   warn: "border-transparent bg-amber-500/15 text-amber-700",
-  bad: "border-transparent bg-destructive/15 text-destructive",
+  bad: "border-transparent bg-destructive/15 text-destructive-ink",
 };
 
 const TONE_ICON: Record<"ok" | "e" | "warn" | "bad", typeof CheckCircle2> = {

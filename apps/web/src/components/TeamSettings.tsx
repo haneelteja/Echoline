@@ -265,7 +265,9 @@ export function TeamSettings({ orgId, orgName }: { orgId: string; orgName?: stri
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="invite-email">Email</Label>
+              <Label htmlFor="invite-email" required>
+                Email
+              </Label>
               <Input
                 id="invite-email"
                 type="email"

@@ -920,7 +920,7 @@ export default function ContactsPage() {
 
       {activeTab === "database" && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
+          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="sky" />
           <KpiCard label="Email sent" value={kpis.emailSent} sub={`of ${kpis.total}`} icon={Mail} accent="sky" />
           <KpiCard label="WhatsApp sent" value={kpis.waSent} sub={`of ${kpis.total}`} icon={MessageCircle} accent="teal" />
           <KpiCard label="Replied" value={kpis.replied} sub="across both channels" icon={MessagesSquare} accent="emerald" />
@@ -928,22 +928,22 @@ export default function ContactsPage() {
       )}
       {activeTab === "email" && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
+          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="sky" />
           <KpiCard label="Email sent" value={kpis.emailSent} sub={`of ${kpis.total}`} icon={Mail} accent="sky" />
           <KpiCard label="Replied" value={kpis.emailReplied} sub={`of ${kpis.emailSent} sent`} icon={MessagesSquare} accent="emerald" />
         </div>
       )}
       {activeTab === "whatsapp" && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
+          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="sky" />
           <KpiCard label="WhatsApp sent" value={kpis.waSent} sub={`of ${kpis.total}`} icon={MessageCircle} accent="teal" />
           <KpiCard label="Replied" value={kpis.waReplied} sub={`of ${kpis.waSent} sent`} icon={MessagesSquare} accent="emerald" />
         </div>
       )}
       {activeTab === "invalidLeads" && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="purple" />
-          <KpiCard label="Invalid on both channels" value={kpis.bothInvalid} sub={`of ${kpis.total}`} icon={Trash2} accent="rose" />
+          <KpiCard label="Total leads" value={kpis.total} icon={Users} accent="sky" />
+          <KpiCard label="Invalid on both channels" value={kpis.bothInvalid} sub={`of ${kpis.total}`} icon={Trash2} accent="red" />
           <KpiCard label="Selected" value={selected.size} sub="ready to delete" icon={CheckCircle2} accent="amber" />
         </div>
       )}
