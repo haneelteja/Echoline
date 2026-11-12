@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/apiClient";
+import { logError } from "@/lib/logger";
 import type {
   BrandKbRow, ChannelSettingsRow, ContactRow, KbItemRow, LeadSourceRow,
   ProjectRow, SequenceSettingsRow, StatusLogEntry, TemplateRow,
@@ -119,6 +120,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
     setLoadingProject(false);
   }, [pid]);
+
+  // Mounted once for the whole dashboard (this provider wraps every page) —
+  // a rejected promise with no .catch() is otherwise only a yellow devtools
+  // warning nobody monitors in production; this is purely a developer-
+  // visibility win, not a user-facing fix (there's no local state to show
+  // an error in for a rejection nothing in this app awaited).
+  useEffect(() => {
+    function onUnhandledRejection(e: PromiseRejectionEvent) {
+      logError({ source: "runtime", module: "window.unhandledrejection", message: String(e.reason?.message ?? e.reason), error: e.reason });
+    }
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    return () => window.removeEventListener("unhandledrejection", onUnhandledRejection);
+  }, []);
 
   useEffect(() => {
     refreshProjects();

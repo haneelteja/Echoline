@@ -57,7 +57,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   // {error,message} shape — confirmed live via a diagnostic marker log that
   // never fired when this handler lived after route registration.
   app.setErrorHandler((err: FastifyError | ZodError, req, reply) => {
-    req.log.error(err);
+    // Structured, not just the raw err object — source/route/statusCode are
+    // what make a pino log line actually searchable, same reasoning as
+    // apps/web/src/lib/logger.ts's logError() on the frontend side.
+    req.log.error({ err, source: "api", route: `${req.method} ${req.url}` });
+    // timestamp/requestId are additive to every response body below — kept
+    // out of the existing error/message/issues shape every apps/web page
+    // already depends on, so nothing currently reading a response breaks.
+    const timestamp = new Date().toISOString();
+    const requestId = req.id;
     // Fastify's own schema validation (ajv) sets err.validation; every route
     // that instead does `someSchema.parse(req.body)` throws a plain
     // ZodError, which has no statusCode — without this check it fell
@@ -70,14 +78,14 @@ export async function buildApp(): Promise<FastifyInstance> {
       // message, plus structured `issues` so a form can show it per-field.
       const issues = err.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
       const message = issues.map((i) => (i.path ? `${i.path}: ${i.message}` : i.message)).join("; ");
-      return reply.code(400).send({ error: "validation_error", message, issues });
+      return reply.code(400).send({ error: "validation_error", message, issues, timestamp, requestId });
     }
     if (err.validation) {
-      return reply.code(400).send({ error: "validation_error", message: err.message });
+      return reply.code(400).send({ error: "validation_error", message: err.message, timestamp, requestId });
     }
     // Only unexpected (5xx) errors go to Sentry — a bad request isn't a bug to page anyone about.
     if (!err.statusCode || err.statusCode >= 500) captureException(err);
-    return reply.code(err.statusCode ?? 500).send({ error: "internal_error", message: err.message });
+    return reply.code(err.statusCode ?? 500).send({ error: "internal_error", message: err.message, timestamp, requestId });
   });
 
   // Provider webhook signatures (Resend/SendGrid/Meta) are computed over the
