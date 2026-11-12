@@ -11,14 +11,16 @@ export interface AiConnection {
 }
 
 /**
- * Every connected AI provider for a project, decrypted — not just the most
- * recently connected one. Multiple can be connected simultaneously since
+ * Every connected AI provider for an organization, decrypted — not just the
+ * most recently connected one. Multiple can be connected simultaneously since
  * migration 0032 (previously blocked by a DB unique index despite the app
  * layer assuming otherwise); this is what lets selectProviderAndModel
- * actually orchestrate across providers, not just within one.
+ * actually orchestrate across providers, not just within one. Connections
+ * are shared across every project in the org (migration
+ * 0041_connections_org_scoped.sql), so this is keyed by org, not project.
  */
-export async function getAiConnections(supabase: any, projectId: string): Promise<AiConnection[]> {
-  const { data: conns } = await supabase.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "ai").eq("status", "connected");
+export async function getAiConnections(supabase: any, orgId: string): Promise<AiConnection[]> {
+  const { data: conns } = await supabase.from("provider_connections").select("*").eq("org_id", orgId).eq("kind", "ai").eq("status", "connected");
   return ((conns as any[]) ?? []).map((conn) => ({
     provider: conn.provider,
     credentials: JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey())),

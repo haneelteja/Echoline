@@ -203,10 +203,11 @@ export type ConnectionStatus = "connected" | "needs_reconnect" | "disconnected";
 
 export interface ConnectionRow {
   id: string;
-  project_id: string;
+  org_id: string;
   kind: "email" | "whatsapp" | "ai" | "email_imap" | "onedrive" | "google_sheets";
   provider: string;
   account_label: string | null;
+  connected_by_email: string | null;
   scopes: string[];
   status: ConnectionStatus;
   needs_reconnect_reason: string | null;

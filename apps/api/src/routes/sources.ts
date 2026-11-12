@@ -99,18 +99,21 @@ export const sourcesRoutes: FastifyPluginAsync = async (app) => {
 
   // Shared by the tabs/files routes below — resolves one specific connected
   // Google account's fresh access token. connectionId is required (not just
-  // "the one connected google_sheets row") because a project can now have
-  // more than one Google account connected at once.
+  // "the one connected google_sheets row") because an org can now have more
+  // than one Google account connected at once. orgId is only an ownership
+  // check tying connectionId to the calling project's org — connections are
+  // shared across every project in the org (migration
+  // 0041_connections_org_scoped.sql).
   async function freshGoogleSheetsAccessToken(
     db: ReturnType<typeof createAdminClient>,
-    projectId: string,
+    orgId: string,
     connectionId: string
   ): Promise<{ accessToken: string } | { error: "no_connection" | "decrypt_failed" | "google_sheets_failed"; message?: string }> {
     const { data: conn, error: connErr } = await db
       .from("provider_connections")
       .select("*")
       .eq("id", connectionId)
-      .eq("project_id", projectId)
+      .eq("org_id", orgId)
       .eq("kind", "google_sheets")
       .eq("status", "connected")
       .maybeSingle();
@@ -141,10 +144,12 @@ export const sourcesRoutes: FastifyPluginAsync = async (app) => {
     if (!connectionId) return reply.code(400).send({ error: "validation_error", message: "connectionId is required" });
 
     const db = createAdminClient();
-    const resolved = await freshGoogleSheetsAccessToken(db, projectId, connectionId);
+    const { data: project } = await db.from("projects").select("org_id").eq("id", projectId).maybeSingle();
+    if (!project) return reply.code(404).send({ error: "not_found" });
+    const resolved = await freshGoogleSheetsAccessToken(db, (project as any).org_id, connectionId);
     if ("error" in resolved) {
       const status = resolved.error === "no_connection" ? 400 : resolved.error === "decrypt_failed" ? 500 : 502;
-      return reply.code(status).send({ error: resolved.error, message: resolved.message ?? "Connect a Google account for this project first" });
+      return reply.code(status).send({ error: resolved.error, message: resolved.message ?? "Connect a Google account for this organization first" });
     }
 
     try {
@@ -165,10 +170,12 @@ export const sourcesRoutes: FastifyPluginAsync = async (app) => {
     if (!connectionId) return reply.code(400).send({ error: "validation_error", message: "connectionId is required" });
 
     const db = createAdminClient();
-    const resolved = await freshGoogleSheetsAccessToken(db, projectId, connectionId);
+    const { data: project } = await db.from("projects").select("org_id").eq("id", projectId).maybeSingle();
+    if (!project) return reply.code(404).send({ error: "not_found" });
+    const resolved = await freshGoogleSheetsAccessToken(db, (project as any).org_id, connectionId);
     if ("error" in resolved) {
       const status = resolved.error === "no_connection" ? 400 : resolved.error === "decrypt_failed" ? 500 : 502;
-      return reply.code(status).send({ error: resolved.error, message: resolved.message ?? "Connect a Google account for this project first" });
+      return reply.code(status).send({ error: resolved.error, message: resolved.message ?? "Connect a Google account for this organization first" });
     }
 
     try {

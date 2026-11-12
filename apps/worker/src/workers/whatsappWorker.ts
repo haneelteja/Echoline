@@ -87,13 +87,13 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
       db.from("projects").select("*").eq("id", projectId).single(),
       db.from("templates").select("*").eq("project_id", projectId).eq("channel", "whatsapp").eq("step", step).maybeSingle(),
       db.from("sequence_settings").select("wa").eq("project_id", projectId).single(),
-      db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "whatsapp").eq("status", "connected").maybeSingle(),
+      db.from("provider_connections").select("*").eq("org_id", orgId).eq("kind", "whatsapp").eq("status", "connected").maybeSingle(),
     ]);
 
     const c = contact as ContactRow | null;
     const phone = normPhone(c?.phone ?? null);
     if (!c || !phone) throw new Error("Contact has no valid WhatsApp number");
-    if (!conn) throw new Error("No connected WhatsApp provider for this project");
+    if (!conn) throw new Error("No connected WhatsApp provider for this organization");
 
     const t = template as TemplateRow | null;
     if (!t) {

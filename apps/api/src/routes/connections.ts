@@ -33,7 +33,7 @@ const createConnectionInput = z.object({
 // Columns safe to return to the browser — never includes the encrypted
 // credential/DEK columns. The API never returns secrets, only status.
 const SAFE_COLUMNS =
-  "id, project_id, kind, provider, account_label, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, max_sends_per_minute, created_at, updated_at";
+  "id, org_id, kind, provider, account_label, connected_by_email, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, max_sends_per_minute, created_at, updated_at";
 
 const rateLimitInput = z.object({ maxSendsPerMinute: z.number().int().min(1).max(10_000).nullable() });
 
@@ -53,13 +53,13 @@ function masterKey() {
 // can flip a previously-"disconnected" row back to "connected" (that's how a
 // user picks a new "active" email/WhatsApp provider without re-entering
 // credentials: test the one you want active). Without this, two rows of the
-// same (project, kind) could end up "connected" at once, which breaks every
+// same (org, kind) could end up "connected" at once, which breaks every
 // code path that assumes at most one (e.g. whatsappWorker.ts's .maybeSingle()
 // lookup). AI is exempt — multiple AI connections may usefully stay
 // "connected" at once; see the connect route's own comment on this.
-async function demoteSiblingConnections(supabase: any, projectId: string, kind: string, keepConnId?: string): Promise<void> {
+async function demoteSiblingConnections(supabase: any, orgId: string, kind: string, keepConnId?: string): Promise<void> {
   if (kind === "ai") return;
-  let query = supabase.from("provider_connections").update({ status: "disconnected", webhook_warning: null }).eq("project_id", projectId).eq("kind", kind).eq("status", "connected");
+  let query = supabase.from("provider_connections").update({ status: "disconnected", webhook_warning: null }).eq("org_id", orgId).eq("kind", kind).eq("status", "connected");
   // The create route calls this before the new row exists yet (nothing to
   // exclude); /test calls it on an existing row it wants to keep connected.
   if (keepConnId) query = query.neq("id", keepConnId);
@@ -123,20 +123,22 @@ const testSendWhatsAppInput = z.object({
 // not a service-role bypass). provider_connections' RLS is admin-only — a
 // non-admin member calling GET gets an empty list, not an error; writes get
 // a 403. That's intentional: connections management is an org-admin concern.
+// Scoped by org, not project — one set of connections is shared by every
+// project in the organization (see migration 0041_connections_org_scoped.sql).
 export const connectionRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/projects/:id/connections", async (req, reply) => {
-    const { id } = req.params as { id: string };
+  app.get("/orgs/:orgId/connections", async (req, reply) => {
+    const { orgId } = req.params as { orgId: string };
     const { data, error } = await req.supabase
       .from("provider_connections")
       .select(SAFE_COLUMNS)
-      .eq("project_id", id)
+      .eq("org_id", orgId)
       .order("created_at");
     if (error) return sendDbError(reply, error);
     return data;
   });
 
-  app.post("/projects/:id/connections", async (req, reply) => {
-    const { id } = req.params as { id: string };
+  app.post("/orgs/:orgId/connections", async (req, reply) => {
+    const { orgId } = req.params as { orgId: string };
     const body = createConnectionInput.parse(req.body);
 
     const emailProviders: readonly string[] = EMAIL_PROVIDER_IDS;
@@ -153,10 +155,6 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ error: "validation_error", message: `${body.provider} is a ${expectedKind} provider` });
     }
 
-    const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
-    if (projErr) return sendDbError(reply, projErr);
-    if (!project) return reply.code(404).send({ error: "not_found" });
-
     // Test before persisting so we never store credentials we know are bad,
     // and so the UI gets immediate feedback without a second round-trip.
     const tester = getConnectionTester(body.provider);
@@ -165,7 +163,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     const envelope = encryptCredentials(JSON.stringify(body.credentials), masterKey());
     const row = envelopeToRow(envelope);
 
-    // Only one *connected* provider per (project, kind) for email/whatsapp —
+    // Only one *connected* provider per (org, kind) for email/whatsapp —
     // those represent a single sending identity, so replace rather than
     // stack. AI is different: multiple AI providers can usefully stay
     // connected at once (e.g. Claude + GPT + a cheap OpenRouter model), so
@@ -173,7 +171,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     // was connected/reconnected most recently when more than one qualifies.
     // Guarded on testResult.ok so a failed new attempt never disconnects a
     // working existing connection.
-    if (testResult.ok) await demoteSiblingConnections(req.supabase, id, body.kind);
+    if (testResult.ok) await demoteSiblingConnections(req.supabase, orgId, body.kind);
 
     // Unlike Meta/Twilio/360dialog (webhook URL configured in their own
     // dashboard), 360Messenger exposes a settings API for this — register it
@@ -205,8 +203,8 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     const { data, error } = await req.supabase
       .from("provider_connections")
       .insert({
-        org_id: (project as any).org_id,
-        project_id: id,
+        org_id: orgId,
+        connected_by_email: req.userEmail,
         kind: body.kind,
         provider: body.provider,
         account_label: body.accountLabel ?? testResult.accountLabel ?? null,
@@ -224,14 +222,14 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(201).send({ ...data, testResult });
   });
 
-  app.post("/projects/:projectId/connections/:connId/test", async (req, reply) => {
-    const { projectId, connId } = req.params as { projectId: string; connId: string };
+  app.post("/orgs/:orgId/connections/:connId/test", async (req, reply) => {
+    const { orgId, connId } = req.params as { orgId: string; connId: string };
     const { data: conn, error } = await req.supabase
       .from("provider_connections")
       .select(
         "id, kind, provider, encrypted_credentials, encryption_iv, encryption_tag, encrypted_dek, dek_iv, dek_tag"
       )
-      .eq("project_id", projectId)
+      .eq("org_id", orgId)
       .eq("id", connId)
       .maybeSingle();
     if (error) return sendDbError(reply, error);
@@ -259,7 +257,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       }
     }
     const quality = result.ok && (conn as any).provider === "meta" ? await safeFetchMetaQuality(credentials, req.log) : null;
-    if (result.ok) await demoteSiblingConnections(req.supabase, projectId, (conn as any).kind, connId);
+    if (result.ok) await demoteSiblingConnections(req.supabase, orgId, (conn as any).kind, connId);
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({
@@ -284,14 +282,14 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
   // sent anywhere), this actually sends a real email through this exact
   // connection to an address the caller chooses — the only way to confirm
   // end-to-end deliverability, not just that the API key is accepted.
-  app.post("/projects/:projectId/connections/:connId/test-send-email", async (req, reply) => {
-    const { projectId, connId } = req.params as { projectId: string; connId: string };
+  app.post("/orgs/:orgId/connections/:connId/test-send-email", async (req, reply) => {
+    const { orgId, connId } = req.params as { orgId: string; connId: string };
     const body = testSendEmailInput.parse(req.body);
 
     const { data: conn, error } = await req.supabase
       .from("provider_connections")
       .select("*")
-      .eq("project_id", projectId)
+      .eq("org_id", orgId)
       .eq("id", connId)
       .eq("kind", "email")
       .maybeSingle();
@@ -316,10 +314,13 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(502).send({ error: "oauth_refresh_failed", message: err instanceof Error ? err.message : String(err) });
     }
 
-    const { data: channelSettings } = await db.from("channel_settings").select("email").eq("project_id", projectId).maybeSingle();
-    const emailSettings = ((channelSettings as { email?: Record<string, string> } | null)?.email ?? {}) as Record<string, string>;
-    const fromEmail = emailSettings.fromEmail || credentials.fromEmail || c.account_label;
-    if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
+    // No single project to read a channel_settings.fromEmail override from —
+    // this connection is shared across every project in the org now — so a
+    // test send just uses whatever the connection itself resolves to. Real
+    // sends still apply a project's own channel_settings override (see
+    // emailWorker.ts), since that stays project-scoped.
+    const fromEmail = credentials.fromEmail || c.account_label;
+    if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this connection" });
 
     try {
       await sender(credentials, {
@@ -338,7 +339,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(502).send({ error: "send_failed", message: err instanceof Error ? err.message : String(err) });
     }
 
-    await demoteSiblingConnections(req.supabase, projectId, c.kind as string, connId);
+    await demoteSiblingConnections(req.supabase, orgId, c.kind as string, connId);
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({ status: "connected", needs_reconnect_reason: null })
@@ -353,8 +354,8 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
   // (not the template path — a cold test message has no approved template
   // to send with, so only providers with a genuine free-text sender work
   // here; see TEXT_ONLY_WHATSAPP_PROVIDERS).
-  app.post("/projects/:projectId/connections/:connId/test-send-whatsapp", async (req, reply) => {
-    const { projectId, connId } = req.params as { projectId: string; connId: string };
+  app.post("/orgs/:orgId/connections/:connId/test-send-whatsapp", async (req, reply) => {
+    const { orgId, connId } = req.params as { orgId: string; connId: string };
     const body = testSendWhatsAppInput.parse(req.body);
 
     const to = normPhone(body.to);
@@ -363,7 +364,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     const { data: conn, error } = await req.supabase
       .from("provider_connections")
       .select("*")
-      .eq("project_id", projectId)
+      .eq("org_id", orgId)
       .eq("id", connId)
       .eq("kind", "whatsapp")
       .maybeSingle();
@@ -395,7 +396,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(502).send({ error: "send_failed", message: err instanceof Error ? err.message : String(err) });
     }
 
-    await demoteSiblingConnections(req.supabase, projectId, c.kind as string, connId);
+    await demoteSiblingConnections(req.supabase, orgId, c.kind as string, connId);
     const { data: updated, error: updateErr } = await req.supabase
       .from("provider_connections")
       .update({ status: "connected", needs_reconnect_reason: null })
@@ -411,8 +412,8 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
   // layer, so the user's Supabase token travels here via the normal
   // Authorization header (not a URL), and only an encrypted copy of it rides
   // along in `state` for the callback (which has no header of its own) to use.
-  app.post("/projects/:id/connections/oauth/:provider/start", async (req, reply) => {
-    const { id, provider } = req.params as { id: string; provider: string };
+  app.post("/orgs/:orgId/connections/oauth/:provider/start", async (req, reply) => {
+    const { orgId, provider } = req.params as { orgId: string; provider: string };
     if (!isOAuthableProvider(provider)) {
       return reply.code(404).send({ error: "unknown_provider" });
     }
@@ -422,15 +423,15 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(503).send({ error: "oauth_not_configured", message: `${service} OAuth credentials are not configured on the server.` });
     }
     const accessToken = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
-    const state = encodeOAuthState({ projectId: id, accessToken });
+    const state = encodeOAuthState({ orgId, accessToken });
     const { service, scopes } = oauthProviderMeta(provider);
     const url = service === "google" ? buildGoogleAuthUrl(config, state, scopes) : buildMicrosoftAuthUrl(config, state, scopes);
     return { url };
   });
 
-  app.delete("/projects/:projectId/connections/:connId", async (req, reply) => {
-    const { projectId, connId } = req.params as { projectId: string; connId: string };
-    const { error } = await req.supabase.from("provider_connections").delete().eq("project_id", projectId).eq("id", connId);
+  app.delete("/orgs/:orgId/connections/:connId", async (req, reply) => {
+    const { orgId, connId } = req.params as { orgId: string; connId: string };
+    const { error } = await req.supabase.from("provider_connections").delete().eq("org_id", orgId).eq("id", connId);
     if (error) return sendDbError(reply, error);
     return reply.code(204).send();
   });
@@ -440,13 +441,13 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
   // clears back to that default. A plain column, not an encrypted
   // credential, so this is its own small route rather than going through
   // the credential-handling /test-style routes above.
-  app.patch("/projects/:projectId/connections/:connId/rate-limit", async (req, reply) => {
-    const { projectId, connId } = req.params as { projectId: string; connId: string };
+  app.patch("/orgs/:orgId/connections/:connId/rate-limit", async (req, reply) => {
+    const { orgId, connId } = req.params as { orgId: string; connId: string };
     const body = rateLimitInput.parse(req.body);
     const { data, error } = await req.supabase
       .from("provider_connections")
       .update({ max_sends_per_minute: body.maxSendsPerMinute })
-      .eq("project_id", projectId)
+      .eq("org_id", orgId)
       .eq("id", connId)
       .select(SAFE_COLUMNS)
       .maybeSingle();

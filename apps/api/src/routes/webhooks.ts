@@ -59,16 +59,18 @@ async function decryptConnectionCredentials(db: ReturnType<typeof createAdminCli
  * encrypted credentials, not in plaintext anywhere queryable, so this
  * decrypts every Meta connection to find the match. Fine at today's scale
  * (a handful of connections); revisit if that ever stops being true.
+ *
+ * Returns the org, not a specific project — the connection is shared across
+ * every project in the org (migration 0041_connections_org_scoped.sql), and
+ * Meta itself has no concept of "project" (one WABA, one template namespace),
+ * so the caller matches wa_templates/templates by org_id too, not project_id.
  */
-async function resolveProjectByWabaId(db: ReturnType<typeof createAdminClient>, wabaId: string): Promise<{ id: string; org_id: string } | null> {
+async function resolveOrgByWabaId(db: ReturnType<typeof createAdminClient>, wabaId: string): Promise<string | null> {
   const { data: connections } = await db.from("provider_connections").select("*").eq("kind", "whatsapp").eq("provider", "meta");
   for (const conn of (connections as any[]) ?? []) {
     try {
       const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey()));
-      if (credentials.wabaId === wabaId) {
-        const { data: project } = await db.from("projects").select("id, org_id").eq("id", conn.project_id).maybeSingle();
-        if (project) return project as { id: string; org_id: string };
-      }
+      if (credentials.wabaId === wabaId) return conn.org_id as string;
     } catch {
       // skip a connection we can't decrypt
     }
@@ -76,7 +78,7 @@ async function resolveProjectByWabaId(db: ReturnType<typeof createAdminClient>, 
   return null;
 }
 
-/** Same decrypt-every-connection approach as resolveProjectByWabaId, but
+/** Same decrypt-every-connection approach as resolveOrgByWabaId, but
  * returns the connection row + its decrypted credentials directly — needed
  * here to both update that exact row and call the Graph API with its token.
  *
@@ -306,15 +308,15 @@ const body = req.body as {
         if (change.field === "message_template_status_update") {
           const wabaId = entry.id;
           if (!wabaId || !value.message_template_name) continue;
-          const project = await resolveProjectByWabaId(db, wabaId);
-          if (!project) continue;
+          const orgId = await resolveOrgByWabaId(db, wabaId);
+          if (!orgId) continue;
           // Meta's PENDING/APPROVED/REJECTED normalized to this app's Title
           // Case convention (templates.meta_status defaults to "Draft").
           const status = value.event ? value.event.charAt(0) + value.event.slice(1).toLowerCase() : "Pending";
           const { data: waTemplate } = await db
             .from("wa_templates")
             .update({ status, rejection_reason: value.reason ?? null, updated_at: new Date().toISOString() })
-            .eq("project_id", project.id)
+            .eq("org_id", orgId)
             .eq("meta_name", value.message_template_name)
             .eq("language", value.message_template_language ?? "en")
             .select("template_id")
@@ -371,19 +373,23 @@ const body = req.body as {
         for (const inbound of value.messages ?? []) {
           const fromPhone = normPhone(inbound.from);
           if (!fromPhone) continue;
+          // This number's connection is shared across every project in the
+          // org (migration 0041_connections_org_scoped.sql) — resolvedProject
+          // was just whichever candidate happened to match first by
+          // wa_number, so the contact lookup is by org, not that one project.
           const { data: contact } = await db
             .from("contacts")
-            .select("id, org_id")
-            .eq("project_id", resolvedProject.id)
+            .select("id, org_id, project_id")
+            .eq("org_id", resolvedProject.org_id)
             .eq("phone", fromPhone)
             .maybeSingle();
           if (!contact) continue;
           const text = inbound.text?.body ?? "";
-          const c = contact as { id: string; org_id: string };
+          const c = contact as { id: string; org_id: string; project_id: string };
           if (isOptOutText(text)) {
             await recordEvent(db, {
               orgId: c.org_id,
-              projectId: resolvedProject.id,
+              projectId: c.project_id,
               messageId: null,
               contactId: c.id,
               channel: "wa",
@@ -394,7 +400,7 @@ const body = req.body as {
           } else {
             await recordEvent(db, {
               orgId: c.org_id,
-              projectId: resolvedProject.id,
+              projectId: c.project_id,
               messageId: null,
               contactId: c.id,
               channel: "wa",
@@ -428,7 +434,7 @@ const body = req.body as {
     const { data: conn } = await db
       .from("provider_connections")
       .select("id")
-      .eq("project_id", project.id)
+      .eq("org_id", project.org_id)
       .eq("kind", "whatsapp")
       .eq("provider", "twilio")
       .eq("status", "connected")
@@ -453,13 +459,17 @@ const body = req.body as {
       }
     } else if (params.Body !== undefined && params.From) {
       const fromPhone = normPhone(params.From.replace("whatsapp:", ""));
-      const { data: contact } = await db.from("contacts").select("id, org_id").eq("project_id", project.id).eq("phone", fromPhone).maybeSingle();
+      // This number's connection is shared across every project in the org
+      // (migration 0041_connections_org_scoped.sql) — `project` above was
+      // just whichever candidate happened to match first, not necessarily
+      // the one this contact actually belongs to.
+      const { data: contact } = await db.from("contacts").select("id, org_id, project_id").eq("org_id", project.org_id).eq("phone", fromPhone).maybeSingle();
       if (contact) {
-        const c = contact as { id: string; org_id: string };
+        const c = contact as { id: string; org_id: string; project_id: string };
         if (isOptOutText(params.Body)) {
           await recordEvent(db, {
             orgId: c.org_id,
-            projectId: project.id,
+            projectId: c.project_id,
             messageId: null,
             contactId: c.id,
             channel: "wa",
@@ -470,7 +480,7 @@ const body = req.body as {
         } else {
           await recordEvent(db, {
             orgId: c.org_id,
-            projectId: project.id,
+            projectId: c.project_id,
             messageId: null,
             contactId: c.id,
             channel: "wa",
@@ -511,22 +521,27 @@ const body = req.body as {
     const { data: conn } = await db
       .from("provider_connections")
       .select("id")
-      .eq("project_id", project.id)
+      .eq("org_id", project.org_id)
       .eq("kind", "whatsapp")
       .eq("provider", "360messenger")
       .eq("status", "connected")
       .maybeSingle();
     if (!conn) return reply.code(200).send({ ok: true });
 
-    const { data: contact } = await db.from("contacts").select("id, org_id").eq("project_id", project.id).eq("phone", fromPhone).maybeSingle();
+    // This number's connection is shared across every project in the org
+    // (migration 0041_connections_org_scoped.sql) — `project` above was just
+    // whichever candidate happened to match first, not necessarily the one
+    // this contact actually belongs to, so the contact lookup is by org, not
+    // that one project.
+    const { data: contact } = await db.from("contacts").select("id, org_id, project_id").eq("org_id", project.org_id).eq("phone", fromPhone).maybeSingle();
     if (!contact) return reply.code(200).send({ ok: true });
 
-    const c = contact as { id: string; org_id: string };
+    const c = contact as { id: string; org_id: string; project_id: string };
     const text = body.Chat ?? "";
     if (isOptOutText(text)) {
       await recordEvent(db, {
         orgId: c.org_id,
-        projectId: project.id,
+        projectId: c.project_id,
         messageId: null,
         contactId: c.id,
         channel: "wa",
@@ -537,7 +552,7 @@ const body = req.body as {
     } else {
       await recordEvent(db, {
         orgId: c.org_id,
-        projectId: project.id,
+        projectId: c.project_id,
         messageId: null,
         contactId: c.id,
         channel: "wa",
@@ -626,21 +641,22 @@ const body = req.body as {
     const body = req.body as { statuses?: any[]; messages?: any[]; contacts?: { wa_id?: string }[] };
     const secretHeader = req.headers["d360-webhook-secret"] as string | undefined;
 
-    // Resolve project the same way as Meta/Twilio: via phone number match on
+    // Resolve the org the same way as Meta/Twilio: via phone number match on
     // the sending account, found by checking every connected 360dialog
     // connection's account_label (the number 360dialog itself reports back
     // at connect time — see test360Dialog), since nothing in this payload
-    // shape identifies the receiving number directly.
+    // shape identifies the receiving number directly. The connection is
+    // shared across every project in the org (migration
+    // 0041_connections_org_scoped.sql), so this resolves an org, not a single
+    // project — contacts/messages below are matched within that whole org.
     const { data: connections } = await db.from("provider_connections").select("*").eq("kind", "whatsapp").eq("provider", "360dialog").eq("status", "connected");
-    let matchedProject: { id: string; org_id: string } | null = null;
+    let matchedOrgId: string | null = null;
     let matchedCredentials: Record<string, string> | null = null;
     for (const conn of (connections as any[]) ?? []) {
-      const { data: project } = await db.from("projects").select("id, org_id").eq("id", conn.project_id).maybeSingle();
-      if (!project) continue;
       try {
         const credentials = JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey()));
         if (!credentials.webhookSecret || secretHeader === credentials.webhookSecret) {
-          matchedProject = project as { id: string; org_id: string };
+          matchedOrgId = conn.org_id as string;
           matchedCredentials = credentials;
           break;
         }
@@ -648,7 +664,7 @@ const body = req.body as {
         // skip a connection we can't decrypt
       }
     }
-    if (!matchedProject) return reply.code(200).send({ ok: true });
+    if (!matchedOrgId) return reply.code(200).send({ ok: true });
     if (matchedCredentials?.webhookSecret && secretHeader !== matchedCredentials.webhookSecret) return reply.code(200).send({ ok: true });
 
     for (const status of body.statuses ?? []) {
@@ -664,14 +680,14 @@ const body = req.body as {
     for (const inbound of body.messages ?? []) {
       const fromPhone = normPhone(inbound.from);
       if (!fromPhone) continue;
-      const { data: contact } = await db.from("contacts").select("id, org_id").eq("project_id", matchedProject.id).eq("phone", fromPhone).maybeSingle();
+      const { data: contact } = await db.from("contacts").select("id, org_id, project_id").eq("org_id", matchedOrgId).eq("phone", fromPhone).maybeSingle();
       if (!contact) continue;
       const text = inbound.text?.body ?? "";
-      const c = contact as { id: string; org_id: string };
+      const c = contact as { id: string; org_id: string; project_id: string };
       if (isOptOutText(text)) {
         await recordEvent(db, {
           orgId: c.org_id,
-          projectId: matchedProject.id,
+          projectId: c.project_id,
           messageId: null,
           contactId: c.id,
           channel: "wa",
@@ -682,7 +698,7 @@ const body = req.body as {
       } else {
         await recordEvent(db, {
           orgId: c.org_id,
-          projectId: matchedProject.id,
+          projectId: c.project_id,
           messageId: null,
           contactId: c.id,
           channel: "wa",

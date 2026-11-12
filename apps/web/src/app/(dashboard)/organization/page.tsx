@@ -6,6 +6,7 @@ import { apiFetch, ApiError } from "@/lib/apiClient";
 import { createClient } from "@/lib/supabase/client";
 import { PROVIDERS, providerInfo, type ProviderInfo } from "@/lib/providerCatalog";
 import type { ConnectionRow } from "@/lib/types";
+import { TeamSettings } from "@/components/TeamSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,8 +58,12 @@ const KIND_META = {
   ai: { title: "AI (template generation & rewrite)", icon: Sparkles },
 } as const;
 
-export default function ChannelsPage() {
-  const { pid, project } = useWorkspace();
+export default function OrganizationPage() {
+  const { project } = useWorkspace();
+  // Connections (and Team, rendered below) are shared across every project
+  // in the org (migration 0041_connections_org_scoped.sql), so this page
+  // keys off the current project's org, not the project itself.
+  const orgId = project?.org_id ?? null;
 
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,10 +101,10 @@ export default function ChannelsPage() {
   }, []);
 
   async function refresh() {
-    if (!pid) return;
+    if (!orgId) return;
     setLoading(true);
     try {
-      const data = await apiFetch<ConnectionRow[]>(`/v1/projects/${pid}/connections`);
+      const data = await apiFetch<ConnectionRow[]>(`/v1/orgs/${orgId}/connections`);
       setConnections(data);
     } finally {
       setLoading(false);
@@ -109,7 +114,7 @@ export default function ChannelsPage() {
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pid]);
+  }, [orgId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -128,10 +133,10 @@ export default function ChannelsPage() {
   }, []);
 
   async function startOAuth(provider: ProviderInfo) {
-    if (!pid) return;
+    if (!orgId) return;
     setError(null);
     try {
-      const { url } = await apiFetch<{ url: string }>(`/v1/projects/${pid}/connections/oauth/${provider.id}/start`, {
+      const { url } = await apiFetch<{ url: string }>(`/v1/orgs/${orgId}/connections/oauth/${provider.id}/start`, {
         method: "POST",
       });
       window.location.href = url;
@@ -141,11 +146,11 @@ export default function ChannelsPage() {
   }
 
   async function createConnection() {
-    if (!pid || !adding) return;
+    if (!orgId || !adding) return;
     setError(null);
     setConnecting(true);
     try {
-      await apiFetch(`/v1/projects/${pid}/connections`, {
+      await apiFetch(`/v1/orgs/${orgId}/connections`, {
         method: "POST",
         body: JSON.stringify({ kind: adding.kind, provider: adding.id, credentials }),
       });
@@ -160,11 +165,11 @@ export default function ChannelsPage() {
   }
 
   async function testConnection(conn: ConnectionRow, otherConnected?: ConnectionRow) {
-    if (!pid) return;
+    if (!orgId) return;
     if (
       otherConnected &&
       !confirm(
-        `This will make ${providerInfo(conn.provider)?.label ?? conn.provider} the active ${conn.kind} connection for this project, replacing ${
+        `This will make ${providerInfo(conn.provider)?.label ?? conn.provider} the active ${conn.kind} connection for this organization, replacing ${
           providerInfo(otherConnected.provider)?.label ?? otherConnected.provider
         }. Continue?`
       )
@@ -174,7 +179,7 @@ export default function ChannelsPage() {
     setBusyId(conn.id);
     setError(null);
     try {
-      await apiFetch(`/v1/projects/${pid}/connections/${conn.id}/test`, { method: "POST" });
+      await apiFetch(`/v1/orgs/${orgId}/connections/${conn.id}/test`, { method: "POST" });
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Test failed");
@@ -197,7 +202,7 @@ export default function ChannelsPage() {
     if (
       otherConnected &&
       !confirm(
-        `This will make ${providerInfo(conn.provider)?.label ?? conn.provider} the active ${conn.kind} connection for this project, replacing ${
+        `This will make ${providerInfo(conn.provider)?.label ?? conn.provider} the active ${conn.kind} connection for this organization, replacing ${
           providerInfo(otherConnected.provider)?.label ?? otherConnected.provider
         }. Continue?`
       )
@@ -236,12 +241,12 @@ export default function ChannelsPage() {
   }
 
   async function submitEmailTest() {
-    if (!pid || !testing) return;
+    if (!orgId || !testing) return;
     setTestBusy(true);
     setTestError(null);
     setTestSuccess(null);
     try {
-      await apiFetch(`/v1/projects/${pid}/connections/${testing.id}/test-send-email`, {
+      await apiFetch(`/v1/orgs/${orgId}/connections/${testing.id}/test-send-email`, {
         method: "POST",
         body: JSON.stringify({
           to: emailTestForm.to,
@@ -260,12 +265,12 @@ export default function ChannelsPage() {
   }
 
   async function submitWaTest() {
-    if (!pid || !testing) return;
+    if (!orgId || !testing) return;
     setTestBusy(true);
     setTestError(null);
     setTestSuccess(null);
     try {
-      await apiFetch(`/v1/projects/${pid}/connections/${testing.id}/test-send-whatsapp`, {
+      await apiFetch(`/v1/orgs/${orgId}/connections/${testing.id}/test-send-whatsapp`, {
         method: "POST",
         body: JSON.stringify({ to: waTestForm.to, message: waTestForm.message }),
       });
@@ -285,12 +290,12 @@ export default function ChannelsPage() {
   }
 
   async function saveRateLimit() {
-    if (!pid || !editingRateLimit) return;
+    if (!orgId || !editingRateLimit) return;
     setRateLimitBusy(true);
     setRateLimitError(null);
     try {
       const trimmed = rateLimitValue.trim();
-      await apiFetch(`/v1/projects/${pid}/connections/${editingRateLimit.id}/rate-limit`, {
+      await apiFetch(`/v1/orgs/${orgId}/connections/${editingRateLimit.id}/rate-limit`, {
         method: "PATCH",
         body: JSON.stringify({ maxSendsPerMinute: trimmed ? Number(trimmed) : null }),
       });
@@ -304,12 +309,12 @@ export default function ChannelsPage() {
   }
 
   async function disconnect(conn: ConnectionRow) {
-    if (!pid) return;
+    if (!orgId) return;
     if (!confirm(`Disconnect ${providerInfo(conn.provider)?.label ?? conn.provider}?`)) return;
     setBusyId(conn.id);
     setError(null);
     try {
-      await apiFetch(`/v1/projects/${pid}/connections/${conn.id}`, { method: "DELETE" });
+      await apiFetch(`/v1/orgs/${orgId}/connections/${conn.id}`, { method: "DELETE" });
       await refresh();
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403 ? "You need admin access to disconnect providers." : "Couldn't disconnect");
@@ -367,7 +372,10 @@ export default function ChannelsPage() {
                     return (
                     <TableRow key={c.id}>
                       <TableCell className="font-semibold text-foreground">{providerInfo(c.provider)?.label ?? c.provider}</TableCell>
-                      <TableCell className="text-muted-foreground">{c.account_label || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {c.account_label || "—"}
+                        {c.connected_by_email && <div className="text-xs text-muted-foreground/70">Connected by {c.connected_by_email}</div>}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant={STATUS_VARIANT[c.status]} className="gap-1" title={c.needs_reconnect_reason ?? undefined}>
@@ -473,13 +481,15 @@ export default function ChannelsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-foreground">Connections</h1>
-        <p className="text-sm text-muted-foreground">
-          Connect email, WhatsApp, AI, and other provider accounts. Credentials are encrypted at rest and never sent back to the browser.
-        </p>
-      </div>
+    <div className="flex flex-col gap-10">
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-foreground">Connections</h1>
+          <p className="text-sm text-muted-foreground">
+            Connect email, WhatsApp, AI, and other provider accounts — shared by every project in this organization. Credentials are
+            encrypted at rest and never sent back to the browser.
+          </p>
+        </div>
 
       {banner && (
         <div
@@ -491,16 +501,19 @@ export default function ChannelsPage() {
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Loading connections…</p>
-      ) : (
-        <div className="flex flex-col gap-5">
-          {section("email", emailConns)}
-          {section("email_imap", emailImapConns)}
-          {section("whatsapp", waConns)}
-          {section("ai", aiConns)}
-        </div>
-      )}
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading connections…</p>
+        ) : (
+          <div className="flex flex-col gap-5">
+            {section("email", emailConns)}
+            {section("email_imap", emailImapConns)}
+            {section("whatsapp", waConns)}
+            {section("ai", aiConns)}
+          </div>
+        )}
+      </div>
+
+      {orgId && <TeamSettings orgId={orgId} />}
 
       <Dialog open={!!adding} onOpenChange={(open) => !open && setAdding(null)}>
         <DialogContent>

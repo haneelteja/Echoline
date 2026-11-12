@@ -73,20 +73,20 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string };
     const body = input.parse(req.body);
 
-    const { data: conn, error: connErr } = await req.supabase
-      .from("provider_connections")
-      .select("*")
-      .eq("project_id", id)
-      .eq("kind", "email")
-      .eq("status", "connected")
-      .maybeSingle();
-    if (connErr) return sendDbError(reply, connErr);
-    if (!conn) return reply.code(400).send({ error: "no_connection", message: "No connected email provider for this project" });
-
     const { data: project, error: projErr } = await req.supabase.from("projects").select("*").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
     const p = project as ProjectRow;
+
+    const { data: conn, error: connErr } = await req.supabase
+      .from("provider_connections")
+      .select("*")
+      .eq("org_id", p.org_id)
+      .eq("kind", "email")
+      .eq("status", "connected")
+      .maybeSingle();
+    if (connErr) return sendDbError(reply, connErr);
+    if (!conn) return reply.code(400).send({ error: "no_connection", message: "No connected email provider for this organization" });
 
     const c = conn as { id: string; provider: string; account_label: string | null } & Record<string, unknown>;
     const sender = getEmailSender(c.provider);

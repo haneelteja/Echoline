@@ -3,7 +3,7 @@ import { decryptCredentials, encryptCredentials, loadMasterKey, type EncryptedEn
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 export interface OAuthStatePayload {
-  projectId: string;
+  orgId: string;
   /** The user's Supabase access token, so the callback (hit directly by the
    * provider's redirect, with no Authorization header of its own) can still
    * write the connection as that user, under RLS, exactly like every other

@@ -144,13 +144,13 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
       db.from("templates").select("*").eq("project_id", projectId).eq("channel", "email").eq("step", step).maybeSingle(),
       db.from("sequence_settings").select("em").eq("project_id", projectId).single(),
       db.from("channel_settings").select("email").eq("project_id", projectId).maybeSingle(),
-      db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "email").eq("status", "connected").maybeSingle(),
+      db.from("provider_connections").select("*").eq("org_id", orgId).eq("kind", "email").eq("status", "connected").maybeSingle(),
     ]);
 
     const c = contact as ContactRow | null;
     if (!c || !validEmail(c.email)) throw new Error("Contact has no valid email");
     if (!template) throw new Error(`No email template for step ${step}`);
-    if (!conn) throw new Error("No connected email provider for this project");
+    if (!conn) throw new Error("No connected email provider for this organization");
 
     // Checked after claiming (not before) so a rate-limit hit goes through
     // the same messages/message_events/dead-letter bookkeeping as any other

@@ -65,10 +65,13 @@ function parseJsonLoose(text: string): unknown {
 
 /**
  * Classifies an inbound reply as an opt-out, a quotation/sample request, or
- * a plain reply — using whichever AI provider the project has connected,
- * ranked the same cost-aware way as apps/api/src/aiRouter.ts's
- * selectProviderAndModel (duplicated here for the same cross-app reason as
- * withinAiUsageLimit above). Returns null when there's no AI connection, the
+ * a plain reply — using whichever AI provider the org has connected (shared
+ * across every project in the org, migration
+ * 0041_connections_org_scoped.sql), ranked the same cost-aware way as
+ * apps/api/src/aiRouter.ts's selectProviderAndModel (duplicated here for the
+ * same cross-app reason as withinAiUsageLimit above). `projectId` is only
+ * used to attribute the AI-usage counter to the reply's actual project, not
+ * to find the connection. Returns null when there's no AI connection, the
  * org is over its monthly cap, or the call/parse fails for any reason — the
  * caller falls back to keyword matching in that case.
  */
@@ -80,7 +83,7 @@ async function classifyReplyIntent(
   subject: string,
   bodyText: string
 ): Promise<ReplyIntent | null> {
-  const { data: conns } = await db.from("provider_connections").select("*").eq("project_id", projectId).eq("kind", "ai").eq("status", "connected");
+  const { data: conns } = await db.from("provider_connections").select("*").eq("org_id", orgId).eq("kind", "ai").eq("status", "connected");
   const connections = ((conns as any[]) ?? []).map((conn) => ({
     provider: conn.provider as AiProviderId,
     credentials: JSON.parse(decryptCredentials(rowToEnvelope(conn), masterKey())) as Record<string, string>,
@@ -163,7 +166,7 @@ export async function runImapReplyPollTick(log: Logger): Promise<void> {
     try {
       await pollOneInbox(db, conn, log);
     } catch (err) {
-      log.error({ err, projectId: conn.project_id }, "imap poll: failed for connection");
+      log.error({ err, orgId: conn.org_id }, "imap poll: failed for connection");
       await db
         .from("provider_connections")
         .update({ status: "needs_reconnect", needs_reconnect_reason: err instanceof Error ? err.message : String(err) })
@@ -177,7 +180,12 @@ async function pollOneInbox(db: ReturnType<typeof createAdminClient>, conn: any,
   const replies = await fetchAndConsumeUnseenImapMessages(credentials);
   if (!replies.length) return;
 
-  const { data: contacts } = await db.from("contacts").select("id, org_id, email, em_status, wa_status").eq("project_id", conn.project_id);
+  // This inbox is shared across every project in the org (migration
+  // 0041_connections_org_scoped.sql), so a reply is matched against
+  // contacts across all of them, not just one — each contact's own
+  // project_id (not conn.project_id, which no longer identifies a single
+  // project) is what the rest of this function attributes the reply to.
+  const { data: contacts } = await db.from("contacts").select("id, org_id, project_id, email, em_status, wa_status").eq("org_id", conn.org_id);
   const byEmail = new Map<string, any>();
   for (const c of (contacts as any[]) ?? []) {
     if (c.email) byEmail.set(String(c.email).toLowerCase(), c);
@@ -192,7 +200,7 @@ async function pollOneInbox(db: ReturnType<typeof createAdminClient>, conn: any,
     // call (or the keyword fallback) when that doesn't already settle it.
     let intent: ReplyIntent = isOptOutText(reply.subject) ? "opt_out" : "other";
     if (intent === "other") {
-      const classified = await classifyReplyIntent(db, log, contact.org_id, conn.project_id, reply.subject, reply.bodyText);
+      const classified = await classifyReplyIntent(db, log, contact.org_id, contact.project_id, reply.subject, reply.bodyText);
       intent = classified ?? (looksLikeQuoteRequest(reply.subject, reply.bodyText) ? "quote_request" : "other");
     }
 
@@ -205,7 +213,7 @@ async function pollOneInbox(db: ReturnType<typeof createAdminClient>, conn: any,
 
     await db.from("message_events").insert({
       org_id: contact.org_id,
-      project_id: conn.project_id,
+      project_id: contact.project_id,
       message_id: null,
       contact_id: contact.id,
       channel: "em",
@@ -215,5 +223,5 @@ async function pollOneInbox(db: ReturnType<typeof createAdminClient>, conn: any,
     await db.from("contacts").update(contactUpdate).eq("id", contact.id);
   }
 
-  log.info({ projectId: conn.project_id, matched: replies.filter((r) => byEmail.has(r.fromAddress)).length, total: replies.length }, "imap poll: processed inbox");
+  log.info({ orgId: conn.org_id, matched: replies.filter((r) => byEmail.has(r.fromAddress)).length, total: replies.length }, "imap poll: processed inbox");
 }

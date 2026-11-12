@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Building2,
   Eye,
   EyeOff,
   KeyRound,
@@ -11,7 +12,6 @@ import {
   Users,
   SendHorizontal,
   BookOpen,
-  Plug,
   Download,
   History,
   Settings,
@@ -37,10 +37,10 @@ const NAV = [
   { href: "/contacts", label: "Leads & status", icon: Users },
   { href: "/sequence", label: "Sequence & Templates", icon: SendHorizontal },
   { href: "/kb", label: "Knowledge base", icon: BookOpen },
-  { href: "/channels", label: "Connections", icon: Plug },
   { href: "/sources", label: "Lead sources", icon: Download },
   { href: "/activity", label: "Activity log", icon: History },
   { href: "/project", label: "Project settings", icon: Settings },
+  { href: "/organization", label: "Organization", icon: Building2 },
 ] as const;
 
 const NEW_PROJECT_OPTION = "__new_project__";

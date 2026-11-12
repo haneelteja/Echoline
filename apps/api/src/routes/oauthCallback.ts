@@ -22,13 +22,13 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
     const webUrl = webPublicUrl();
 
     if (!isOAuthableProvider(provider)) {
-      return reply.redirect(`${webUrl}/channels?oauth_error=unknown_provider`);
+      return reply.redirect(`${webUrl}/organization?oauth_error=unknown_provider`);
     }
     if (error) {
-      return reply.redirect(`${webUrl}/channels?oauth_error=${encodeURIComponent(error)}`);
+      return reply.redirect(`${webUrl}/organization?oauth_error=${encodeURIComponent(error)}`);
     }
     if (!code || !state) {
-      return reply.redirect(`${webUrl}/channels?oauth_error=missing_code`);
+      return reply.redirect(`${webUrl}/organization?oauth_error=missing_code`);
     }
 
     let statePayload;
@@ -36,14 +36,14 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
       statePayload = decodeOAuthState(state);
     } catch (err) {
       req.log.warn({ err }, "OAuth state decode/expiry failure");
-      return reply.redirect(`${webUrl}/channels?oauth_error=invalid_or_expired_state`);
+      return reply.redirect(`${webUrl}/organization?oauth_error=invalid_or_expired_state`);
     }
 
     const config = getOAuthConfig(provider);
     const { kind, service } = oauthProviderMeta(provider);
-    // Email connections land back on Channels (where they're managed);
+    // Email connections land back on the Organization page (where they're managed);
     // OneDrive/Sheets land on Sources, since that's where lead sources live.
-    const returnPath = kind === "email" ? "/channels" : "/sources";
+    const returnPath = kind === "email" ? "/organization" : "/sources";
     if (!config) {
       return reply.redirect(`${webUrl}${returnPath}?oauth_error=oauth_not_configured`);
     }
@@ -83,12 +83,10 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
       // Acts as the user who started the flow, under RLS — same as every
       // other write in this API. Not the service-role client.
       const supabase = createAnonClient(statePayload.accessToken);
-      const { data: project } = await supabase.from("projects").select("org_id").eq("id", statePayload.projectId).maybeSingle();
-      if (!project) {
-        return reply.redirect(`${webUrl}${returnPath}?oauth_error=project_not_found`);
-      }
+      const { data: userData } = await supabase.auth.getUser(statePayload.accessToken);
+      const connectedByEmail = userData.user?.email ?? null;
 
-      // Only one *connected* provider per (project, kind) — replace, don't
+      // Only one *connected* provider per (org, kind) — replace, don't
       // stack (e.g. re-running the Gmail OAuth flow shouldn't leave two
       // "connected" email providers for the worker to trip over). The one
       // exception: google_sheets with a resolved account email only replaces
@@ -98,7 +96,7 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
         let disconnectQuery = supabase
           .from("provider_connections")
           .update({ status: "disconnected" })
-          .eq("project_id", statePayload.projectId)
+          .eq("org_id", statePayload.orgId)
           .eq("kind", kind)
           .eq("status", "connected");
         if (provider === "google_sheets" && accountLabel) {
@@ -112,8 +110,8 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const { error: insertErr } = await supabase.from("provider_connections").insert({
-        org_id: (project as any).org_id,
-        project_id: statePayload.projectId,
+        org_id: statePayload.orgId,
+        connected_by_email: connectedByEmail,
         kind,
         provider,
         account_label: accountLabel,

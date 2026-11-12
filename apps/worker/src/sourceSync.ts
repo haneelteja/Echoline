@@ -92,10 +92,10 @@ async function syncOneSource(db: ReturnType<typeof createAdminClient>, source: a
   // connected (maybeSingle() alone throws on more than one match).
   const connQuery = source.provider_connection_id
     ? db.from("provider_connections").select("*").eq("id", source.provider_connection_id).eq("status", "connected")
-    : db.from("provider_connections").select("*").eq("project_id", source.project_id).eq("kind", source.type).eq("status", "connected").limit(1);
+    : db.from("provider_connections").select("*").eq("org_id", source.org_id).eq("kind", source.type).eq("status", "connected").limit(1);
   const { data: conn } = await connQuery.maybeSingle();
   if (!conn) {
-    log.warn({ sourceId: source.id }, "source sync: no connected provider for this project/kind, skipping");
+    log.warn({ sourceId: source.id }, "source sync: no connected provider for this org/kind, skipping");
     await db.from("lead_sources").update({ last_sync: new Date().toISOString() }).eq("id", source.id);
     return;
   }

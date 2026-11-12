@@ -216,7 +216,8 @@ function ColumnHead({
 }
 
 export default function SourcesPage() {
-  const { pid, sources, loadingProject, refreshProjectData } = useWorkspace();
+  const { pid, project, sources, loadingProject, refreshProjectData } = useWorkspace();
+  const orgId = project?.org_id ?? null;
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -246,8 +247,8 @@ export default function SourcesPage() {
   const [sort, setSort] = useState<{ key: ColumnKey; dir: "asc" | "desc" }[]>([]);
 
   async function refreshConnections() {
-    if (!pid) return;
-    const data = await apiFetch<ConnectionRow[]>(`/v1/projects/${pid}/connections`);
+    if (!orgId) return;
+    const data = await apiFetch<ConnectionRow[]>(`/v1/orgs/${orgId}/connections`);
     setConnections(data);
   }
 
@@ -260,7 +261,7 @@ export default function SourcesPage() {
     else if (oauthError) setError(`Connection failed: ${oauthError.replace(/_/g, " ")}.`);
     if (connected || oauthError) window.history.replaceState({}, "", window.location.pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pid]);
+  }, [orgId]);
 
   const onedriveConn = connections.find((c) => c.kind === "onedrive" && c.status === "connected");
   // A project can have several connected Google accounts (one per Google
@@ -279,10 +280,10 @@ export default function SourcesPage() {
   }
 
   async function startOAuth(provider: "onedrive" | "google_sheets") {
-    if (!pid) return;
+    if (!orgId) return;
     setError(null);
     try {
-      const { url } = await apiFetch<{ url: string }>(`/v1/projects/${pid}/connections/oauth/${provider}/start`, { method: "POST" });
+      const { url } = await apiFetch<{ url: string }>(`/v1/orgs/${orgId}/connections/oauth/${provider}/start`, { method: "POST" });
       window.location.href = url;
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't start OAuth flow");

@@ -17,11 +17,12 @@ const submitInput = z.object({
 
 /**
  * Submits a WhatsApp template to Meta for approval. Gated to org-admins —
- * same justification as connections.ts: this reads the
- * project's connected Meta credentials, and provider_connections is
- * admin-only via RLS (migration 0002). Runs entirely through the caller's
- * own req.supabase/RLS context rather than an admin-client bypass, so an
- * admin here naturally has both the connection read and the templates write
+ * same justification as connections.ts: this reads the org's connected Meta
+ * credentials (shared across every project in the org, migration
+ * 0041_connections_org_scoped.sql), and provider_connections is admin-only
+ * via RLS (migration 0002). Runs entirely through the caller's own
+ * req.supabase/RLS context rather than an admin-client bypass, so an admin
+ * here naturally has both the connection read and the templates write
  * access it needs.
  */
 export const waTemplatesRoutes: FastifyPluginAsync = async (app) => {
@@ -43,13 +44,13 @@ export const waTemplatesRoutes: FastifyPluginAsync = async (app) => {
     const { data: conn, error: connErr } = await req.supabase
       .from("provider_connections")
       .select("*")
-      .eq("project_id", projectId)
+      .eq("org_id", t.org_id)
       .eq("kind", "whatsapp")
       .eq("provider", "meta")
       .eq("status", "connected")
       .maybeSingle();
     if (connErr) return sendDbError(reply, connErr);
-    if (!conn) return reply.code(400).send({ error: "no_connection", message: "No connected Meta WhatsApp provider for this project" });
+    if (!conn) return reply.code(400).send({ error: "no_connection", message: "No connected Meta WhatsApp provider for this organization" });
 
     let credentials: Record<string, string>;
     try {

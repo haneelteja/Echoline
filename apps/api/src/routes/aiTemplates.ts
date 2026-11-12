@@ -139,13 +139,13 @@ export const aiTemplatesRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string };
     const body = generateInput.parse(req.body);
 
-    const connections = await getAiConnections(req.supabase, id);
-    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
     const orgId = (project as any).org_id as string;
+
+    const connections = await getAiConnections(req.supabase, orgId);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this organization" });
 
     if (!(await enforceAiUsageLimit(orgId, reply))) return;
 
@@ -196,13 +196,13 @@ Return JSON only: {"templates":[{"step":0,"name":"short name","subject":"${isEma
     const { projectId, templateId } = req.params as { projectId: string; templateId: string };
     const body = rewriteInput.parse(req.body);
 
-    const connections = await getAiConnections(req.supabase, projectId);
-    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", projectId).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
     const orgId = (project as any).org_id as string;
+
+    const connections = await getAiConnections(req.supabase, orgId);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this organization" });
 
     if (!(await enforceAiUsageLimit(orgId, reply))) return;
 
@@ -257,13 +257,13 @@ Return JSON only: {"subject":"…","body":"…","categoryLines":{…}}`;
     const { id } = req.params as { id: string };
     const body = insightsInput.parse(req.body);
 
-    const connections = await getAiConnections(req.supabase, id);
-    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-
     const { data: project, error: projErr } = await req.supabase.from("projects").select("name, brand, org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
     const p = project as { name: string; brand: string | null; org_id: string };
+
+    const connections = await getAiConnections(req.supabase, p.org_id);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this organization" });
 
     if (!(await enforceAiUsageLimit(p.org_id, reply))) return;
 
@@ -289,13 +289,13 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
     const { id } = req.params as { id: string };
     const body = imageGenerateInput.parse(req.body);
 
-    const connections = await getAiConnections(req.supabase, id);
-    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
     const orgId = (project as any).org_id as string;
+
+    const connections = await getAiConnections(req.supabase, orgId);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this organization" });
 
     if (!(await enforceAiUsageLimit(orgId, reply))) return;
 
@@ -343,13 +343,13 @@ Write 4 short, specific, actionable observations (max 2 sentences each) as plain
     const { id } = req.params as { id: string };
     const body = copilotInput.parse(req.body);
 
-    const connections = await getAiConnections(req.supabase, id);
-    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this project" });
-
     const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", id).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
     const orgId = (project as any).org_id as string;
+
+    const connections = await getAiConnections(req.supabase, orgId);
+    if (!connections.length) return reply.code(400).send({ error: "no_connection", message: "No connected AI provider for this organization" });
 
     if (!(await enforceAiUsageLimit(orgId, reply))) return;
 

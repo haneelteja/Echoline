@@ -4,7 +4,6 @@ import { AlertTriangle, Plus } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { createClient } from "@/lib/supabase/client";
-import { TeamSettings } from "@/components/TeamSettings";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -303,8 +302,6 @@ export default function ProjectSettingsPage() {
             </div>
           </section>
         )}
-
-        <TeamSettings orgId={project.org_id} />
       </div>
 
       <Dialog open={confirmGoLive} onOpenChange={(open) => !open && !savingTestSendMode && setConfirmGoLive(false)}>

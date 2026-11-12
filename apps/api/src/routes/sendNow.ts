@@ -272,12 +272,12 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
     const { data: conn, error: connErr } = await db
       .from("provider_connections")
       .select("*")
-      .eq("project_id", projectId)
+      .eq("org_id", p.org_id)
       .eq("kind", kind)
       .eq("status", "connected")
       .maybeSingle();
     if (connErr) return sendDbError(reply, connErr);
-    if (!conn) return reply.code(400).send({ error: "no_connection", message: `No connected ${kind} provider for this project` });
+    if (!conn) return reply.code(400).send({ error: "no_connection", message: `No connected ${kind} provider for this organization` });
 
     // Neither depends on the other's result, so run them concurrently rather
     // than paying both round trips back-to-back on this synchronous path.
