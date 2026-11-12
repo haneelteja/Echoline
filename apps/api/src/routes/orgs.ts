@@ -31,6 +31,18 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(201).send(org);
   });
 
+  // Basic org identity (name) — the Organization page's connections/team are
+  // all scoped by orgId already, but had nothing naming *which* org that is
+  // until this existed. RLS's own org_select policy (any member can read
+  // their org) is the only gate; no admin check needed for a read this plain.
+  app.get("/orgs/:orgId", async (req, reply) => {
+    const { orgId } = req.params as { orgId: string };
+    const { data, error } = await req.supabase.from("organizations").select("id, name, created_at").eq("id", orgId).maybeSingle();
+    if (error) return sendDbError(reply, error);
+    if (!data) return reply.code(404).send({ error: "not_found" });
+    return data;
+  });
+
   // Member list, with each row's email resolved via the admin client —
   // auth.users isn't exposed to a regular PostgREST client at all, so every
   // caller needs this regardless of their own role. Relies on `memberships`

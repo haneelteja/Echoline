@@ -3,6 +3,12 @@
 
 export type MembershipRole = "owner" | "admin" | "viewer" | "project_viewer";
 
+export interface OrganizationRow {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface MemberRow {
   id: string;
   org_id: string;

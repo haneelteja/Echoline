@@ -5,7 +5,7 @@ import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { createClient } from "@/lib/supabase/client";
 import { PROVIDERS, providerInfo, type ProviderInfo } from "@/lib/providerCatalog";
-import type { ConnectionRow } from "@/lib/types";
+import type { ConnectionRow, OrganizationRow } from "@/lib/types";
 import { TeamSettings } from "@/components/TeamSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,7 @@ export default function OrganizationPage() {
   // keys off the current project's org, not the project itself.
   const orgId = project?.org_id ?? null;
 
+  const [org, setOrg] = useState<OrganizationRow | null>(null);
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
@@ -99,6 +100,13 @@ export default function OrganizationPage() {
       .auth.getUser()
       .then(({ data }) => setUserEmail(data.user?.email ?? null));
   }, []);
+
+  useEffect(() => {
+    if (!orgId) return;
+    apiFetch<OrganizationRow>(`/v1/orgs/${orgId}`)
+      .then(setOrg)
+      .catch(() => setOrg(null));
+  }, [orgId]);
 
   async function refresh() {
     if (!orgId) return;
@@ -482,9 +490,14 @@ export default function OrganizationPage() {
 
   return (
     <div className="flex flex-col gap-10">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Organization</p>
+        <h1 className="font-display text-2xl font-bold text-foreground">{org?.name ?? "…"}</h1>
+      </div>
+
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="font-display text-2xl font-bold text-foreground">Connections</h1>
+          <h2 className="font-display text-lg font-semibold text-foreground">Connections</h2>
           <p className="text-sm text-muted-foreground">
             Connect email, WhatsApp, AI, and other provider accounts — shared by every project in this organization. Credentials are
             encrypted at rest and never sent back to the browser.
