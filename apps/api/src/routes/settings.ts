@@ -10,19 +10,18 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     return data;
   });
 
+  // Partial update — stop_on_reply now saves independently from the Project
+  // settings page (apps/web's Sequence page only ever sends em/wa), so a
+  // plain `update({stop_on_reply, em, wa})` with em/wa undefined would null
+  // them out instead of leaving them untouched.
   app.put("/projects/:id/sequence", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = req.body as Record<string, unknown>;
-    const { data, error } = await req.supabase
-      .from("sequence_settings")
-      .update({
-        stop_on_reply: body.stopOnReply,
-        em: body.em,
-        wa: body.wa,
-      })
-      .eq("project_id", id)
-      .select()
-      .maybeSingle();
+    const update: Record<string, unknown> = {};
+    if ("stopOnReply" in body) update.stop_on_reply = body.stopOnReply;
+    if ("em" in body) update.em = body.em;
+    if ("wa" in body) update.wa = body.wa;
+    const { data, error } = await req.supabase.from("sequence_settings").update(update).eq("project_id", id).select().maybeSingle();
     if (error) return sendDbError(reply, error);
     return data;
   });

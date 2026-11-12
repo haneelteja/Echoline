@@ -56,7 +56,6 @@ interface ChannelDraft {
 }
 
 interface SeqDraft {
-  stop_on_reply: boolean;
   em: ChannelDraft;
   wa: ChannelDraft;
 }
@@ -71,7 +70,7 @@ function withDefaults(s: SequenceSettingsRow): SeqDraft {
     dailyCap: cfg.dailyCap ?? s.daily_cap,
     window: cfg.window ?? { start: s.window_start.slice(0, 5), end: s.window_end.slice(0, 5) },
   });
-  return { stop_on_reply: s.stop_on_reply, em: fill(s.em), wa: fill(s.wa) };
+  return { em: fill(s.em), wa: fill(s.wa) };
 }
 
 /** Maps a saved template row to its editable draft shape — shared by
@@ -155,11 +154,7 @@ export default function SequencePage() {
     try {
       await apiFetch(`/v1/projects/${pid}/sequence`, {
         method: "PUT",
-        body: JSON.stringify({
-          stopOnReply: draft.stop_on_reply,
-          em: draft.em,
-          wa: draft.wa,
-        }),
+        body: JSON.stringify({ em: draft.em, wa: draft.wa }),
       });
       setSeqSaved(true);
       await refreshProjectData();
@@ -741,14 +736,6 @@ export default function SequencePage() {
       </div>
 
       <section className="panel">
-        <h2>Stop conditions</h2>
-        <div className="field" style={{ marginTop: 12 }}>
-          <label className="row">
-            <input type="checkbox" checked={draft.stop_on_reply} onChange={(e) => setDraft({ ...draft, stop_on_reply: e.target.checked })} />
-            Stop both channels when a lead replies or opts out
-          </label>
-          <p className="hint">Applies across both channels together — a reply or opt-out on one stops outreach on the other too.</p>
-        </div>
         <button className="btn primary" onClick={saveSequence}>
           Save sequence
         </button>

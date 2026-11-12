@@ -8,7 +8,7 @@ import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { ProjectRow } from "@/lib/types";
+import type { ProjectRow, SequenceSettingsRow } from "@/lib/types";
 
 // Mirrors the server-side check in apps/api/src/routes/projects.ts — hiding
 // the control here is just so nobody else is confused by a toggle they can't
@@ -16,7 +16,7 @@ import type { ProjectRow } from "@/lib/types";
 const TEST_SEND_MODE_OPERATOR_EMAIL = "pega2023test@gmail.com";
 
 export default function ProjectSettingsPage() {
-  const { pid, project, setPid, refreshProjects, updateProject } = useWorkspace();
+  const { pid, project, setPid, refreshProjects, updateProject, refreshProjectData } = useWorkspace();
   const supabase = useMemo(() => createClient(), []);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -38,6 +38,10 @@ export default function ProjectSettingsPage() {
   const [savingTestTargets, setSavingTestTargets] = useState(false);
   const [testTargetsError, setTestTargetsError] = useState<string | null>(null);
   const [testTargetsSaved, setTestTargetsSaved] = useState(false);
+  const [stopOnReply, setStopOnReply] = useState(true);
+  const [savingStopOnReply, setSavingStopOnReply] = useState(false);
+  const [stopOnReplySaved, setStopOnReplySaved] = useState(false);
+  const [stopOnReplyError, setStopOnReplyError] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserEmail(data.user?.email ?? null));
@@ -61,6 +65,15 @@ export default function ProjectSettingsPage() {
     setTestSendEmailAddr(project.test_send_email ?? "");
     setTestSendWhatsappNum(project.test_send_whatsapp ?? "");
   }, [project]);
+
+  // Fetched separately from `project` — stop_on_reply lives on
+  // sequence_settings, not the projects table.
+  useEffect(() => {
+    if (!pid) return;
+    apiFetch<SequenceSettingsRow>(`/v1/projects/${pid}/sequence`)
+      .then((s) => setStopOnReply(s.stop_on_reply))
+      .catch(() => {});
+  }, [pid]);
 
   if (!project) return <div className="empty">Loading…</div>;
 
@@ -131,6 +144,25 @@ export default function ProjectSettingsPage() {
       );
     } finally {
       setSavingTestTargets(false);
+    }
+  }
+
+  async function saveStopOnReply(next: boolean) {
+    if (!pid) return;
+    setSavingStopOnReply(true);
+    setStopOnReplyError(null);
+    setStopOnReplySaved(false);
+    const prev = stopOnReply;
+    setStopOnReply(next);
+    try {
+      await apiFetch(`/v1/projects/${pid}/sequence`, { method: "PUT", body: JSON.stringify({ stopOnReply: next }) });
+      setStopOnReplySaved(true);
+      await refreshProjectData();
+    } catch (e) {
+      setStopOnReply(prev);
+      setStopOnReplyError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't change this." : "Couldn't save.");
+    } finally {
+      setSavingStopOnReply(false);
     }
   }
 
@@ -219,6 +251,42 @@ export default function ProjectSettingsPage() {
               </p>
             )}
           </div>
+        </section>
+
+        <section className="panel">
+          <h2>Stop conditions</h2>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", marginTop: 14 }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Stop both channels when a lead replies or opts out</div>
+              <p className="small muted" style={{ maxWidth: "48ch", marginTop: 2 }}>
+                Applies across both channels together — a reply or opt-out on one stops outreach on the other too.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={stopOnReply}
+              disabled={savingStopOnReply}
+              onClick={() => saveStopOnReply(!stopOnReply)}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50",
+                stopOnReply ? "border-transparent bg-primary" : "border-border bg-muted"
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                  stopOnReply ? "translate-x-6" : "translate-x-1"
+                )}
+              />
+            </button>
+          </div>
+          {stopOnReplySaved && <span className="small muted" style={{ marginTop: 10, display: "inline-block" }}>Saved.</span>}
+          {stopOnReplyError && (
+            <p className="small" style={{ color: "var(--bad)", marginTop: 10 }}>
+              {stopOnReplyError}
+            </p>
+          )}
         </section>
 
         {currentUserEmail === TEST_SEND_MODE_OPERATOR_EMAIL && (
