@@ -6,7 +6,7 @@ import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { useKbAssets } from "@/lib/useKbAssets";
 import { AssetPicker } from "@/components/AssetPicker";
-import type { SequenceSettingsRow, TemplateRow } from "@/lib/types";
+import type { SequenceSettingsRow, TemplateRow, TemplateVersionRow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,12 @@ type GenChannel = "email" | "whatsapp";
 
 const CH_LABEL: Record<ChannelKey, string> = { em: "Email", wa: "WhatsApp" };
 const CH_TEMPLATE: Record<ChannelKey, GenChannel> = { em: "email", wa: "whatsapp" };
-const STEP_LABEL = ["Initial", "Follow-up 1", "Follow-up 2", "Follow-up 3"];
+
+/** Step labels are computed, not a fixed list — steps can be added past the
+ * original Initial + 3 follow-ups, and the label keeps making sense. */
+function stepLabel(i: number): string {
+  return i === 0 ? "Initial" : `Follow-up ${i}`;
+}
 
 /** Compact human summary for the wait-time trigger button — e.g. "2d 30m",
  * "90s", "5d". Omits any unit that's zero rather than padding with "0d 0m". */
@@ -113,6 +118,15 @@ export default function SequencePage() {
   const [picking, setPicking] = useState<"header" | "gallery" | null>(null);
   const [editingWait, setEditingWait] = useState<{ ch: ChannelKey; index: number } | null>(null);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  // Email-only: clicking an empty step's "Choose / create template" opens a
+  // small picker (blank vs. a saved library template) instead of creating a
+  // blank template immediately.
+  const [pickingLibraryFor, setPickingLibraryFor] = useState<{ ch: ChannelKey; index: number } | null>(null);
+
+  const [versions, setVersions] = useState<TemplateVersionRow[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
 
   // True whenever the open template editor's draft differs from the
   // last-saved row — gates the "save or discard?" prompt so a plain close
@@ -155,8 +169,10 @@ export default function SequencePage() {
   }
 
   function templateFor(ch: ChannelKey, step: number): TemplateRow | null {
-    return templates.find((t) => t.channel === CH_TEMPLATE[ch] && t.step === step) ?? null;
+    return templates.find((t) => t.channel === CH_TEMPLATE[ch] && t.step === step && !t.is_library) ?? null;
   }
+
+  const emailLibraryTemplates = templates.filter((t) => t.channel === "email" && t.is_library);
 
   function openEditor(t: TemplateRow) {
     setEditing(t);
@@ -165,6 +181,41 @@ export default function SequencePage() {
     setTestEmailTo("");
     setTestEmailStatus("idle");
     setTestEmailError(null);
+    setVersions([]);
+    setShowVersions(false);
+    setVersionsError(null);
+  }
+
+  async function openVersionHistory() {
+    if (!pid || !editing) return;
+    setShowVersions(true);
+    setLoadingVersions(true);
+    setVersionsError(null);
+    try {
+      const list = await apiFetch<TemplateVersionRow[]>(`/v1/projects/${pid}/templates/${editing.id}/versions`);
+      setVersions(list);
+    } catch {
+      setVersionsError("Couldn't load version history.");
+    } finally {
+      setLoadingVersions(false);
+    }
+  }
+
+  async function revertToVersion(versionId: string) {
+    if (!pid || !editing) return;
+    setBusy(true);
+    setVersionsError(null);
+    try {
+      const updated = await apiFetch<TemplateRow>(`/v1/projects/${pid}/templates/${editing.id}/versions/${versionId}/revert`, { method: "POST" });
+      setEditing(updated);
+      setDraftTpl(toDraft(updated));
+      await refreshProjectData();
+      setShowVersions(false);
+    } catch {
+      setVersionsError("Couldn't revert to that version.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function createTemplate(ch: ChannelKey, step: number) {
@@ -177,7 +228,7 @@ export default function SequencePage() {
         body: JSON.stringify({
           channel: CH_TEMPLATE[ch],
           step,
-          name: STEP_LABEL[step] ?? `Step ${step + 1}`,
+          name: stepLabel(step),
           subject: "",
           body: "",
           category_lines: {},
@@ -188,6 +239,83 @@ export default function SequencePage() {
       openEditor(created);
     } catch (e) {
       setTplError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't create templates." : "Couldn't create template.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Creates a step-bound template pre-filled from a saved library entry —
+   * an independent copy: editing the step afterward never touches the
+   * library original or any other step that started from the same one. */
+  async function createTemplateFromLibrary(ch: ChannelKey, step: number, lib: TemplateRow) {
+    if (!pid) return;
+    setBusy(true);
+    setTplError(null);
+    try {
+      const created = await apiFetch<TemplateRow>(`/v1/projects/${pid}/templates`, {
+        method: "POST",
+        body: JSON.stringify({
+          channel: CH_TEMPLATE[ch],
+          step,
+          name: lib.name || stepLabel(step),
+          subject: lib.subject ?? "",
+          body: lib.body ?? "",
+          category_lines: lib.category_lines ?? {},
+          header_asset_id: lib.header_asset_id,
+          gallery_asset_ids: lib.gallery_asset_ids ?? [],
+          cc_email: lib.cc_email,
+          reply_to_email: lib.reply_to_email,
+          body_is_html: lib.body_is_html,
+        }),
+      });
+      await refreshProjectData();
+      setPickingLibraryFor(null);
+      openEditor(created);
+    } catch (e) {
+      setTplError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't create templates." : "Couldn't create template.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Creates a new, blank saved email template — not bound to any sequence
+   * step, listed in the "Saved email templates" library below the Email
+   * flow so it can be applied as a starting point for a future step. */
+  async function createLibraryTemplate() {
+    if (!pid) return;
+    setBusy(true);
+    setTplError(null);
+    try {
+      const created = await apiFetch<TemplateRow>(`/v1/projects/${pid}/templates`, {
+        method: "POST",
+        body: JSON.stringify({
+          channel: "email",
+          step: 0,
+          is_library: true,
+          name: "New saved template",
+          subject: "",
+          body: "",
+          category_lines: {},
+        }),
+      });
+      await refreshProjectData();
+      openEditor(created);
+    } catch (e) {
+      setTplError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't create templates." : "Couldn't create template.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteLibraryTemplate(id: string) {
+    if (!pid) return;
+    setBusy(true);
+    setTplError(null);
+    try {
+      await apiFetch(`/v1/projects/${pid}/templates/${id}`, { method: "DELETE" });
+      await refreshProjectData();
+    } catch (e) {
+      setTplError(e instanceof ApiError && e.status === 403 ? "You have view-only access and can't delete templates." : "Couldn't delete template.");
     } finally {
       setBusy(false);
     }
@@ -382,20 +510,35 @@ export default function SequencePage() {
     setDraftTpl({ ...draftTpl, subject, body });
   }
 
+  function addStep(ch: ChannelKey) {
+    const chDraft = draft![ch];
+    setDraft({ ...draft!, [ch]: { ...chDraft, steps: [...chDraft.steps, { delayDays: 3 }] } });
+  }
+
+  function removeLastStep(ch: ChannelKey) {
+    const chDraft = draft![ch];
+    if (chDraft.steps.length <= 1) return;
+    setDraft({ ...draft!, [ch]: { ...chDraft, steps: chDraft.steps.slice(0, -1) } });
+  }
+
   function column(ch: ChannelKey) {
     const chDraft = draft![ch];
     const steps = chDraft.steps;
 
     // Horizontal flow: each step is a card, with a wait-time connector
     // between consecutive cards — Initial, then a connector, then Follow-up
-    // 1, and so on. flex-wrap lets it fold onto multiple rows on narrower
-    // screens instead of forcing horizontal scroll.
+    // 1, and so on. Cards grow to fill the row's full width (only the
+    // connectors have a fixed size); flex-wrap folds the row onto multiple
+    // lines on narrower screens instead of forcing horizontal scroll. Adding
+    // or removing a step re-renders this automatically since it's driven
+    // entirely off `steps`.
     const flowNodes = steps.flatMap((s, i) => {
       const tpl = templateFor(ch, i);
+      const isLast = i === steps.length - 1;
       const nodes = [];
       if (i > 0) {
         nodes.push(
-          <div key={`wait-${i}`} className="flex flex-col items-center justify-center" style={{ minWidth: 64, padding: "0 4px" }}>
+          <div key={`wait-${i}`} className="flex flex-col items-center justify-center" style={{ minWidth: 64, flex: "0 0 auto", padding: "0 4px" }}>
             <div style={{ height: 1, width: "100%", minWidth: 24, background: "var(--line)" }} />
             <button
               type="button"
@@ -415,9 +558,21 @@ export default function SequencePage() {
         <div
           key={`step-${i}`}
           className="flex flex-col"
-          style={{ gap: 6, minWidth: 190, maxWidth: 230, flex: "1 1 190px", padding: 12, border: "1px solid var(--border, #e8e8e8)", borderRadius: 10 }}
+          style={{ gap: 6, minWidth: 190, flex: "1 1 190px", padding: 12, border: "1px solid var(--border, #e8e8e8)", borderRadius: 10, position: "relative" }}
         >
-          <b className="small">{STEP_LABEL[i] ?? `Step ${i + 1}`}</b>
+          {isLast && steps.length > 1 && (
+            <button
+              type="button"
+              className="btn small danger"
+              style={{ position: "absolute", top: -8, right: -8, padding: 2, borderRadius: "50%" }}
+              onClick={() => removeLastStep(ch)}
+              aria-label="Remove this step"
+              title="Remove this step"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+          <b className="small">{stepLabel(i)}</b>
           <span className="small muted">{i === 0 ? "sent immediately" : `${formatWait(s)} after the previous step`}</span>
           {tpl ? (
             <>
@@ -430,6 +585,10 @@ export default function SequencePage() {
                 Edit template
               </button>
             </>
+          ) : ch === "em" ? (
+            <button className="btn small" disabled={busy} onClick={() => setPickingLibraryFor({ ch, index: i })}>
+              Choose / create template
+            </button>
           ) : (
             <button className="btn small" disabled={busy} onClick={() => createTemplate(ch, i)}>
               Choose / create template
@@ -439,6 +598,19 @@ export default function SequencePage() {
       );
       return nodes;
     });
+
+    flowNodes.push(
+      <div key="add-step" className="flex flex-col items-center justify-center" style={{ minWidth: 64, flex: "0 0 auto", padding: "0 4px" }}>
+        <button
+          type="button"
+          className="row small"
+          style={{ gap: 6, padding: "4px 10px", borderRadius: 999, border: "1px dashed var(--line)", background: "var(--bg)", whiteSpace: "nowrap" }}
+          onClick={() => addStep(ch)}
+        >
+          + Add follow-up
+        </button>
+      </div>
+    );
 
     return (
       <section className="panel" key={ch}>
@@ -498,6 +670,45 @@ export default function SequencePage() {
             </div>
           </div>
         </div>
+
+        {ch === "em" && (
+          <div style={{ borderTop: "1px solid var(--border, #e8e8e8)", paddingTop: 14, marginTop: 14 }}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+              <h3 className="small" style={{ fontWeight: 600 }}>
+                Saved email templates
+              </h3>
+              <button className="btn small" disabled={busy} onClick={createLibraryTemplate}>
+                + New saved template
+              </button>
+            </div>
+            {emailLibraryTemplates.length === 0 ? (
+              <p className="hint">No saved templates yet — create one here to reuse it as a starting point for any step above.</p>
+            ) : (
+              <div className="flex flex-col" style={{ gap: 6 }}>
+                {emailLibraryTemplates.map((t) => (
+                  <div
+                    key={t.id}
+                    className="row"
+                    style={{ justifyContent: "space-between", gap: 10, padding: "8px 10px", border: "1px solid var(--border, #e8e8e8)", borderRadius: 8 }}
+                  >
+                    <div className="small">
+                      <b>{t.name || "Untitled"}</b>
+                      {t.subject ? ` — ${t.subject}` : ""}
+                    </div>
+                    <div className="row small" style={{ gap: 6 }}>
+                      <button className="btn small" onClick={() => openEditor(t)}>
+                        Edit
+                      </button>
+                      <button className="btn small danger" disabled={busy} onClick={() => deleteLibraryTemplate(t.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
     );
   }
@@ -587,7 +798,12 @@ export default function SequencePage() {
           {editing && draftTpl && (
             <>
               <DialogHeader>
-                <DialogTitle>Edit {editing.channel === "email" ? "email" : "WhatsApp"} template</DialogTitle>
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <DialogTitle>Edit {editing.channel === "email" ? "email" : "WhatsApp"} template</DialogTitle>
+                  <button type="button" className="btn small" onClick={openVersionHistory} style={{ marginRight: 24 }}>
+                    Version history
+                  </button>
+                </div>
               </DialogHeader>
               <div className="grid gap-8 lg:grid-cols-[1fr_440px]">
                 <div className="flex flex-col gap-3">
@@ -975,6 +1191,96 @@ export default function SequencePage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={pickingLibraryFor !== null} onOpenChange={(open) => !open && setPickingLibraryFor(null)}>
+        <DialogContent className="max-w-md">
+          {pickingLibraryFor && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{stepLabel(pickingLibraryFor.index)} — choose a template</DialogTitle>
+                <DialogDescription>Start blank, or from one of your saved email templates.</DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col" style={{ gap: 8 }}>
+                <button
+                  className="btn small"
+                  disabled={busy}
+                  onClick={() => {
+                    const { ch, index } = pickingLibraryFor;
+                    setPickingLibraryFor(null);
+                    createTemplate(ch, index);
+                  }}
+                >
+                  Start blank
+                </button>
+                {emailLibraryTemplates.length === 0 ? (
+                  <p className="hint">No saved templates yet.</p>
+                ) : (
+                  emailLibraryTemplates.map((t) => (
+                    <button
+                      key={t.id}
+                      className="btn small"
+                      disabled={busy}
+                      onClick={() => createTemplateFromLibrary(pickingLibraryFor.ch, pickingLibraryFor.index, t)}
+                    >
+                      {t.name || "Untitled"}
+                      {t.subject ? ` — ${t.subject}` : ""}
+                    </button>
+                  ))
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPickingLibraryFor(null)}>
+                  Cancel
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showVersions} onOpenChange={(open) => !open && setShowVersions(false)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Version history</DialogTitle>
+            <DialogDescription>Every past save of this template. Revert to bring an older version back as the current one.</DialogDescription>
+          </DialogHeader>
+          {loadingVersions ? (
+            <p className="small muted">Loading…</p>
+          ) : versions.length === 0 ? (
+            <p className="hint">No earlier versions yet — this template hasn&apos;t been saved since it was created.</p>
+          ) : (
+            <div className="flex flex-col" style={{ gap: 8, maxHeight: 360, overflowY: "auto" }}>
+              {versions.map((v, i) => (
+                <div
+                  key={v.id}
+                  className="row"
+                  style={{ justifyContent: "space-between", gap: 10, padding: "8px 10px", border: "1px solid var(--border, #e8e8e8)", borderRadius: 8 }}
+                >
+                  <div className="small">
+                    <b>{i === 0 ? "Current" : `${new Date(v.created_at).toLocaleString()}`}</b>
+                    {v.subject ? ` — ${v.subject}` : ""}
+                  </div>
+                  {i > 0 && (
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => revertToVersion(v.id)}>
+                      Revert to this version
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {versionsError && (
+            <p className="small" style={{ color: "var(--bad)" }}>
+              {versionsError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVersions(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {draftTpl && (
         <AssetPicker
           pid={pid}
@@ -996,7 +1302,7 @@ export default function SequencePage() {
             <>
               <DialogHeader>
                 <DialogTitle>
-                  {CH_LABEL[editingWait.ch]} — {STEP_LABEL[editingWait.index] ?? `Step ${editingWait.index + 1}`} delay
+                  {CH_LABEL[editingWait.ch]} — {stepLabel(editingWait.index)} delay
                 </DialogTitle>
                 <DialogDescription>How long to wait after the previous step before sending this one.</DialogDescription>
               </DialogHeader>

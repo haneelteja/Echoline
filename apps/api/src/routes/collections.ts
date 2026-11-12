@@ -5,6 +5,10 @@ interface CollectionConfig {
   path: string; // e.g. "contacts" -> /projects/:id/contacts
   table: string; // e.g. "contacts"
   orgScoped: boolean; // insert requires org_id (all of ours do)
+  /** Skips registering the generic PATCH route — set when a dedicated route
+   * elsewhere needs to wrap the update with extra behavior (e.g. templates'
+   * version-history snapshot in templateVersions.ts). */
+  skipPatch?: boolean;
 }
 
 // Default cap is deliberately generous (comfortably above any real dataset
@@ -57,20 +61,22 @@ function registerCollection(app: Parameters<FastifyPluginAsync>[0], cfg: Collect
     return reply.code(201).send(data);
   });
 
-  app.patch(`/projects/:projectId/${cfg.path}/:itemId`, async (req, reply) => {
-    const { projectId, itemId } = req.params as { projectId: string; itemId: string };
-    const body = req.body as Record<string, unknown>;
-    const { data, error } = await req.supabase
-      .from(cfg.table)
-      .update(body)
-      .eq("project_id", projectId)
-      .eq("id", itemId)
-      .select()
-      .maybeSingle();
-    if (error) return sendDbError(reply, error);
-    if (!data) return reply.code(404).send({ error: "not_found" });
-    return data;
-  });
+  if (!cfg.skipPatch) {
+    app.patch(`/projects/:projectId/${cfg.path}/:itemId`, async (req, reply) => {
+      const { projectId, itemId } = req.params as { projectId: string; itemId: string };
+      const body = req.body as Record<string, unknown>;
+      const { data, error } = await req.supabase
+        .from(cfg.table)
+        .update(body)
+        .eq("project_id", projectId)
+        .eq("id", itemId)
+        .select()
+        .maybeSingle();
+      if (error) return sendDbError(reply, error);
+      if (!data) return reply.code(404).send({ error: "not_found" });
+      return data;
+    });
+  }
 
   app.delete(`/projects/:projectId/${cfg.path}/:itemId`, async (req, reply) => {
     const { projectId, itemId } = req.params as { projectId: string; itemId: string };
@@ -99,7 +105,9 @@ function registerCollection(app: Parameters<FastifyPluginAsync>[0], cfg: Collect
 
 export const collectionRoutes: FastifyPluginAsync = async (app) => {
   registerCollection(app, { path: "contacts", table: "contacts", orgScoped: true });
-  registerCollection(app, { path: "templates", table: "templates", orgScoped: true });
+  // PATCH is handled by templateVersionsRoutes instead, which snapshots a
+  // version on every save.
+  registerCollection(app, { path: "templates", table: "templates", orgScoped: true, skipPatch: true });
   registerCollection(app, { path: "kb", table: "kb_items", orgScoped: true });
   registerCollection(app, { path: "sources", table: "lead_sources", orgScoped: true });
   // Deleting a folder just unfiles its assets (folder_id -> null via FK) —

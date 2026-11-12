@@ -134,6 +134,22 @@ export interface TemplateRow {
   cc_email: string | null;
   reply_to_email: string | null;
   body_is_html: boolean;
+  is_library: boolean;
+}
+
+export interface TemplateVersionRow {
+  id: string;
+  template_id: string;
+  name: string | null;
+  subject: string | null;
+  body: string | null;
+  category_lines: Record<string, string>;
+  header_asset_id: string | null;
+  gallery_asset_ids: string[];
+  cc_email: string | null;
+  reply_to_email: string | null;
+  body_is_html: boolean;
+  created_at: string;
 }
 
 export interface KbFolderRow {

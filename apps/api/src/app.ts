@@ -20,6 +20,7 @@ import { sourcesRoutes } from "./routes/sources.js";
 import { statusLogRoutes } from "./routes/statusLog.js";
 import { sendNowRoutes } from "./routes/sendNow.js";
 import { templateTestSendRoutes } from "./routes/templateTestSend.js";
+import { templateVersionsRoutes } from "./routes/templateVersions.js";
 import { kbAssetsRoutes } from "./routes/kbAssets.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { inviteRoutes, publicInviteRoutes } from "./routes/invites.js";
@@ -137,6 +138,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(statusLogRoutes);
       await api.register(sendNowRoutes);
       await api.register(templateTestSendRoutes);
+      await api.register(templateVersionsRoutes);
       await api.register(kbAssetsRoutes);
       await api.register(orgRoutes);
       await api.register(inviteRoutes);
