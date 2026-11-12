@@ -76,7 +76,7 @@ async function main() {
     return data!.id as string;
   }
 
-  const viewerMembershipId = await upsertMembership(viewerId, "viewer");
+  await upsertMembership(viewerId, "viewer");
   const projectViewerMembershipId = await upsertMembership(projectViewerId, "project_viewer");
 
   // scope the project_viewer to Elma only

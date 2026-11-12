@@ -11,7 +11,7 @@ import { createServer } from "node:http";
  */
 export function startHealthServer() {
   const port = Number(process.env.PORT) || 10000;
-  const server = createServer((req, res) => {
+  const server = createServer((_req, res) => {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end("ok");
   });
