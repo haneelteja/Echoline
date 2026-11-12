@@ -586,7 +586,7 @@ export default function OrganizationPage() {
         )}
       </div>
 
-      {orgId && <TeamSettings orgId={orgId} />}
+      {orgId && <TeamSettings orgId={orgId} orgName={org?.name ?? null} />}
 
       <Dialog open={!!adding} onOpenChange={(open) => !open && setAdding(null)}>
         <DialogContent>

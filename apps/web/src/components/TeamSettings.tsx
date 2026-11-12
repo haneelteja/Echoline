@@ -30,7 +30,7 @@ function roleLabel(role: MembershipRole): string {
   return INVITABLE_ROLES.find((r) => r.value === role)?.label ?? role;
 }
 
-export function TeamSettings({ orgId }: { orgId: string }) {
+export function TeamSettings({ orgId, orgName }: { orgId: string; orgName?: string | null }) {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -252,7 +252,16 @@ export function TeamSettings({ orgId }: { orgId: string }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Invite a teammate</DialogTitle>
-            <DialogDescription>They&apos;ll get an email with a link to accept. The invite expires in 7 days.</DialogDescription>
+            <DialogDescription>
+              {orgName ? (
+                <>
+                  Invite to <span className="font-medium text-foreground">{orgName}</span>. They&apos;ll get an email with a link to
+                  accept. The invite expires in 7 days.
+                </>
+              ) : (
+                "They'll get an email with a link to accept. The invite expires in 7 days."
+              )}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
