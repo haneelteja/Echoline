@@ -57,6 +57,22 @@ export const contactsImportRoutes: FastifyPluginAsync = async (app) => {
           skipped++;
           continue;
         }
+
+        // A row that was reviewed and deleted shouldn't come back as "new"
+        // on a re-import just because the record it would have matched is
+        // gone — see deleted_contacts (migration 0048).
+        const [byDeletedEmail, byDeletedPhone] = await Promise.all([
+          email
+            ? req.supabase.from("deleted_contacts").select("id").eq("project_id", id).ilike("email", email).maybeSingle()
+            : Promise.resolve({ data: null }),
+          phone
+            ? req.supabase.from("deleted_contacts").select("id").eq("project_id", id).eq("phone", phone).maybeSingle()
+            : Promise.resolve({ data: null }),
+        ]);
+        if (byDeletedEmail.data ?? byDeletedPhone.data) {
+          skipped++;
+          continue;
+        }
       }
 
       const { error } = await req.supabase.from("contacts").insert({

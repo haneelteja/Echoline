@@ -10,6 +10,7 @@ import {
   Database,
   FileSpreadsheet,
   Hand,
+  History,
   Loader2,
   Mail,
   MapPin,
@@ -29,7 +30,7 @@ import { isWithinSendWindow, nextDue, normPhone, SENTIMENT_VALUES, statusLabel, 
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { toCoreContact, toCoreSequence } from "@/lib/adapt";
-import type { ContactRow } from "@/lib/types";
+import type { ContactRow, DeletedContactRow } from "@/lib/types";
 import { ImportLeadsDialog } from "@/components/ImportLeadsDialog";
 import { StatusLogDialog } from "@/components/StatusLogDialog";
 import { SendNowDialog } from "@/components/SendNowDialog";
@@ -586,6 +587,40 @@ export default function ContactsPage() {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetDone, setResetDone] = useState<number | null>(null);
 
+  // Deletion leaves a permanent snapshot in deleted_contacts (migration
+  // 0048) even though the contact row itself is a hard delete — this dialog
+  // is the only way to see that trail.
+  const [viewingDeleted, setViewingDeleted] = useState(false);
+  const [deletedContacts, setDeletedContacts] = useState<DeletedContactRow[]>([]);
+  const [loadingDeleted, setLoadingDeleted] = useState(false);
+  const [deletedSearch, setDeletedSearch] = useState("");
+
+  async function openDeletedLeads() {
+    setViewingDeleted(true);
+    if (!pid) return;
+    setLoadingDeleted(true);
+    try {
+      const data = await apiFetch<DeletedContactRow[]>(`/v1/projects/${pid}/contacts/deleted`);
+      setDeletedContacts(data);
+    } catch {
+      setDeletedContacts([]);
+    } finally {
+      setLoadingDeleted(false);
+    }
+  }
+
+  const filteredDeleted = useMemo(() => {
+    const q = deletedSearch.trim().toLowerCase();
+    if (!q) return deletedContacts;
+    return deletedContacts.filter(
+      (d) =>
+        d.name.toLowerCase().includes(q) ||
+        (d.email ?? "").toLowerCase().includes(q) ||
+        (d.phone ?? "").includes(q) ||
+        (d.source ?? "").toLowerCase().includes(q)
+    );
+  }, [deletedContacts, deletedSearch]);
+
   const kpis = useMemo(() => {
     const total = contacts.length;
     const emailSent = contacts.filter((c) => c.em_stage > 0).length;
@@ -903,6 +938,10 @@ export default function ContactsPage() {
           </span>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={openDeletedLeads}>
+            <History className="h-4 w-4" />
+            Deleted leads
+          </Button>
           <Button variant="outline" onClick={() => setConfirmReset(true)}>
             <RotateCcw className="h-4 w-4" />
             Reset status
@@ -1068,6 +1107,77 @@ export default function ContactsPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      <Dialog open={viewingDeleted} onOpenChange={(open) => !open && setViewingDeleted(false)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Deleted leads</DialogTitle>
+            <DialogDescription>
+              A permanent record of every lead removed from this project — deleting is a hard delete (send history goes
+              with it), but this snapshot survives so there&apos;s still a trace it was received.
+            </DialogDescription>
+          </DialogHeader>
+          {loadingDeleted ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : deletedContacts.length ? (
+            <div className="flex flex-col gap-3">
+              <div className="relative max-w-xs">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search name, email, phone, source…"
+                  value={deletedSearch}
+                  onChange={(e) => setDeletedSearch(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {filteredDeleted.length} of {deletedContacts.length}
+              </p>
+              <div className="max-h-[50vh] overflow-y-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Business</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>WhatsApp</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Originally added</TableHead>
+                      <TableHead>Deleted</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="[&>tr:nth-child(even)]:bg-muted/30">
+                    {filteredDeleted.map((d) => (
+                      <TableRow key={d.id}>
+                        <TableCell className="font-medium text-foreground">{d.name}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          <span className={d.email ? undefined : "italic"}>{d.email || d.raw_email || "—"}</span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          <span className={d.phone ? undefined : "italic"}>{d.phone || d.raw_phone || "—"}</span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{d.source || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {d.original_created_at ? new Date(d.original_created_at).toLocaleString() : "—"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground" title={d.deleted_by ? `By ${d.deleted_by}` : undefined}>
+                          {new Date(d.deleted_at).toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No leads have been deleted from this project yet.</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingDeleted(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {importing && pid && <ImportLeadsDialog pid={pid} onClose={() => setImporting(false)} onImported={refreshProjectData} />}
 

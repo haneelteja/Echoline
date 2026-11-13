@@ -152,6 +152,18 @@ async function syncOneSource(db: ReturnType<typeof createAdminClient>, source: a
         skipped++;
         continue;
       }
+
+      // A row that was reviewed and deleted shouldn't come back as "new"
+      // next sync just because the record it would have matched is gone —
+      // see deleted_contacts (migration 0048).
+      const [byDeletedEmail, byDeletedPhone] = await Promise.all([
+        email ? db.from("deleted_contacts").select("id").eq("project_id", source.project_id).ilike("email", email).maybeSingle() : Promise.resolve({ data: null }),
+        phone ? db.from("deleted_contacts").select("id").eq("project_id", source.project_id).eq("phone", phone).maybeSingle() : Promise.resolve({ data: null }),
+      ]);
+      if (byDeletedEmail.data ?? byDeletedPhone.data) {
+        skipped++;
+        continue;
+      }
     }
 
     const { error } = await db.from("contacts").insert({

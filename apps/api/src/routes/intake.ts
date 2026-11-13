@@ -151,6 +151,24 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // A lead that was reviewed and deleted shouldn't silently come back as
+    // "new" just because the record it would have matched is gone — see
+    // deleted_contacts (migration 0048).
+    if (leadId || email || phone) {
+      const [byDeletedExternalId, byDeletedEmail, byDeletedPhone] = await Promise.all([
+        leadId ? db.from("deleted_contacts").select("id").eq("project_id", s.project_id).eq("external_id", leadId).maybeSingle() : Promise.resolve({ data: null }),
+        email ? db.from("deleted_contacts").select("id").eq("project_id", s.project_id).ilike("email", email).maybeSingle() : Promise.resolve({ data: null }),
+        phone ? db.from("deleted_contacts").select("id").eq("project_id", s.project_id).eq("phone", phone).maybeSingle() : Promise.resolve({ data: null }),
+      ]);
+      if (byDeletedExternalId.data ?? byDeletedEmail.data ?? byDeletedPhone.data) {
+        await db
+          .from("lead_sources")
+          .update({ rows_skipped: s.rows_skipped + 1, last_sync: new Date().toISOString() })
+          .eq("id", sourceId);
+        return reply.code(200).send({ ok: true, previouslyDeleted: true });
+      }
+    }
+
     const { data: contact, error: insertErr } = await db
       .from("contacts")
       .insert({

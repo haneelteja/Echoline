@@ -9,6 +9,10 @@ interface CollectionConfig {
    * elsewhere needs to wrap the update with extra behavior (e.g. templates'
    * version-history snapshot in templateVersions.ts). */
   skipPatch?: boolean;
+  /** Skips registering both generic DELETE routes — set when a dedicated
+   * route elsewhere needs to wrap the delete with extra behavior (e.g.
+   * contacts' deleted_contacts audit snapshot in contactsDelete.ts). */
+  skipDelete?: boolean;
 }
 
 // Default cap is deliberately generous (comfortably above any real dataset
@@ -78,33 +82,37 @@ function registerCollection(app: Parameters<FastifyPluginAsync>[0], cfg: Collect
     });
   }
 
-  app.delete(`/projects/:projectId/${cfg.path}/:itemId`, async (req, reply) => {
-    const { projectId, itemId } = req.params as { projectId: string; itemId: string };
-    const { error } = await req.supabase.from(cfg.table).delete().eq("project_id", projectId).eq("id", itemId);
-    if (error) return sendDbError(reply, error);
-    return reply.code(204).send();
-  });
+  if (!cfg.skipDelete) {
+    app.delete(`/projects/:projectId/${cfg.path}/:itemId`, async (req, reply) => {
+      const { projectId, itemId } = req.params as { projectId: string; itemId: string };
+      const { error } = await req.supabase.from(cfg.table).delete().eq("project_id", projectId).eq("id", itemId);
+      if (error) return sendDbError(reply, error);
+      return reply.code(204).send();
+    });
 
-  // Bulk delete as one request/one query instead of the caller firing N
-  // individual item-DELETEs in parallel — that pattern (used by the leads
-  // page's "delete invalid leads") looked "stuck" on Render's free tier
-  // once N got into the hundreds, even though every request did eventually
-  // land; one round trip removes both the slowness and the all-or-nothing
-  // fragility of N concurrent requests.
-  app.delete(`/projects/:id/${cfg.path}`, async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const { ids } = req.body as { ids?: unknown };
-    if (!Array.isArray(ids) || ids.length === 0 || !ids.every((v) => typeof v === "string")) {
-      return reply.code(400).send({ error: "ids_required", message: "Body must be { ids: string[] }" });
-    }
-    const { error } = await req.supabase.from(cfg.table).delete().eq("project_id", id).in("id", ids);
-    if (error) return sendDbError(reply, error);
-    return reply.code(204).send();
-  });
+    // Bulk delete as one request/one query instead of the caller firing N
+    // individual item-DELETEs in parallel — that pattern (used by the leads
+    // page's "delete invalid leads") looked "stuck" on Render's free tier
+    // once N got into the hundreds, even though every request did eventually
+    // land; one round trip removes both the slowness and the all-or-nothing
+    // fragility of N concurrent requests.
+    app.delete(`/projects/:id/${cfg.path}`, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const { ids } = req.body as { ids?: unknown };
+      if (!Array.isArray(ids) || ids.length === 0 || !ids.every((v) => typeof v === "string")) {
+        return reply.code(400).send({ error: "ids_required", message: "Body must be { ids: string[] }" });
+      }
+      const { error } = await req.supabase.from(cfg.table).delete().eq("project_id", id).in("id", ids);
+      if (error) return sendDbError(reply, error);
+      return reply.code(204).send();
+    });
+  }
 }
 
 export const collectionRoutes: FastifyPluginAsync = async (app) => {
-  registerCollection(app, { path: "contacts", table: "contacts", orgScoped: true });
+  // DELETE is handled by contactsDeleteRoutes instead, which snapshots into
+  // deleted_contacts before removing the row.
+  registerCollection(app, { path: "contacts", table: "contacts", orgScoped: true, skipDelete: true });
   // PATCH is handled by templateVersionsRoutes instead, which snapshots a
   // version on every save.
   registerCollection(app, { path: "templates", table: "templates", orgScoped: true, skipPatch: true });

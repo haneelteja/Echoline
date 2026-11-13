@@ -115,6 +115,29 @@ export interface ContactRow {
   created_at: string;
 }
 
+// Permanent snapshot taken right before a contact is deleted — see
+// deleted_contacts (migration 0048). Browsable from the Contacts page so a
+// hard delete still leaves a visible trace that the lead was received.
+export interface DeletedContactRow {
+  id: string;
+  project_id: string;
+  original_contact_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  category: string | null;
+  area: string | null;
+  source: string | null;
+  external_id: string | null;
+  raw_email: string | null;
+  raw_phone: string | null;
+  em_status: string;
+  wa_status: string;
+  original_created_at: string | null;
+  deleted_at: string;
+  deleted_by: string | null;
+}
+
 export interface StatusLogEntry {
   id: string;
   contact_id: string;

@@ -8,6 +8,7 @@ import { settingsRoutes } from "./routes/settings.js";
 import { collectionRoutes } from "./routes/collections.js";
 import { contactsImportRoutes } from "./routes/contactsImport.js";
 import { contactsResetRoutes } from "./routes/contactsReset.js";
+import { contactsDeleteRoutes } from "./routes/contactsDelete.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { waTemplatesRoutes } from "./routes/waTemplates.js";
 import { aiTemplatesRoutes } from "./routes/aiTemplates.js";
@@ -144,6 +145,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(collectionRoutes);
       await api.register(contactsImportRoutes);
       await api.register(contactsResetRoutes);
+      await api.register(contactsDeleteRoutes);
       await api.register(connectionRoutes);
       await api.register(sourcesRoutes);
       await api.register(waTemplatesRoutes);
