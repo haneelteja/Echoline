@@ -93,7 +93,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col gap-1 border-r border-border bg-background p-4 transition-transform lg:static lg:translate-x-0",
+          // Mobile: a full-height fixed overlay, slid in/out. Desktop
+          // (lg:): sticky to the viewport instead of a plain flex sibling —
+          // lg:static had no explicit height, so flexbox's default
+          // align-items:stretch made it grow to match whatever height
+          // <main> happened to be on that page (tall on Sources/Contacts,
+          // short elsewhere), instead of staying a fixed, always-fully-
+          // visible size regardless of page content length.
+          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col gap-1 border-r border-border bg-background p-4 transition-transform lg:sticky lg:inset-auto lg:top-0 lg:h-dvh lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
