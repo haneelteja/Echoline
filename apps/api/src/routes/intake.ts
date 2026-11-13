@@ -57,7 +57,10 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
       .select("id, org_id, project_id, type, name, config, rows_added, rows_skipped, rows_failed")
       .eq("id", sourceId)
       .maybeSingle();
-    if (sourceErr) return reply.code(500).send({ error: "internal_error" });
+    if (sourceErr) {
+      req.log.error({ err: sourceErr, source: "api", route: "POST /intake/:sourceId", sourceId }, "intake: failed to load source");
+      return reply.code(500).send({ error: "internal_error" });
+    }
     if (!source) return reply.code(404).send({ error: "not_found" });
     const s = source as {
       id: string;
@@ -120,7 +123,10 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
               : { rows_skipped: s.rows_skipped + 1, last_sync: new Date().toISOString() }
           )
           .eq("id", sourceId);
-        if (updateErr) return reply.code(500).send({ error: "internal_error" });
+        if (updateErr) {
+          req.log.error({ err: updateErr, source: "api", route: "POST /intake/:sourceId", sourceId, leadId }, "intake: failed to update contact by external_id");
+          return reply.code(500).send({ error: "internal_error" });
+        }
         return reply.code(200).send({ ok: true, updated: true, contactId: (byExternalId as { id: string }).id });
       }
     }
@@ -159,6 +165,7 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
       .select("id")
       .single();
     if (insertErr) {
+      req.log.error({ err: insertErr, source: "api", route: "POST /intake/:sourceId", sourceId }, "intake: failed to insert contact");
       await db.from("lead_sources").update({ rows_failed: s.rows_failed + 1, last_sync: new Date().toISOString() }).eq("id", sourceId);
       return reply.code(500).send({ error: "internal_error" });
     }
