@@ -128,9 +128,13 @@ export default function SequencePage() {
   useEffect(() => {
     if (!project?.org_id) return;
     apiFetch<ConnectionRow[]>(`/v1/orgs/${project.org_id}/connections`)
-      .then((conns) => setEmailConnections(conns.filter((c) => c.kind === "email" && c.status === "connected")))
+      // Not status-filtered — a not-yet-connected connection's configured
+      // From addresses still show up (disabled), so they're visible instead
+      // of silently missing; see the picker below for the status check.
+      .then((conns) => setEmailConnections(conns.filter((c) => c.kind === "email")))
       .catch(() => setEmailConnections([]));
   }, [project?.org_id]);
+  const connectedEmailConnections = emailConnections.filter((c) => c.status === "connected");
 
   const [editing, setEditing] = useState<TemplateRow | null>(null);
   const [draftTpl, setDraftTpl] = useState<TemplateDraft | null>(null);
@@ -852,32 +856,37 @@ export default function SequencePage() {
                         onChange={(e) => setDraftTpl({ ...draftTpl, ...parseFromOptionValue(e.target.value) })}
                       >
                         <option value="">
-                          {emailConnections.length > 1
+                          {connectedEmailConnections.length > 1
                             ? "Choose a From address…"
-                            : emailConnections.length === 1
-                              ? `Default — ${emailConnections[0].account_label || providerInfo(emailConnections[0].provider)?.label || emailConnections[0].provider}`
-                              : "No email connection connected yet"}
+                            : connectedEmailConnections.length === 1
+                              ? `Default — ${connectedEmailConnections[0].account_label || providerInfo(connectedEmailConnections[0].provider)?.label || connectedEmailConnections[0].provider}`
+                              : "No connection is currently connected"}
                         </option>
-                        {emailConnections.flatMap((c) =>
-                          c.from_addresses?.length
+                        {emailConnections.flatMap((c) => {
+                          const disabled = c.status !== "connected";
+                          const suffix = disabled ? " (not connected)" : "";
+                          return c.from_addresses?.length
                             ? c.from_addresses.map((addr) => (
-                                <option key={fromOptionValue(c.id, addr)} value={fromOptionValue(c.id, addr)}>
+                                <option key={fromOptionValue(c.id, addr)} value={fromOptionValue(c.id, addr)} disabled={disabled}>
                                   {addr}
+                                  {suffix}
                                 </option>
                               ))
                             : [
-                                <option key={fromOptionValue(c.id, null)} value={fromOptionValue(c.id, null)}>
-                                  {c.account_label || c.provider}
+                                <option key={fromOptionValue(c.id, null)} value={fromOptionValue(c.id, null)} disabled={disabled}>
+                                  {(c.account_label || providerInfo(c.provider)?.label || c.provider) + suffix}
                                 </option>,
-                              ]
-                        )}
+                              ];
+                        })}
                       </select>
                       <p className="hint">
-                        {emailConnections.length > 1
+                        {connectedEmailConnections.length > 1
                           ? "Which connected email address this step sends from — required once more than one is connected."
-                          : emailConnections.length === 1
-                            ? `This step currently sends from your only connected email account — go to Organization to connect another or add more From addresses to it.`
-                            : "Connect an email provider on the Organization page before this step can send."}
+                          : connectedEmailConnections.length === 1
+                            ? "This step currently sends from your only connected email account — go to Organization to connect another or add more From addresses to it."
+                            : emailConnections.length > 0
+                              ? "None of your configured email connections are connected yet — test one on the Organization page to enable sending (greyed-out addresses below belong to those)."
+                              : "Connect an email provider on the Organization page before this step can send."}
                       </p>
                     </div>
                   )}
