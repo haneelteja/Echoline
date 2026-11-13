@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Download,
   Eye,
@@ -21,9 +23,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ColumnFilter, SortIndicator, type SortDirection } from "@/components/ui/column-filter";
+import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
 
 const EVENT_TONE: Record<string, "ok" | "e" | "warn" | "bad"> = {
   sent: "ok",
@@ -238,6 +243,8 @@ export default function ActivityPage() {
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<ColumnKey, string>>(EMPTY_FILTERS);
   const [sort, setSort] = useState<{ key: ColumnKey; dir: "asc" | "desc" }[]>([{ key: "occurred_at", dir: "desc" }]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const load = useCallback(async () => {
     if (!pid) return;
@@ -342,6 +349,18 @@ export default function ActivityPage() {
     return rows;
   }, [events, search, columnFilters, sort]);
 
+  // Same pagination pattern as the Reports page — keeps the table from
+  // rendering hundreds of rows in one React commit, independent of the
+  // server-side "Load more" cursor above (which fetches more raw data;
+  // this just pages through whatever's already loaded and filtered).
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedEvents = useMemo(() => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize), [filtered, currentPage, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, columnFilters, sort, pageSize]);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -405,7 +424,7 @@ export default function ActivityPage() {
             </TableRow>
           </TableHeader>
           <TableBody className="[&>tr:nth-child(even)]:bg-muted/30">
-            {filtered.map((ev) => (
+            {pagedEvents.map((ev) => (
               <TableRow key={ev.id}>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
@@ -444,6 +463,46 @@ export default function ActivityPage() {
 
       {!filtered.length && events.length > 0 && (
         <p className="text-center text-sm text-muted-foreground">No events match your filters.</p>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="flex flex-col items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Showing{" "}
+              <span className="font-semibold tabular-nums text-foreground">
+                {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)}
+              </span>{" "}
+              of <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span>
+            </span>
+            <Select value={String(pageSize)} onChange={(e) => setPageSize(Number(e.target.value))} className="w-auto">
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} rows
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Previous
+            </Button>
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold tabular-nums text-muted-foreground">
+              Page {currentPage} of {pageCount}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={currentPage >= pageCount}
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       )}
 
       {hasMore && events.length > 0 && (
