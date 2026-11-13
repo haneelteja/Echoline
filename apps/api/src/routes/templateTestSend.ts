@@ -106,7 +106,7 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    const c = conn as { id: string; provider: string; account_label: string | null } & Record<string, unknown>;
+    const c = conn as { id: string; provider: string; account_label: string | null; default_from_address: string | null } & Record<string, unknown>;
     const sender = getEmailSender(c.provider);
     if (!sender) return reply.code(400).send({ error: "no_sender", message: `No sender implemented for provider ${c.provider}` });
 
@@ -156,7 +156,7 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     await ensureFreshOAuthToken(db, c, credentials);
     const { data: channelSettings } = await db.from("channel_settings").select("email").eq("project_id", id).maybeSingle();
     const emailSettings = ((channelSettings as { email?: Record<string, string> } | null)?.email ?? {}) as Record<string, string>;
-    const fromEmail = body.fromEmail || emailSettings.fromEmail || credentials.fromEmail || c.account_label;
+    const fromEmail = body.fromEmail || emailSettings.fromEmail || c.default_from_address || credentials.fromEmail || c.account_label;
     if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
     try {

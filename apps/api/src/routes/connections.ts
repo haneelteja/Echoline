@@ -33,10 +33,16 @@ const createConnectionInput = z.object({
 // Columns safe to return to the browser — never includes the encrypted
 // credential/DEK columns. The API never returns secrets, only status.
 const SAFE_COLUMNS =
-  "id, org_id, kind, provider, account_label, connected_by_email, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, max_sends_per_minute, from_addresses, created_at, updated_at";
+  "id, org_id, kind, provider, account_label, connected_by_email, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, max_sends_per_minute, from_addresses, default_from_address, created_at, updated_at";
 
 const rateLimitInput = z.object({ maxSendsPerMinute: z.number().int().min(1).max(10_000).nullable() });
-const fromAddressesInput = z.object({ fromAddresses: z.array(z.string().email()).max(50) });
+const fromAddressesInput = z.object({
+  fromAddresses: z.array(z.string().email()).max(50),
+  // Which of the addresses above a template falls back to when it hasn't
+  // picked one itself — null means "no default, fall back further" (see
+  // emailWorker.ts's fromEmail precedence).
+  defaultFromAddress: z.string().email().nullable().optional(),
+});
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -304,7 +310,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     if (error) return sendDbError(reply, error);
     if (!conn) return reply.code(404).send({ error: "not_found" });
 
-    const c = conn as { id: string; provider: string; account_label: string | null } & Record<string, unknown>;
+    const c = conn as { id: string; provider: string; account_label: string | null; default_from_address: string | null } & Record<string, unknown>;
     const sender = getEmailSender(c.provider);
     if (!sender) return reply.code(400).send({ error: "no_sender", message: `No sender implemented for provider ${c.provider}` });
 
@@ -327,7 +333,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     // test send just uses whatever the connection itself resolves to. Real
     // sends still apply a project's own channel_settings override (see
     // emailWorker.ts), since that stays project-scoped.
-    const fromEmail = body.from || credentials.fromEmail || c.account_label;
+    const fromEmail = body.from || c.default_from_address || credentials.fromEmail || c.account_label;
     if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this connection" });
 
     try {
@@ -473,9 +479,12 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/orgs/:orgId/connections/:connId/from-addresses", async (req, reply) => {
     const { orgId, connId } = req.params as { orgId: string; connId: string };
     const body = fromAddressesInput.parse(req.body);
+    if (body.defaultFromAddress && !body.fromAddresses.includes(body.defaultFromAddress)) {
+      return reply.code(400).send({ error: "validation_error", message: "Default address must be one of the addresses in the list" });
+    }
     const { data, error } = await req.supabase
       .from("provider_connections")
-      .update({ from_addresses: body.fromAddresses })
+      .update({ from_addresses: body.fromAddresses, default_from_address: body.defaultFromAddress ?? null })
       .eq("org_id", orgId)
       .eq("id", connId)
       .select(SAFE_COLUMNS)

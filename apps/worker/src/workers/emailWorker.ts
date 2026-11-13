@@ -230,10 +230,10 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     // template's own from_email (picked from the connection's from_addresses
     // — see connections.ts's /from-addresses route) wins when set, since
     // that's what makes per-template From selection actually take effect;
-    // falling back through the project's channel-settings override,
-    // whatever was set at connect-time, and finally the connection's own
-    // account_label, same precedence as before this existed.
-    const fromEmail = tRow.from_email || emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
+    // falling back through the project's channel-settings override, the
+    // connection's admin-picked default_from_address, whatever was set at
+    // connect-time, and finally the connection's own account_label.
+    const fromEmail = tRow.from_email || emailSettings.fromEmail || (conn as any).default_from_address || credentials.fromEmail || (conn as any).account_label;
     if (!fromEmail) throw new Error("No from-email configured for this project's email connection");
 
     const result = await sender(credentials, {

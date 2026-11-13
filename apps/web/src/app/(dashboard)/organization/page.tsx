@@ -107,6 +107,11 @@ export default function OrganizationPage() {
   // verified domain can send as any address in the list. One per line.
   const [editingFromAddresses, setEditingFromAddresses] = useState<ConnectionRow | null>(null);
   const [fromAddressesValue, setFromAddressesValue] = useState("");
+  // Which of those addresses a template falls back to when it hasn't picked
+  // one itself — without this, that fallback silently used whatever address
+  // was typed once at connect time and never shown again (see
+  // emailWorker.ts's fromEmail precedence).
+  const [defaultFromAddressValue, setDefaultFromAddressValue] = useState("");
   const [fromAddressesBusy, setFromAddressesBusy] = useState(false);
   const [fromAddressesError, setFromAddressesError] = useState<string | null>(null);
 
@@ -270,10 +275,10 @@ export default function OrganizationPage() {
         cc: "",
         subject: `Test email from ${brandName}`,
         body: `This is a test email from ${brandName}, sent via ${providerLabel} to confirm the connection is working correctly.`,
-        // Default to the connection's first configured address, if it has
-        // any — otherwise leave blank so the backend falls back to the
-        // connection's own account_label/credential default.
-        from: conn.from_addresses?.[0] ?? "",
+        // Prefer the connection's chosen default address; otherwise its
+        // first configured address; otherwise leave blank so the backend
+        // falls back to the connection's own account_label/credential default.
+        from: conn.default_from_address || conn.from_addresses?.[0] || "",
       });
     } else {
       setWaTestForm({
@@ -363,7 +368,17 @@ export default function OrganizationPage() {
   function openFromAddressesEditor(conn: ConnectionRow) {
     setEditingFromAddresses(conn);
     setFromAddressesValue((conn.from_addresses ?? []).join("\n"));
+    setDefaultFromAddressValue(conn.default_from_address ?? "");
     setFromAddressesError(null);
+  }
+
+  // Live-parsed from the textarea so the default picker's options always
+  // match what's about to be saved, not the last-saved list.
+  function parsedFromAddresses(): string[] {
+    return fromAddressesValue
+      .split("\n")
+      .map((v) => v.trim())
+      .filter(Boolean);
   }
 
   async function saveFromAddresses() {
@@ -371,13 +386,11 @@ export default function OrganizationPage() {
     setFromAddressesBusy(true);
     setFromAddressesError(null);
     try {
-      const fromAddresses = fromAddressesValue
-        .split("\n")
-        .map((v) => v.trim())
-        .filter(Boolean);
+      const fromAddresses = parsedFromAddresses();
+      const defaultFromAddress = fromAddresses.includes(defaultFromAddressValue) ? defaultFromAddressValue : null;
       await apiFetch(`/v1/orgs/${orgId}/connections/${editingFromAddresses.id}/from-addresses`, {
         method: "PATCH",
-        body: JSON.stringify({ fromAddresses }),
+        body: JSON.stringify({ fromAddresses, defaultFromAddress }),
       });
       setEditingFromAddresses(null);
       await refresh();
@@ -474,6 +487,11 @@ export default function OrganizationPage() {
                       <TableCell className="text-muted-foreground">
                         {c.account_label || "—"}
                         {c.connected_by_email && <div className="text-xs text-muted-foreground/70">Connected by {c.connected_by_email}</div>}
+                        {c.default_from_address && (
+                          <div className="text-xs text-muted-foreground/70" title="Used when a template doesn't pick a From address itself">
+                            Default: {c.default_from_address}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -891,6 +909,18 @@ export default function OrganizationPage() {
                   value={fromAddressesValue}
                   onChange={(e) => setFromAddressesValue(e.target.value)}
                 />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="default-from-address">Default address</Label>
+                <Select id="default-from-address" value={defaultFromAddressValue} onChange={(e) => setDefaultFromAddressValue(e.target.value)}>
+                  <option value="">No default — fall back further</option>
+                  {parsedFromAddresses().map((addr) => (
+                    <option key={addr} value={addr}>
+                      {addr}
+                    </option>
+                  ))}
+                </Select>
+                <p className="hint">Used for any template that hasn&apos;t picked a specific From address itself.</p>
               </div>
               {fromAddressesError && <p className="text-sm text-destructive">{fromAddressesError}</p>}
               <DialogFooter>

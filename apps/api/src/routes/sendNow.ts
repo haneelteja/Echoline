@@ -362,7 +362,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         await ensureFreshOAuthToken(db, conn as any, credentials);
         const { data: channelSettings } = await db.from("channel_settings").select("email").eq("project_id", projectId).maybeSingle();
         const emailSettings = ((channelSettings as any)?.email ?? {}) as Record<string, string>;
-        const fromEmail = t.from_email || emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
+        const fromEmail = t.from_email || emailSettings.fromEmail || (conn as any).default_from_address || credentials.fromEmail || (conn as any).account_label;
         if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
         const result = await sender(credentials, {

@@ -859,7 +859,12 @@ export default function SequencePage() {
                           {connectedEmailConnections.length > 1
                             ? "Choose a From address…"
                             : connectedEmailConnections.length === 1
-                              ? `Default — ${connectedEmailConnections[0].account_label || providerInfo(connectedEmailConnections[0].provider)?.label || connectedEmailConnections[0].provider}`
+                              ? `Default — ${
+                                  connectedEmailConnections[0].default_from_address ||
+                                  connectedEmailConnections[0].account_label ||
+                                  providerInfo(connectedEmailConnections[0].provider)?.label ||
+                                  connectedEmailConnections[0].provider
+                                }`
                               : "No connection is currently connected"}
                         </option>
                         {emailConnections.flatMap((c) => {
