@@ -89,7 +89,7 @@ export default function OrganizationPage() {
   // of just the credential-only /test check, since a valid API key doesn't
   // guarantee delivery actually works end to end.
   const [testing, setTesting] = useState<ConnectionRow | null>(null);
-  const [emailTestForm, setEmailTestForm] = useState({ to: "", cc: "", subject: "", body: "" });
+  const [emailTestForm, setEmailTestForm] = useState({ to: "", cc: "", subject: "", body: "", from: "" });
   const [waTestForm, setWaTestForm] = useState({ to: "", message: "" });
   const [testBusy, setTestBusy] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
@@ -270,6 +270,10 @@ export default function OrganizationPage() {
         cc: "",
         subject: `Test email from ${brandName}`,
         body: `This is a test email from ${brandName}, sent via ${providerLabel} to confirm the connection is working correctly.`,
+        // Default to the connection's first configured address, if it has
+        // any — otherwise leave blank so the backend falls back to the
+        // connection's own account_label/credential default.
+        from: conn.from_addresses?.[0] ?? "",
       });
     } else {
       setWaTestForm({
@@ -300,6 +304,7 @@ export default function OrganizationPage() {
           cc: emailTestForm.cc || undefined,
           subject: emailTestForm.subject,
           body: emailTestForm.body,
+          from: emailTestForm.from || undefined,
         }),
       });
       setTestSuccess(`Test email sent to ${emailTestForm.to}.`);
@@ -715,6 +720,22 @@ export default function OrganizationPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-3">
+                {!!testing.from_addresses?.length && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="test-from">From</Label>
+                    <Select
+                      id="test-from"
+                      value={emailTestForm.from}
+                      onChange={(e) => setEmailTestForm({ ...emailTestForm, from: e.target.value })}
+                    >
+                      {testing.from_addresses.map((addr) => (
+                        <option key={addr} value={addr}>
+                          {addr}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="test-to">To</Label>

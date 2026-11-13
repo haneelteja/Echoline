@@ -116,6 +116,10 @@ const testSendEmailInput = z.object({
   cc: z.string().email().optional(),
   subject: z.string().min(1),
   body: z.string().min(1),
+  // Only meaningful for API-key providers with a from_addresses list — lets
+  // the test actually exercise the specific address a template would use,
+  // instead of always falling back to the connection's single default.
+  from: z.string().email().optional(),
 });
 
 const testSendWhatsAppInput = z.object({
@@ -323,7 +327,7 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     // test send just uses whatever the connection itself resolves to. Real
     // sends still apply a project's own channel_settings override (see
     // emailWorker.ts), since that stays project-scoped.
-    const fromEmail = credentials.fromEmail || c.account_label;
+    const fromEmail = body.from || credentials.fromEmail || c.account_label;
     if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this connection" });
 
     try {
