@@ -69,8 +69,11 @@ export const contactsImportRoutes: FastifyPluginAsync = async (app) => {
         email,
         phone,
         source: body.source,
-        em_status: "not_contacted",
-        wa_status: "not_contacted",
+        // Same reasoning as intake.ts/sourceSync.ts: a row with no usable
+        // email/phone goes straight to terminal, so the scheduler never pays
+        // for a one-time "discover and log it's invalid" pass per contact.
+        em_status: email ? "not_contacted" : "invalid_email",
+        wa_status: phone ? "not_contacted" : "invalid_whatsapp",
       });
       if (error) failed++;
       else added++;

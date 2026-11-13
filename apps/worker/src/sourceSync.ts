@@ -165,8 +165,12 @@ async function syncOneSource(db: ReturnType<typeof createAdminClient>, source: a
       category,
       area,
       source: source.name,
-      em_status: "not_contacted",
-      wa_status: "not_contacted",
+      // Same reasoning as intake.ts's identical check: skip straight to
+      // terminal when the channel never had a usable address, so the
+      // scheduler never has to pay for a one-time "discover and log it's
+      // invalid" pass per contact for a fact already known at import time.
+      em_status: email ? "not_contacted" : "invalid_email",
+      wa_status: phone ? "not_contacted" : "invalid_whatsapp",
     });
     if (error) failed++;
     else added++;

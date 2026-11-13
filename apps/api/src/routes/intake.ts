@@ -166,8 +166,17 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
         raw_phone: rawPhone,
         external_id: leadId,
         source: s.name,
-        em_status: "not_contacted",
-        wa_status: "not_contacted",
+        // Set straight to terminal when the channel never had a usable
+        // address — e.g. a lead-scan bot that found a business but no public
+        // email/phone. Otherwise the scheduler would pick this contact up on
+        // its first tick, discover the same thing, and pay for a contacts
+        // update + a message_events "Invalid" row to say so — one wasted
+        // write and one noise entry in the Activity log per channel, for a
+        // fact we already know at insert time. A genuinely malformed (not
+        // merely absent) email/phone still goes through that path normally,
+        // since that's an actual data-quality issue worth flagging.
+        em_status: email ? "not_contacted" : "invalid_email",
+        wa_status: phone ? "not_contacted" : "invalid_whatsapp",
       })
       .select("id")
       .single();
