@@ -6,6 +6,7 @@ import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { useKbAssets } from "@/lib/useKbAssets";
 import { AssetPicker } from "@/components/AssetPicker";
+import { providerInfo } from "@/lib/providerCatalog";
 import type { ConnectionRow, SequenceSettingsRow, TemplateRow, TemplateVersionRow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -851,7 +852,11 @@ export default function SequencePage() {
                         onChange={(e) => setDraftTpl({ ...draftTpl, ...parseFromOptionValue(e.target.value) })}
                       >
                         <option value="">
-                          {emailConnections.length > 1 ? "Choose a From address…" : "Whichever email connection is connected"}
+                          {emailConnections.length > 1
+                            ? "Choose a From address…"
+                            : emailConnections.length === 1
+                              ? `Default — ${emailConnections[0].account_label || providerInfo(emailConnections[0].provider)?.label || emailConnections[0].provider}`
+                              : "No email connection connected yet"}
                         </option>
                         {emailConnections.flatMap((c) =>
                           c.from_addresses?.length
@@ -870,7 +875,9 @@ export default function SequencePage() {
                       <p className="hint">
                         {emailConnections.length > 1
                           ? "Which connected email address this step sends from — required once more than one is connected."
-                          : "Only one email connection is active, so this step uses it automatically unless you pick a specific From address here."}
+                          : emailConnections.length === 1
+                            ? `This step currently sends from your only connected email account — go to Organization to connect another or add more From addresses to it.`
+                            : "Connect an email provider on the Organization page before this step can send."}
                       </p>
                     </div>
                   )}
