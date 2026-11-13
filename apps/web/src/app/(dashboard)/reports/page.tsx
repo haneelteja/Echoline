@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Mail, Search, Send, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, Mail, Search, Send, X } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import type { ReportConfigRow, ReportType } from "@/lib/types";
@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 const TAB_LABEL: Record<ReportType, string> = { new_leads: "New leads", leads_by_source: "Leads by source" };
 const EMPTY_FILTERS = { dateFrom: "", dateTo: "", search: "", area: "", source: "" };
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
 
 function csvCell(v: string): string {
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
@@ -27,6 +28,8 @@ export default function ReportsPage() {
   const [search, setSearch] = useState(EMPTY_FILTERS.search);
   const [areaFilter, setAreaFilter] = useState(EMPTY_FILTERS.area);
   const [sourceFilter, setSourceFilter] = useState(EMPTY_FILTERS.source);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const [configs, setConfigs] = useState<ReportConfigRow[]>([]);
   const [loadingConfigs, setLoadingConfigs] = useState(true);
@@ -94,6 +97,19 @@ export default function ReportsPage() {
     }
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
   }, [filtered]);
+
+  // Pagination keeps the table from rendering hundreds of rows in one React
+  // commit — same technique as the Contacts page, but with a configurable
+  // page size here since report exports can span a much wider date range.
+  const totalRows = tab === "new_leads" ? filtered.length : bySource.length;
+  const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedLeads = useMemo(() => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize), [filtered, currentPage, pageSize]);
+  const pagedSource = useMemo(() => bySource.slice((currentPage - 1) * pageSize, currentPage * pageSize), [bySource, currentPage, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab, dateFrom, dateTo, search, areaFilter, sourceFilter, pageSize]);
 
   const hasActiveFilters = Boolean(dateFrom || dateTo || search || areaFilter || sourceFilter);
   function clearFilters() {
@@ -229,7 +245,7 @@ export default function ReportsPage() {
             </TableRow>
           </TableHeader>
           <TableBody className="[&>tr:nth-child(even)]:bg-muted/30">
-            {filtered.map((c) => (
+            {pagedLeads.map((c) => (
               <TableRow key={c.id}>
                 <TableCell className="font-medium text-foreground">{c.name}</TableCell>
                 <TableCell className="text-muted-foreground">{c.email || "—"}</TableCell>
@@ -251,7 +267,7 @@ export default function ReportsPage() {
             </TableRow>
           </TableHeader>
           <TableBody className="[&>tr:nth-child(even)]:bg-muted/30">
-            {bySource.map(([source, count]) => (
+            {pagedSource.map(([source, count]) => (
               <TableRow key={source}>
                 <TableCell className="font-medium text-foreground">{source}</TableCell>
                 <TableCell className="tabular-nums text-muted-foreground">{count}</TableCell>
@@ -260,7 +276,47 @@ export default function ReportsPage() {
           </TableBody>
         </Table>
       )}
-      {!filtered.length && !loadingConfigs && <p className="text-center text-sm text-muted-foreground">No leads match your filters.</p>}
+      {!totalRows && !loadingConfigs && <p className="text-center text-sm text-muted-foreground">No leads match your filters.</p>}
+
+      {totalRows > 0 && (
+        <div className="flex flex-col items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Showing{" "}
+              <span className="font-semibold tabular-nums text-foreground">
+                {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalRows)}
+              </span>{" "}
+              of <span className="font-semibold tabular-nums text-foreground">{totalRows}</span>
+            </span>
+            <Select value={String(pageSize)} onChange={(e) => setPageSize(Number(e.target.value))} className="w-auto">
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} rows
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Previous
+            </Button>
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold tabular-nums text-muted-foreground">
+              Page {currentPage} of {pageCount}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={currentPage >= pageCount}
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex-row items-center gap-2 space-y-0">
