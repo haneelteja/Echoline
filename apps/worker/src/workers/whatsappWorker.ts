@@ -112,10 +112,11 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
     const pr = project as ProjectRow;
 
     // Testing-phase safety valve: redirect to a fixed test number instead of
-    // the real lead. Free-text sends get a prefix naming the real lead (so a
-    // shared test number stays legible); an Approved Meta template's body is
-    // fixed by Meta and can't be altered, so the real lead is only visible
-    // via message_events.payload for those.
+    // the real lead. The message itself is sent byte-identical to what the
+    // real lead would get — no [TEST ...] tag — so test mode is actually
+    // useful for checking how a send really looks; which contact/step a
+    // given test message was standing in for is tracked via message_events
+    // (the Activity log), not inline in the message text.
     const testMode = isTestSendMode(pr.test_send_mode);
     const toPhone = testMode ? testSendWhatsApp(pr.test_send_whatsapp) : phone;
     const fillCtx = {
@@ -133,7 +134,7 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
       // free-form text instead.
       const sender = getWhatsAppTextSender(providerId);
       if (!sender) throw new Error(`No text sender implemented for provider ${providerId}`);
-      const text = testMode ? `[TEST → ${c.name} ${phone}, step ${step}]\n${fill(t.body, fillCtx)}` : fill(t.body, fillCtx);
+      const text = fill(t.body, fillCtx);
       // Unlike a Meta template header (capped at one attachment), a
       // free-text provider has no such limit — text plus the first gallery
       // item go out together in one message, each remaining item follows as
