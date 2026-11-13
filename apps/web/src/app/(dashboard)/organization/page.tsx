@@ -79,6 +79,9 @@ export default function OrganizationPage() {
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [pendingProvider, setPendingProvider] = useState<Record<string, string>>({});
+  // Which section's "+" was clicked — opens the provider-picker popup
+  // instead of the old always-visible sidebar column.
+  const [pickingProviderKind, setPickingProviderKind] = useState<"email" | "whatsapp" | "email_imap" | "ai" | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // Test-send dialog — lets the user actually exercise a connection (real
@@ -404,6 +407,7 @@ export default function OrganizationPage() {
   function connectPending(kind: string) {
     const p = PROVIDERS.find((x) => x.id === pendingProvider[kind]);
     if (!p) return;
+    setPickingProviderKind(null);
     if (p.auth === "oauth") startOAuth(p);
     else {
       setAdding(p);
@@ -424,12 +428,21 @@ export default function OrganizationPage() {
           <Icon className="h-4 w-4 text-muted-foreground" />
           <h2 className="font-display text-base font-semibold text-foreground">{title}</h2>
           {conns.length > 0 && (
-            <Badge variant="secondary" className="ml-auto font-normal text-muted-foreground">
+            <Badge variant="secondary" className="font-normal text-muted-foreground">
               {conns.length} connected
             </Badge>
           )}
+          <button
+            type="button"
+            className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-primary hover:text-primary"
+            onClick={() => setPickingProviderKind(kind)}
+            title={`Add a ${title.toLowerCase()} provider`}
+            aria-label={`Add a ${title.toLowerCase()} provider`}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         </CardHeader>
-        <CardContent className="grid gap-0 p-0 lg:grid-cols-[1fr_300px]">
+        <CardContent className="p-0">
           <div className="flex flex-col justify-center p-5">
             {conns.length ? (
               <Table>
@@ -535,33 +548,6 @@ export default function OrganizationPage() {
               <p className="text-sm text-muted-foreground">No {title.toLowerCase()} providers connected yet.</p>
             )}
           </div>
-
-          <div className="flex flex-col justify-center gap-2 border-t border-border bg-muted/20 p-4 lg:border-l lg:border-t-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add a provider</p>
-            <Select
-              value={pendingProvider[kind] ?? ""}
-              onChange={(e) => setPendingProvider({ ...pendingProvider, [kind]: e.target.value })}
-            >
-              <option value="">Choose a provider…</option>
-              {PROVIDERS.filter((p) => p.kind === kind).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
-            <Button size="sm" disabled={!pendingProvider[kind]} onClick={() => connectPending(kind)}>
-              {PROVIDERS.find((p) => p.id === pendingProvider[kind])?.auth === "oauth" ? (
-                <>
-                  Continue <ArrowRight className="h-3.5 w-3.5" />
-                </>
-              ) : (
-                <>
-                  <Plus className="h-3.5 w-3.5" />
-                  Connect
-                </>
-              )}
-            </Button>
-          </div>
         </CardContent>
       </Card>
     );
@@ -638,6 +624,50 @@ export default function OrganizationPage() {
       </div>
 
       {orgId && <TeamSettings orgId={orgId} orgName={org?.name ?? null} />}
+
+      <Dialog open={!!pickingProviderKind} onOpenChange={(open) => !open && setPickingProviderKind(null)}>
+        <DialogContent>
+          {pickingProviderKind && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Add a {KIND_META[pickingProviderKind].title.toLowerCase()} provider</DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="picker-provider">Provider</Label>
+                <Select
+                  id="picker-provider"
+                  value={pendingProvider[pickingProviderKind] ?? ""}
+                  onChange={(e) => setPendingProvider({ ...pendingProvider, [pickingProviderKind]: e.target.value })}
+                >
+                  <option value="">Choose a provider…</option>
+                  {PROVIDERS.filter((p) => p.kind === pickingProviderKind).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPickingProviderKind(null)}>
+                  Cancel
+                </Button>
+                <Button disabled={!pendingProvider[pickingProviderKind]} onClick={() => connectPending(pickingProviderKind)}>
+                  {PROVIDERS.find((p) => p.id === pendingProvider[pickingProviderKind])?.auth === "oauth" ? (
+                    <>
+                      Continue <ArrowRight className="h-3.5 w-3.5" />
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3.5 w-3.5" />
+                      Connect
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!adding} onOpenChange={(open) => !open && setAdding(null)}>
         <DialogContent>
