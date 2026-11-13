@@ -17,13 +17,38 @@ const ROLE_BLURB: Record<string, string> = {
  * provider_connections row (Resend/SMTP/etc.), which send to *leads*, not
  * teammates. Needs its own credential since no org has a platform-wide one.
  */
+export interface PlatformEmailAttachment {
+  filename: string;
+  /** Base64-encoded — matches @echoline/providers' EmailAttachment shape. */
+  content: string;
+  contentType: string;
+}
+
 function platformSender() {
   const apiKey = process.env.PLATFORM_RESEND_API_KEY;
   const from = process.env.PLATFORM_EMAIL_FROM;
   if (!apiKey || !from) return null;
   const sender = getEmailSender("resend");
   if (!sender) return null;
-  return { send: (to: string, subject: string, html: string, text: string) => sender({ apiKey }, { from, to, subject, html, text }) };
+  return {
+    send: (to: string, subject: string, html: string, text: string, attachments?: PlatformEmailAttachment[]) =>
+      sender({ apiKey }, { from, to, subject, html, text, attachments }),
+  };
+}
+
+/** Shared by anything sending through the platform's own transactional
+ * email rather than a project's connected provider — reports (see
+ * routes/reportConfigs.ts) alongside invites. */
+export async function sendPlatformEmail(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  attachments?: PlatformEmailAttachment[];
+}): Promise<void> {
+  const sender = platformSender();
+  if (!sender) throw new Error("Platform email isn't configured (PLATFORM_RESEND_API_KEY/PLATFORM_EMAIL_FROM)");
+  await sender.send(opts.to, opts.subject, opts.html, opts.text, opts.attachments);
 }
 
 export async function sendInviteEmail(opts: {

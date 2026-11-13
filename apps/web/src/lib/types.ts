@@ -236,3 +236,17 @@ export interface MessageEventRow {
   occurred_at: string;
   contacts: { name: string; email: string | null; phone: string | null } | null;
 }
+
+export type ReportType = "new_leads" | "leads_by_source";
+
+export interface ReportConfigRow {
+  id: string;
+  project_id: string;
+  org_id: string;
+  report_type: ReportType;
+  enabled: boolean;
+  recipient_email: string;
+  format: "table" | "excel";
+  send_time: string; // "HH:MM:SS"
+  last_sent_date: string | null;
+}

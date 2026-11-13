@@ -7,6 +7,7 @@ import {
   Building2,
   Eye,
   EyeOff,
+  FileBarChart2,
   KeyRound,
   LayoutDashboard,
   Users,
@@ -39,6 +40,7 @@ const NAV = [
   { href: "/kb", label: "Knowledge base", icon: BookOpen },
   { href: "/sources", label: "Lead sources", icon: Download },
   { href: "/activity", label: "Activity log", icon: History },
+  { href: "/reports", label: "Reports", icon: FileBarChart2 },
   { href: "/project", label: "Project settings", icon: Settings },
   { href: "/organization", label: "Organization", icon: Building2 },
 ] as const;

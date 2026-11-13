@@ -4,3 +4,4 @@ export * from "./validate";
 export * from "./sequence";
 export * from "./template";
 export * from "./deliverability";
+export * from "./reports";

@@ -24,6 +24,7 @@ import { templateVersionsRoutes } from "./routes/templateVersions.js";
 import { kbAssetsRoutes } from "./routes/kbAssets.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { inviteRoutes, publicInviteRoutes } from "./routes/invites.js";
+import { reportConfigRoutes } from "./routes/reportConfigs.js";
 
 /**
  * Everything short of actually listening on a port — kept in its own module
@@ -155,6 +156,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await api.register(kbAssetsRoutes);
       await api.register(orgRoutes);
       await api.register(inviteRoutes);
+      await api.register(reportConfigRoutes);
     },
     { prefix: "/v1" }
   );

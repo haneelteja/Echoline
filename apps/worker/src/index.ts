@@ -8,6 +8,7 @@ import { runSourceSyncTick, syncSourceNow } from "./sourceSync.js";
 import { runImapReplyPollTick } from "./imapPoll.js";
 import { runWaQualityPollTick } from "./waQualityPoll.js";
 import { runAiCatalogSyncTick } from "./aiCatalogSync.js";
+import { runReportSendTick } from "./reportSend.js";
 import { startEmailWorker } from "./workers/emailWorker.js";
 import { startWhatsAppWorker } from "./workers/whatsappWorker.js";
 import { startHealthServer } from "./healthServer.js";
@@ -57,6 +58,7 @@ async function main() {
         await runImapReplyPollTick(log).catch((err) => log.error({ err }, "imap reply poll tick failed"));
         await runWaQualityPollTick(log).catch((err) => log.error({ err }, "wa quality poll tick failed"));
         await runAiCatalogSyncTick(log).catch((err) => log.error({ err }, "ai catalog sync tick failed"));
+        await runReportSendTick(log).catch((err) => log.error({ err }, "report send tick failed"));
       }
     },
     { connection: getRedisConnection() }
@@ -69,7 +71,7 @@ async function main() {
   const emailWorker = startEmailWorker();
   const whatsappWorker = startWhatsAppWorker();
 
-  log.info("Echoline worker started: scheduler (every 5 min) + source sync + imap reply poll + wa quality poll + ai catalog sync + send-email + send-whatsapp");
+  log.info("Echoline worker started: scheduler (every 5 min) + source sync + imap reply poll + wa quality poll + ai catalog sync + report send + send-email + send-whatsapp");
 
   const shutdown = async () => {
     log.info("Shutting down...");

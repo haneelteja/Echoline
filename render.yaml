@@ -103,3 +103,10 @@ services:
         sync: false
       - key: MICROSOFT_OAUTH_CLIENT_SECRET
         sync: false
+      # Reports tab's daily digest (reportSend.ts) sends through the same
+      # platform transactional email as echoline-api's team invites — must
+      # be the SAME values as echoline-api's, not a project's own connection.
+      - key: PLATFORM_RESEND_API_KEY
+        sync: false
+      - key: PLATFORM_EMAIL_FROM
+        sync: false
