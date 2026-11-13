@@ -99,6 +99,14 @@ export default function OrganizationPage() {
   const [rateLimitBusy, setRateLimitBusy] = useState(false);
   const [rateLimitError, setRateLimitError] = useState<string | null>(null);
 
+  // Only meaningful for API-key email providers (Resend/SES/SendGrid/Brevo/
+  // SMTP) — their "from" is caller-controlled per send, so this connection's
+  // verified domain can send as any address in the list. One per line.
+  const [editingFromAddresses, setEditingFromAddresses] = useState<ConnectionRow | null>(null);
+  const [fromAddressesValue, setFromAddressesValue] = useState("");
+  const [fromAddressesBusy, setFromAddressesBusy] = useState(false);
+  const [fromAddressesError, setFromAddressesError] = useState<string | null>(null);
+
   useEffect(() => {
     createClient()
       .auth.getUser()
@@ -344,6 +352,40 @@ export default function OrganizationPage() {
     }
   }
 
+  function openFromAddressesEditor(conn: ConnectionRow) {
+    setEditingFromAddresses(conn);
+    setFromAddressesValue((conn.from_addresses ?? []).join("\n"));
+    setFromAddressesError(null);
+  }
+
+  async function saveFromAddresses() {
+    if (!orgId || !editingFromAddresses) return;
+    setFromAddressesBusy(true);
+    setFromAddressesError(null);
+    try {
+      const fromAddresses = fromAddressesValue
+        .split("\n")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      await apiFetch(`/v1/orgs/${orgId}/connections/${editingFromAddresses.id}/from-addresses`, {
+        method: "PATCH",
+        body: JSON.stringify({ fromAddresses }),
+      });
+      setEditingFromAddresses(null);
+      await refresh();
+    } catch (e) {
+      setFromAddressesError(
+        e instanceof ApiError && e.status === 403
+          ? "You need admin access to change this."
+          : e instanceof ApiError
+            ? e.message
+            : "Couldn't save."
+      );
+    } finally {
+      setFromAddressesBusy(false);
+    }
+  }
+
   async function disconnect(conn: ConnectionRow) {
     if (!orgId) return;
     if (!confirm(`Disconnect ${providerInfo(conn.provider)?.label ?? conn.provider}?`)) return;
@@ -403,7 +445,10 @@ export default function OrganizationPage() {
                 </TableHeader>
                 <TableBody>
                   {conns.map((c) => {
-                    const activeSibling = kind !== "ai" ? conns.find((other) => other.id !== c.id && other.status === "connected") : undefined;
+                    // email no longer replaces a sibling when connected —
+                    // multiple can stay connected at once (each template
+                    // picks its own From connection, see sequence/page.tsx).
+                    const activeSibling = kind !== "ai" && kind !== "email" ? conns.find((other) => other.id !== c.id && other.status === "connected") : undefined;
                     const willSwitchActive = c.status !== "connected" && !!activeSibling;
                     return (
                     <TableRow key={c.id}>
@@ -461,6 +506,12 @@ export default function OrganizationPage() {
                       )}
                       <TableCell>
                         <div className="flex justify-end gap-1.5">
+                          {kind === "email" && providerInfo(c.provider)?.auth === "apikey" && (
+                            <Button variant="outline" size="sm" onClick={() => openFromAddressesEditor(c)} title="Addresses this connection's verified domain can send as">
+                              <Mail className="h-3.5 w-3.5" />
+                              From addresses ({(c.from_addresses ?? []).length})
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -762,6 +813,41 @@ export default function OrganizationPage() {
                 </Button>
                 <Button onClick={saveRateLimit} disabled={rateLimitBusy}>
                   {rateLimitBusy ? "Saving…" : "Save"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingFromAddresses} onOpenChange={(open) => !open && !fromAddressesBusy && setEditingFromAddresses(null)}>
+        <DialogContent>
+          {editingFromAddresses && (
+            <>
+              <DialogHeader>
+                <DialogTitle>From addresses — {providerInfo(editingFromAddresses.provider)?.label ?? editingFromAddresses.provider}</DialogTitle>
+                <DialogDescription>
+                  Addresses this connection&apos;s verified domain can send as — each template picks one of these (or the connection
+                  itself) as its From address. One per line.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="from-addresses-value">Addresses</Label>
+                <Textarea
+                  id="from-addresses-value"
+                  rows={5}
+                  placeholder={"sales@yourdomain.com\ninfo@yourdomain.com"}
+                  value={fromAddressesValue}
+                  onChange={(e) => setFromAddressesValue(e.target.value)}
+                />
+              </div>
+              {fromAddressesError && <p className="text-sm text-destructive">{fromAddressesError}</p>}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditingFromAddresses(null)} disabled={fromAddressesBusy}>
+                  Cancel
+                </Button>
+                <Button onClick={saveFromAddresses} disabled={fromAddressesBusy}>
+                  {fromAddressesBusy ? "Saving…" : "Save"}
                 </Button>
               </DialogFooter>
             </>

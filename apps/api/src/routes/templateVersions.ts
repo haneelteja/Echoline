@@ -15,6 +15,8 @@ interface TemplateContentRow {
   cc_email: string | null;
   reply_to_email: string | null;
   body_is_html: boolean;
+  from_connection_id: string | null;
+  from_email: string | null;
 }
 
 /** The editable-content subset of a template row, snapshotted into
@@ -32,6 +34,8 @@ function contentFields(t: TemplateContentRow) {
     cc_email: t.cc_email,
     reply_to_email: t.reply_to_email,
     body_is_html: t.body_is_html,
+    from_connection_id: t.from_connection_id,
+    from_email: t.from_email,
   };
 }
 

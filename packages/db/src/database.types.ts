@@ -134,6 +134,8 @@ export interface TemplateRow {
   cc_email: string | null;
   reply_to_email: string | null;
   body_is_html: boolean;
+  from_connection_id: string | null;
+  from_email: string | null;
   created_at: string;
   updated_at: string;
 }

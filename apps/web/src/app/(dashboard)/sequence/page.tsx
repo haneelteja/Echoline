@@ -6,7 +6,7 @@ import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch, ApiError } from "@/lib/apiClient";
 import { useKbAssets } from "@/lib/useKbAssets";
 import { AssetPicker } from "@/components/AssetPicker";
-import type { SequenceSettingsRow, TemplateRow, TemplateVersionRow } from "@/lib/types";
+import type { ConnectionRow, SequenceSettingsRow, TemplateRow, TemplateVersionRow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +46,8 @@ interface TemplateDraft {
   ccEmail: string;
   replyToEmail: string;
   isHtml: boolean;
+  fromConnectionId: string | null;
+  fromEmail: string | null;
 }
 
 interface ChannelDraft {
@@ -89,7 +91,26 @@ function toDraft(t: TemplateRow): TemplateDraft {
     ccEmail: t.cc_email ?? "",
     replyToEmail: t.reply_to_email ?? "",
     isHtml: t.body_is_html ?? false,
+    fromConnectionId: t.from_connection_id ?? null,
+    fromEmail: t.from_email ?? null,
   };
+}
+
+/** Flattens every connected email connection into pickable "From" options —
+ * one per configured from_addresses entry (API-key providers like Resend,
+ * where the address is caller-controlled), or one for the connection itself
+ * when it has none (OAuth providers like Gmail/Outlook, where the From is
+ * pinned to the authenticated account). Encodes both pieces a template
+ * needs into one string so a single <select> can drive both fields. */
+function fromOptionValue(connectionId: string, email: string | null): string {
+  return `${connectionId}|${email ?? ""}`;
+}
+function parseFromOptionValue(value: string): { fromConnectionId: string | null; fromEmail: string | null } {
+  if (!value) return { fromConnectionId: null, fromEmail: null };
+  const sep = value.indexOf("|");
+  const connectionId = sep >= 0 ? value.slice(0, sep) : value;
+  const email = sep >= 0 ? value.slice(sep + 1) : "";
+  return { fromConnectionId: connectionId, fromEmail: email || null };
 }
 
 export default function SequencePage() {
@@ -98,6 +119,17 @@ export default function SequencePage() {
   const [draft, setDraft] = useState<SeqDraft | null>(seq ? withDefaults(seq) : null);
   const [seqSaved, setSeqSaved] = useState(false);
   const [seqError, setSeqError] = useState<string | null>(null);
+
+  // For the template editor's From picker — connections are org-shared
+  // (not project-scoped), so fetched here keyed on org_id, same source
+  // organization/page.tsx uses.
+  const [emailConnections, setEmailConnections] = useState<ConnectionRow[]>([]);
+  useEffect(() => {
+    if (!project?.org_id) return;
+    apiFetch<ConnectionRow[]>(`/v1/orgs/${project.org_id}/connections`)
+      .then((conns) => setEmailConnections(conns.filter((c) => c.kind === "email" && c.status === "connected")))
+      .catch(() => setEmailConnections([]));
+  }, [project?.org_id]);
 
   const [editing, setEditing] = useState<TemplateRow | null>(null);
   const [draftTpl, setDraftTpl] = useState<TemplateDraft | null>(null);
@@ -261,6 +293,8 @@ export default function SequencePage() {
           cc_email: lib.cc_email,
           reply_to_email: lib.reply_to_email,
           body_is_html: lib.body_is_html,
+          from_connection_id: lib.from_connection_id,
+          from_email: lib.from_email,
         }),
       });
       await refreshProjectData();
@@ -338,6 +372,8 @@ export default function SequencePage() {
           cc_email: draftTpl.ccEmail.trim() || null,
           reply_to_email: draftTpl.replyToEmail.trim() || null,
           body_is_html: draftTpl.isHtml,
+          from_connection_id: draftTpl.fromConnectionId,
+          from_email: draftTpl.fromEmail,
         }),
       });
       setEditing(updated);
@@ -444,6 +480,8 @@ export default function SequencePage() {
           cc: draftTpl.ccEmail.trim() || undefined,
           replyTo: draftTpl.replyToEmail.trim() || undefined,
           isHtml: draftTpl.isHtml,
+          fromConnectionId: draftTpl.fromConnectionId ?? undefined,
+          fromEmail: draftTpl.fromEmail ?? undefined,
         }),
       });
       setTestEmailStatus("sent");
@@ -802,6 +840,38 @@ export default function SequencePage() {
                     <div className="field">
                       <label htmlFor="ts">Subject</label>
                       <input id="ts" value={draftTpl.subject} onChange={(e) => setDraftTpl({ ...draftTpl, subject: e.target.value })} />
+                    </div>
+                  )}
+                  {editing.channel === "email" && (
+                    <div className="field">
+                      <label htmlFor="tfrom">From</label>
+                      <select
+                        id="tfrom"
+                        value={draftTpl.fromConnectionId ? fromOptionValue(draftTpl.fromConnectionId, draftTpl.fromEmail) : ""}
+                        onChange={(e) => setDraftTpl({ ...draftTpl, ...parseFromOptionValue(e.target.value) })}
+                      >
+                        <option value="">
+                          {emailConnections.length > 1 ? "Choose a From address…" : "Whichever email connection is connected"}
+                        </option>
+                        {emailConnections.flatMap((c) =>
+                          c.from_addresses?.length
+                            ? c.from_addresses.map((addr) => (
+                                <option key={fromOptionValue(c.id, addr)} value={fromOptionValue(c.id, addr)}>
+                                  {addr}
+                                </option>
+                              ))
+                            : [
+                                <option key={fromOptionValue(c.id, null)} value={fromOptionValue(c.id, null)}>
+                                  {c.account_label || c.provider}
+                                </option>,
+                              ]
+                        )}
+                      </select>
+                      <p className="hint">
+                        {emailConnections.length > 1
+                          ? "Which connected email address this step sends from — required once more than one is connected."
+                          : "Only one email connection is active, so this step uses it automatically unless you pick a specific From address here."}
+                      </p>
                     </div>
                   )}
                   {editing.channel === "email" && (

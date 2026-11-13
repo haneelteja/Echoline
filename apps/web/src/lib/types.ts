@@ -141,6 +141,8 @@ export interface TemplateRow {
   reply_to_email: string | null;
   body_is_html: boolean;
   is_library: boolean;
+  from_connection_id: string | null;
+  from_email: string | null;
 }
 
 export interface TemplateVersionRow {
@@ -155,6 +157,8 @@ export interface TemplateVersionRow {
   cc_email: string | null;
   reply_to_email: string | null;
   body_is_html: boolean;
+  from_connection_id: string | null;
+  from_email: string | null;
   created_at: string;
 }
 
@@ -222,6 +226,7 @@ export interface ConnectionRow {
   wa_messaging_tier: string | null;
   wa_quality_checked_at: string | null;
   max_sends_per_minute: number | null;
+  from_addresses: string[] | null;
   created_at: string;
   updated_at: string;
 }

@@ -33,9 +33,10 @@ const createConnectionInput = z.object({
 // Columns safe to return to the browser — never includes the encrypted
 // credential/DEK columns. The API never returns secrets, only status.
 const SAFE_COLUMNS =
-  "id, org_id, kind, provider, account_label, connected_by_email, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, max_sends_per_minute, created_at, updated_at";
+  "id, org_id, kind, provider, account_label, connected_by_email, scopes, status, needs_reconnect_reason, webhook_warning, wa_quality_rating, wa_messaging_tier, wa_quality_checked_at, max_sends_per_minute, from_addresses, created_at, updated_at";
 
 const rateLimitInput = z.object({ maxSendsPerMinute: z.number().int().min(1).max(10_000).nullable() });
+const fromAddressesInput = z.object({ fromAddresses: z.array(z.string().email()).max(50) });
 
 function masterKey() {
   return loadMasterKey(process.env.CREDENTIAL_VAULT_MASTER_KEY);
@@ -51,14 +52,17 @@ function masterKey() {
  * both also do a different DB write shape around the fetch. */
 // Shared by /test, /test-send-email and /test-send-whatsapp — each of those
 // can flip a previously-"disconnected" row back to "connected" (that's how a
-// user picks a new "active" email/WhatsApp provider without re-entering
+// user picks a new "active" WhatsApp provider without re-entering
 // credentials: test the one you want active). Without this, two rows of the
-// same (org, kind) could end up "connected" at once, which breaks every
-// code path that assumes at most one (e.g. whatsappWorker.ts's .maybeSingle()
-// lookup). AI is exempt — multiple AI connections may usefully stay
-// "connected" at once; see the connect route's own comment on this.
+// same (org, kind) could end up "connected" at once, which breaks any code
+// path that assumes at most one — still true for whatsapp/email_imap
+// (whatsappWorker.ts's .maybeSingle() lookup). AI and email are both
+// exempt — multiple AI connections, and multiple email connections (one per
+// template's own From choice, see templates.from_connection_id), may
+// usefully stay "connected" at once; emailWorker.ts/sendNow.ts/
+// templateTestSend.ts no longer assume exactly one.
 async function demoteSiblingConnections(supabase: any, orgId: string, kind: string, keepConnId?: string): Promise<void> {
-  if (kind === "ai") return;
+  if (kind === "ai" || kind === "email") return;
   let query = supabase.from("provider_connections").update({ status: "disconnected", webhook_warning: null }).eq("org_id", orgId).eq("kind", kind).eq("status", "connected");
   // The create route calls this before the new row exists yet (nothing to
   // exclude); /test calls it on an existing row it wants to keep connected.
@@ -447,6 +451,27 @@ export const connectionRoutes: FastifyPluginAsync = async (app) => {
     const { data, error } = await req.supabase
       .from("provider_connections")
       .update({ max_sends_per_minute: body.maxSendsPerMinute })
+      .eq("org_id", orgId)
+      .eq("id", connId)
+      .select(SAFE_COLUMNS)
+      .maybeSingle();
+    if (error) return sendDbError(reply, error);
+    if (!data) return reply.code(404).send({ error: "not_found" });
+    return data;
+  });
+
+  // Only meaningful for API-key email providers (Resend/SES/SendGrid/Brevo/
+  // SMTP) — their "from" is caller-controlled per send, so a connection's
+  // verified domain can send as any address in this list (see
+  // templates.from_email). Gmail/Outlook ignore this; the UI doesn't
+  // surface the editor for OAuth providers, but nothing here blocks it —
+  // harmless if set and never read for those.
+  app.patch("/orgs/:orgId/connections/:connId/from-addresses", async (req, reply) => {
+    const { orgId, connId } = req.params as { orgId: string; connId: string };
+    const body = fromAddressesInput.parse(req.body);
+    const { data, error } = await req.supabase
+      .from("provider_connections")
+      .update({ from_addresses: body.fromAddresses })
       .eq("org_id", orgId)
       .eq("id", connId)
       .select(SAFE_COLUMNS)

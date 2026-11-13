@@ -269,15 +269,30 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
     const channelKind: "em" | "wa" = body.channel === "email" ? "em" : "wa";
 
     const kind = body.channel === "email" ? "email" : "whatsapp";
-    const { data: conn, error: connErr } = await db
-      .from("provider_connections")
-      .select("*")
-      .eq("org_id", p.org_id)
-      .eq("kind", kind)
-      .eq("status", "connected")
-      .maybeSingle();
+    // email is no longer limited to one connected row per org (see
+    // templates.from_connection_id) — fetched as a list for both kinds;
+    // whatsapp still only ever has one connected row, so candidates[0] is
+    // equivalent to the old .maybeSingle() for it.
+    const { data: conns, error: connErr } = await db.from("provider_connections").select("*").eq("org_id", p.org_id).eq("kind", kind).eq("status", "connected");
     if (connErr) return sendDbError(reply, connErr);
-    if (!conn) return reply.code(400).send({ error: "no_connection", message: `No connected ${kind} provider for this organization` });
+    const candidates = (conns as any[]) ?? [];
+    const conn =
+      kind === "email"
+        ? t.from_connection_id
+          ? candidates.find((x) => x.id === t.from_connection_id)
+          : candidates.length === 1
+            ? candidates[0]
+            : undefined
+        : candidates[0];
+    if (!conn) {
+      return reply.code(400).send({
+        error: "no_connection",
+        message:
+          kind === "email" && candidates.length > 1 && !t.from_connection_id
+            ? "Multiple email connections are active for this organization — this template needs a From connection set"
+            : `No connected ${kind} provider for this organization`,
+      });
+    }
 
     // Neither depends on the other's result, so run them concurrently rather
     // than paying both round trips back-to-back on this synchronous path.
@@ -347,7 +362,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
         await ensureFreshOAuthToken(db, conn as any, credentials);
         const { data: channelSettings } = await db.from("channel_settings").select("email").eq("project_id", projectId).maybeSingle();
         const emailSettings = ((channelSettings as any)?.email ?? {}) as Record<string, string>;
-        const fromEmail = emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
+        const fromEmail = t.from_email || emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
         if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
         const result = await sender(credentials, {

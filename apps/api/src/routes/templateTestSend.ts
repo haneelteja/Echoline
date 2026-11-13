@@ -51,6 +51,8 @@ const input = z.object({
   cc: z.string().email().optional(),
   replyTo: z.string().email().optional(),
   isHtml: z.boolean().optional(),
+  fromConnectionId: z.string().uuid().optional(),
+  fromEmail: z.string().email().optional(),
 });
 
 const SAMPLE_CONTACT = { name: "Acme Corp", contactPerson: null as string | null, area: "Gachibowli", category: "Restaurant" };
@@ -78,15 +80,31 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     if (!project) return reply.code(404).send({ error: "not_found" });
     const p = project as ProjectRow;
 
-    const { data: conn, error: connErr } = await req.supabase
+    // email is no longer limited to one connected row per org (see
+    // templates.from_connection_id) — the editor's draft carries its own
+    // fromConnectionId choice through body.fromConnectionId.
+    const { data: conns, error: connErr } = await req.supabase
       .from("provider_connections")
       .select("*")
       .eq("org_id", p.org_id)
       .eq("kind", "email")
-      .eq("status", "connected")
-      .maybeSingle();
+      .eq("status", "connected");
     if (connErr) return sendDbError(reply, connErr);
-    if (!conn) return reply.code(400).send({ error: "no_connection", message: "No connected email provider for this organization" });
+    const candidates = (conns as any[]) ?? [];
+    const conn = body.fromConnectionId
+      ? candidates.find((x) => x.id === body.fromConnectionId)
+      : candidates.length === 1
+        ? candidates[0]
+        : undefined;
+    if (!conn) {
+      return reply.code(400).send({
+        error: "no_connection",
+        message:
+          candidates.length > 1 && !body.fromConnectionId
+            ? "Multiple email connections are active for this organization — pick a From connection first"
+            : "No connected email provider for this organization",
+      });
+    }
 
     const c = conn as { id: string; provider: string; account_label: string | null } & Record<string, unknown>;
     const sender = getEmailSender(c.provider);
@@ -138,7 +156,7 @@ export const templateTestSendRoutes: FastifyPluginAsync = async (app) => {
     await ensureFreshOAuthToken(db, c, credentials);
     const { data: channelSettings } = await db.from("channel_settings").select("email").eq("project_id", id).maybeSingle();
     const emailSettings = ((channelSettings as { email?: Record<string, string> } | null)?.email ?? {}) as Record<string, string>;
-    const fromEmail = emailSettings.fromEmail || credentials.fromEmail || c.account_label;
+    const fromEmail = body.fromEmail || emailSettings.fromEmail || credentials.fromEmail || c.account_label;
     if (!fromEmail) return reply.code(400).send({ error: "no_sender_email", message: "No from-email configured for this project's email connection" });
 
     try {

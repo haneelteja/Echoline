@@ -138,19 +138,34 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
   const messageId = (claimed as { id: string }).id;
 
   try {
-    const [{ data: contact }, { data: project }, { data: template }, { data: seq }, { data: channelSettings }, { data: conn }] = await Promise.all([
+    const [{ data: contact }, { data: project }, { data: template }, { data: seq }, { data: channelSettings }, { data: connections }] = await Promise.all([
       db.from("contacts").select("*").eq("id", contactId).single(),
       db.from("projects").select("*").eq("id", projectId).single(),
       db.from("templates").select("*").eq("project_id", projectId).eq("channel", "email").eq("step", step).maybeSingle(),
       db.from("sequence_settings").select("em").eq("project_id", projectId).single(),
       db.from("channel_settings").select("email").eq("project_id", projectId).maybeSingle(),
-      db.from("provider_connections").select("*").eq("org_id", orgId).eq("kind", "email").eq("status", "connected").maybeSingle(),
+      // email is no longer limited to one connected row per org (see
+      // templates.from_connection_id) — not .maybeSingle() any more.
+      db.from("provider_connections").select("*").eq("org_id", orgId).eq("kind", "email").eq("status", "connected"),
     ]);
 
     const c = contact as ContactRow | null;
     if (!c || !validEmail(c.email)) throw new Error("Contact has no valid email");
     if (!template) throw new Error(`No email template for step ${step}`);
-    if (!conn) throw new Error("No connected email provider for this organization");
+    const tRow = template as TemplateRow;
+    const candidates = (connections as any[]) ?? [];
+    const conn = tRow.from_connection_id
+      ? candidates.find((x) => x.id === tRow.from_connection_id)
+      : candidates.length === 1
+        ? candidates[0]
+        : undefined;
+    if (!conn) {
+      throw new Error(
+        tRow.from_connection_id
+          ? "This template's From connection isn't connected"
+          : "Multiple email connections are active for this organization — this template needs a From connection set"
+      );
+    }
 
     // Checked after claiming (not before) so a rate-limit hit goes through
     // the same messages/message_events/dead-letter bookkeeping as any other
@@ -164,7 +179,6 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     if (!sender) throw new Error(`No sender implemented for provider ${(conn as any).provider}`);
 
     const p = project as ProjectRow;
-    const tRow = template as TemplateRow;
     const t = { body: tRow.body ?? "", categoryLines: tRow.category_lines ?? {} };
     const projectBrand = {
       name: p.name,
@@ -212,10 +226,14 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
     await ensureFreshOAuthToken(db, conn as any, credentials);
     const emailSettings = ((channelSettings as any)?.email ?? {}) as Record<string, string>;
     // OAuth connections (Gmail/Outlook) send as the authenticated account
-    // itself; API-key providers need an explicit sender address — either set
-    // when connecting (credentials.fromEmail) or, as a last resort, the
-    // connection's own account_label.
-    const fromEmail = emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
+    // itself; API-key providers need an explicit sender address. The
+    // template's own from_email (picked from the connection's from_addresses
+    // — see connections.ts's /from-addresses route) wins when set, since
+    // that's what makes per-template From selection actually take effect;
+    // falling back through the project's channel-settings override,
+    // whatever was set at connect-time, and finally the connection's own
+    // account_label, same precedence as before this existed.
+    const fromEmail = tRow.from_email || emailSettings.fromEmail || credentials.fromEmail || (conn as any).account_label;
     if (!fromEmail) throw new Error("No from-email configured for this project's email connection");
 
     const result = await sender(credentials, {
