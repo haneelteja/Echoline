@@ -29,6 +29,13 @@ function timingSafeTokenEqual(a: string, b: string): boolean {
  * De-dup rule matches the original prototype's Excel/CSV import: same email
  * or phone as an existing contact in this project is skipped, and an
  * existing contact's status is never overwritten by a re-synced source.
+ *
+ * Optional `leadId` in the body is matched against `contacts.external_id`
+ * *before* the email/phone check — a sender that tracks its own stable
+ * per-lead ID can resend the same lead with a changed email/phone and have
+ * it update that same contact's name/email/phone/category/area, instead of
+ * the email/phone check missing it (new email/phone = no match) and
+ * inserting a duplicate. em_status/wa_status are still never touched here.
  */
 export const intakeRoutes: FastifyPluginAsync = async (app) => {
   // Scoped to this route only (not the whole app) — a webhook/form sender is
@@ -85,6 +92,38 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
 
     const email = validEmail(body.email) ? body.email!.trim() : null;
     const phone = normPhone(body.phone) || null;
+    const category = body.category?.trim() || null;
+    const area = body.area?.trim() || null;
+    // Optional — a sender that tracks its own stable per-lead ID (e.g. a
+    // spreadsheet's own Lead ID column) can pass it so a later resync with a
+    // *changed* email/phone updates this same contact instead of the
+    // email/phone dedup below missing it and inserting a duplicate.
+    const leadId = body.leadId?.trim() || null;
+
+    if (leadId) {
+      const { data: byExternalId } = await db
+        .from("contacts")
+        .select("id")
+        .eq("project_id", s.project_id)
+        .eq("external_id", leadId)
+        .maybeSingle();
+      if (byExternalId) {
+        const { error: updateErr } = await db
+          .from("contacts")
+          .update({ name, email, phone, category, area })
+          .eq("id", (byExternalId as { id: string }).id);
+        await db
+          .from("lead_sources")
+          .update(
+            updateErr
+              ? { rows_failed: s.rows_failed + 1, last_sync: new Date().toISOString() }
+              : { rows_skipped: s.rows_skipped + 1, last_sync: new Date().toISOString() }
+          )
+          .eq("id", sourceId);
+        if (updateErr) return reply.code(500).send({ error: "internal_error" });
+        return reply.code(200).send({ ok: true, updated: true, contactId: (byExternalId as { id: string }).id });
+      }
+    }
 
     if (email || phone) {
       const [byEmail, byPhone] = await Promise.all([
@@ -108,10 +147,11 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
         project_id: s.project_id,
         name,
         contact_person: body.contactPerson ?? null,
-        category: body.category ?? null,
-        area: body.area ?? null,
+        category,
+        area,
         email,
         phone,
+        external_id: leadId,
         source: s.name,
         em_status: "not_contacted",
         wa_status: "not_contacted",
