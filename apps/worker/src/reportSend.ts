@@ -3,11 +3,13 @@ import {
   buildLeadsBySourceReport,
   buildNewLeadsReport,
   buildReportWorkbook,
+  buildSentMessagesReport,
   localDate,
   localNow,
   renderReportHtmlTable,
   renderReportPlainText,
   type ReportContactRow,
+  type ReportSentEventRow,
   type ReportTable,
 } from "@echoline/core";
 import type { Logger } from "pino";
@@ -16,7 +18,24 @@ import { sendPlatformEmail } from "./platformEmail.js";
 const REPORT_TITLE: Record<string, string> = {
   new_leads: "New leads",
   leads_by_source: "Leads by source",
+  emails_sent: "Emails sent",
+  whatsapp_sent: "WhatsApp messages sent",
 };
+
+const SENT_CHANNEL: Record<string, "em" | "wa"> = { emails_sent: "em", whatsapp_sent: "wa" };
+
+interface SentEventContactJoin {
+  occurred_at: string;
+  contacts: { name: string; email: string | null; phone: string | null; area: string | null; source: string | null; raw_email: string | null; raw_phone: string | null } | null;
+}
+
+function toSentEventRows(events: SentEventContactJoin[], channel: "em" | "wa"): ReportSentEventRow[] {
+  return events.map((ev) => {
+    const c = ev.contacts;
+    const to = channel === "em" ? c?.email || c?.raw_email || "" : c?.phone || c?.raw_phone || "";
+    return { contactName: c?.name ?? "", to, area: c?.area ?? null, source: c?.source ?? null, occurredAt: ev.occurred_at };
+  });
+}
 
 async function sendOneReport(
   db: ReturnType<typeof createAdminClient>,
@@ -25,19 +44,37 @@ async function sendOneReport(
   today: string,
   log: Logger
 ): Promise<void> {
-  const { data: contacts, error } = await db
-    .from("contacts")
-    .select("name, email, phone, category, area, source, created_at")
-    .eq("project_id", config.project_id);
-  if (error) throw error;
+  let table: ReportTable;
+  let rowCount: number;
 
-  // Scheduled sends are always "today" (project-local calendar day) — the
-  // interactive Reports page's arbitrary date range is a UI-only concern,
-  // not something a daily digest config carries.
-  const todaysContacts = ((contacts as ReportContactRow[]) ?? []).filter((c) => localDate(c.created_at, timezone) === today);
+  if (config.report_type === "emails_sent" || config.report_type === "whatsapp_sent") {
+    const channel = SENT_CHANNEL[config.report_type];
+    const { data: events, error } = await db
+      .from("message_events")
+      .select("occurred_at, contacts(name, email, phone, area, source, raw_email, raw_phone)")
+      .eq("project_id", config.project_id)
+      .eq("event_type", "sent")
+      .eq("channel", channel);
+    if (error) throw error;
+    const todaysEvents = ((events as unknown as SentEventContactJoin[]) ?? []).filter((ev) => localDate(ev.occurred_at, timezone) === today);
+    table = buildSentMessagesReport(toSentEventRows(todaysEvents, channel));
+    rowCount = todaysEvents.length;
+  } else {
+    const { data: contacts, error } = await db
+      .from("contacts")
+      .select("name, email, phone, category, area, source, created_at")
+      .eq("project_id", config.project_id);
+    if (error) throw error;
+
+    // Scheduled sends are always "today" (project-local calendar day) — the
+    // interactive Reports page's arbitrary date range is a UI-only concern,
+    // not something a daily digest config carries.
+    const todaysContacts = ((contacts as ReportContactRow[]) ?? []).filter((c) => localDate(c.created_at, timezone) === today);
+    table = config.report_type === "new_leads" ? buildNewLeadsReport(todaysContacts) : buildLeadsBySourceReport(todaysContacts);
+    rowCount = todaysContacts.length;
+  }
 
   const title = `${REPORT_TITLE[config.report_type] ?? config.report_type} — ${today}`;
-  const table: ReportTable = config.report_type === "new_leads" ? buildNewLeadsReport(todaysContacts) : buildLeadsBySourceReport(todaysContacts);
 
   if (config.format === "excel") {
     const buffer = await buildReportWorkbook(table, REPORT_TITLE[config.report_type] ?? config.report_type);
@@ -63,7 +100,7 @@ async function sendOneReport(
     });
   }
 
-  log.info({ configId: config.id, projectId: config.project_id, reportType: config.report_type, rows: todaysContacts.length }, "report send: sent");
+  log.info({ configId: config.id, projectId: config.project_id, reportType: config.report_type, rows: rowCount }, "report send: sent");
 }
 
 /**

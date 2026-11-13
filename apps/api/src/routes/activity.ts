@@ -27,4 +27,25 @@ export const activityRoutes: FastifyPluginAsync = async (app) => {
     if (error) return sendDbError(reply, error);
     return data;
   });
+
+  /**
+   * Unbounded (well, 5000-capped) variant for the Reports tab's "Emails
+   * sent"/"WhatsApp sent" tabs — those need the full set to filter/sort/
+   * export client-side, unlike the Activity log's cursor-paginated feed.
+   * `event_type=sent` only: a report of what went out, not every delivery/
+   * open/bounce event layered on top. Includes area/source so the Reports
+   * page's existing area/source filters work against this data too.
+   */
+  app.get("/projects/:id/activity/sent", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { data, error } = await req.supabase
+      .from("message_events")
+      .select("id, message_id, contact_id, channel, event_type, payload, occurred_at, contacts(name, email, phone, area, source, raw_email, raw_phone)")
+      .eq("project_id", id)
+      .eq("event_type", "sent")
+      .order("occurred_at", { ascending: false })
+      .limit(5000);
+    if (error) return sendDbError(reply, error);
+    return data;
+  });
 };

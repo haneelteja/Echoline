@@ -70,6 +70,25 @@ export function buildLeadsBySourceReport(contacts: ReportContactRow[]): ReportTa
   return { headers: ["Source", "Leads"], rows };
 }
 
+/** A single "sent" message_event, already flattened out of its join with
+ * contacts — `to` is whichever address the send actually used (falls back to
+ * raw_email/raw_phone the same way the Activity log does, so a send to an
+ * invalid-format address still shows up instead of rendering blank). */
+export interface ReportSentEventRow {
+  contactName: string;
+  to: string;
+  area: string | null;
+  source: string | null;
+  occurredAt: string;
+}
+
+export function buildSentMessagesReport(rows: ReportSentEventRow[]): ReportTable {
+  return {
+    headers: ["Contact", "To", "Area", "Source", "Sent at"],
+    rows: rows.map((r) => [r.contactName, r.to, r.area ?? "", r.source ?? "", new Date(r.occurredAt).toLocaleString()]),
+  };
+}
+
 /** Plain inline-styled HTML table — same color tokens/fonts as
  * apps/api/src/platformEmail.ts's invite email, so this doesn't read as a
  * different product. */

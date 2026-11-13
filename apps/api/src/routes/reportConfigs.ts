@@ -4,20 +4,39 @@ import {
   buildLeadsBySourceReport,
   buildNewLeadsReport,
   buildReportWorkbook,
+  buildSentMessagesReport,
   renderReportHtmlTable,
   renderReportPlainText,
   type ReportContactRow,
+  type ReportSentEventRow,
 } from "@echoline/core";
 import { sendDbError } from "../errors.js";
 import { sendPlatformEmail } from "../platformEmail.js";
 
-const REPORT_TYPES = ["new_leads", "leads_by_source"] as const;
+const REPORT_TYPES = ["new_leads", "leads_by_source", "emails_sent", "whatsapp_sent"] as const;
 type ReportType = (typeof REPORT_TYPES)[number];
 
 const REPORT_TITLE: Record<ReportType, string> = {
   new_leads: "New leads",
   leads_by_source: "Leads by source",
+  emails_sent: "Emails sent",
+  whatsapp_sent: "WhatsApp messages sent",
 };
+
+const SENT_CHANNEL: Record<"emails_sent" | "whatsapp_sent", "em" | "wa"> = { emails_sent: "em", whatsapp_sent: "wa" };
+
+interface SentEventContactJoin {
+  occurred_at: string;
+  contacts: { name: string; email: string | null; phone: string | null; area: string | null; source: string | null; raw_email: string | null; raw_phone: string | null } | null;
+}
+
+function toSentEventRows(events: SentEventContactJoin[], channel: "em" | "wa"): ReportSentEventRow[] {
+  return events.map((ev) => {
+    const c = ev.contacts;
+    const to = channel === "em" ? c?.email || c?.raw_email || "" : c?.phone || c?.raw_phone || "";
+    return { contactName: c?.name ?? "", to, area: c?.area ?? null, source: c?.source ?? null, occurredAt: ev.occurred_at };
+  });
+}
 
 const configInput = z.object({
   recipientEmail: z.string().email(),
@@ -103,14 +122,34 @@ export const reportConfigRoutes: FastifyPluginAsync = async (app) => {
       format = (config as { format: "table" | "excel" }).format;
     }
 
-    let contactsQuery = req.supabase.from("contacts").select("name, email, phone, category, area, source, created_at").eq("project_id", projectId);
-    if (body.from) contactsQuery = contactsQuery.gte("created_at", body.from);
-    if (body.toDate) contactsQuery = contactsQuery.lte("created_at", body.toDate);
-    const { data: contacts, error: contactsErr } = await contactsQuery;
-    if (contactsErr) return sendDbError(reply, contactsErr);
+    let table;
+    let rowCount: number;
+    if (reportType === "emails_sent" || reportType === "whatsapp_sent") {
+      const channel = SENT_CHANNEL[reportType];
+      let eventsQuery = req.supabase
+        .from("message_events")
+        .select("occurred_at, contacts(name, email, phone, area, source, raw_email, raw_phone)")
+        .eq("project_id", projectId)
+        .eq("event_type", "sent")
+        .eq("channel", channel);
+      if (body.from) eventsQuery = eventsQuery.gte("occurred_at", body.from);
+      if (body.toDate) eventsQuery = eventsQuery.lte("occurred_at", body.toDate);
+      const { data: events, error: eventsErr } = await eventsQuery;
+      if (eventsErr) return sendDbError(reply, eventsErr);
+      const rows = toSentEventRows((events ?? []) as unknown as SentEventContactJoin[], channel);
+      table = buildSentMessagesReport(rows);
+      rowCount = rows.length;
+    } else {
+      let contactsQuery = req.supabase.from("contacts").select("name, email, phone, category, area, source, created_at").eq("project_id", projectId);
+      if (body.from) contactsQuery = contactsQuery.gte("created_at", body.from);
+      if (body.toDate) contactsQuery = contactsQuery.lte("created_at", body.toDate);
+      const { data: contacts, error: contactsErr } = await contactsQuery;
+      if (contactsErr) return sendDbError(reply, contactsErr);
 
-    const rows = (contacts ?? []) as ReportContactRow[];
-    const table = reportType === "new_leads" ? buildNewLeadsReport(rows) : buildLeadsBySourceReport(rows);
+      const rows = (contacts ?? []) as ReportContactRow[];
+      table = reportType === "new_leads" ? buildNewLeadsReport(rows) : buildLeadsBySourceReport(rows);
+      rowCount = rows.length;
+    }
     const title = `${REPORT_TITLE[reportType]} — test send`;
 
     try {
@@ -144,6 +183,6 @@ export const reportConfigRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(502).send({ error: "email_failed", message: err instanceof Error ? err.message : String(err) });
     }
 
-    return { ok: true, sentTo: recipient, rows: rows.length };
+    return { ok: true, sentTo: recipient, rows: rowCount };
   });
 };
