@@ -5,6 +5,8 @@ import {
   buildNewLeadsReport,
   buildReportWorkbook,
   buildSentMessagesReport,
+  localDate,
+  localNow,
   renderReportHtmlTable,
   renderReportPlainText,
   type ReportContactRow,
@@ -104,9 +106,16 @@ export const reportConfigRoutes: FastifyPluginAsync = async (app) => {
       })
       .parse(req.body ?? {});
 
-    const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id").eq("id", projectId).maybeSingle();
+    const { data: project, error: projErr } = await req.supabase.from("projects").select("org_id, timezone").eq("id", projectId).maybeSingle();
     if (projErr) return sendDbError(reply, projErr);
     if (!project) return reply.code(404).send({ error: "not_found" });
+    const timezone = (project as { timezone: string }).timezone ?? "UTC";
+    const { date: today } = localNow(timezone);
+    // Mirrors the scheduled digest's own window (apps/worker/src/reportSend.ts):
+    // "today, project-local" only, not every historical row — a daily digest
+    // test send should preview what the real thing will contain, not the
+    // entire backlog. `from`/`toDate` remain an explicit override escape hatch.
+    const useExplicitRange = Boolean(body.from || body.toDate);
 
     let recipient = body.to;
     let format: "table" | "excel" = "table";
@@ -132,25 +141,32 @@ export const reportConfigRoutes: FastifyPluginAsync = async (app) => {
         .eq("project_id", projectId)
         .eq("event_type", "sent")
         .eq("channel", channel);
-      if (body.from) eventsQuery = eventsQuery.gte("occurred_at", body.from);
-      if (body.toDate) eventsQuery = eventsQuery.lte("occurred_at", body.toDate);
+      if (useExplicitRange) {
+        if (body.from) eventsQuery = eventsQuery.gte("occurred_at", body.from);
+        if (body.toDate) eventsQuery = eventsQuery.lte("occurred_at", body.toDate);
+      }
       const { data: events, error: eventsErr } = await eventsQuery;
       if (eventsErr) return sendDbError(reply, eventsErr);
-      const rows = toSentEventRows((events ?? []) as unknown as SentEventContactJoin[], channel);
+      let rawEvents = (events ?? []) as unknown as SentEventContactJoin[];
+      if (!useExplicitRange) rawEvents = rawEvents.filter((ev) => localDate(ev.occurred_at, timezone) === today);
+      const rows = toSentEventRows(rawEvents, channel);
       table = buildSentMessagesReport(rows);
       rowCount = rows.length;
     } else {
       let contactsQuery = req.supabase.from("contacts").select("name, email, phone, category, area, source, created_at").eq("project_id", projectId);
-      if (body.from) contactsQuery = contactsQuery.gte("created_at", body.from);
-      if (body.toDate) contactsQuery = contactsQuery.lte("created_at", body.toDate);
+      if (useExplicitRange) {
+        if (body.from) contactsQuery = contactsQuery.gte("created_at", body.from);
+        if (body.toDate) contactsQuery = contactsQuery.lte("created_at", body.toDate);
+      }
       const { data: contacts, error: contactsErr } = await contactsQuery;
       if (contactsErr) return sendDbError(reply, contactsErr);
 
-      const rows = (contacts ?? []) as ReportContactRow[];
+      let rows = (contacts ?? []) as ReportContactRow[];
+      if (!useExplicitRange) rows = rows.filter((c) => localDate(c.created_at, timezone) === today);
       table = reportType === "new_leads" ? buildNewLeadsReport(rows) : buildLeadsBySourceReport(rows);
       rowCount = rows.length;
     }
-    const title = `${REPORT_TITLE[reportType]} — test send`;
+    const title = useExplicitRange ? `${REPORT_TITLE[reportType]} — test send` : `${REPORT_TITLE[reportType]} — ${today} (test send)`;
 
     try {
       if (format === "excel") {
