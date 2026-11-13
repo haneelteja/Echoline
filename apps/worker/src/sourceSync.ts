@@ -136,6 +136,12 @@ async function syncOneSource(db: ReturnType<typeof createAdminClient>, source: a
     const phone = colMap.phone !== undefined ? normPhone(row[colMap.phone]) || null : null;
     const category = colMap.category !== undefined ? row[colMap.category]?.trim() || null : null;
     const area = colMap.area !== undefined ? row[colMap.area]?.trim() || null : null;
+    // Diagnostic only, never used for sending — same reasoning as
+    // intake.ts's identical fallback: keeps what the sheet/table actually
+    // had visible when it fails validation, instead of vanishing into a
+    // null column with nothing to show for it later.
+    const rawEmail = !email && colMap.email !== undefined && row[colMap.email]?.trim() ? row[colMap.email].trim() : null;
+    const rawPhone = !phone && colMap.phone !== undefined && row[colMap.phone]?.trim() ? row[colMap.phone].trim() : null;
 
     if (email || phone) {
       const [byEmail, byPhone] = await Promise.all([
@@ -154,6 +160,8 @@ async function syncOneSource(db: ReturnType<typeof createAdminClient>, source: a
       name,
       email,
       phone,
+      raw_email: rawEmail,
+      raw_phone: rawPhone,
       category,
       area,
       source: source.name,

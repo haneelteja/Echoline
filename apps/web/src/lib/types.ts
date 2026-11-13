@@ -234,7 +234,7 @@ export interface MessageEventRow {
   event_type: string;
   payload: Record<string, unknown>;
   occurred_at: string;
-  contacts: { name: string; email: string | null; phone: string | null } | null;
+  contacts: { name: string; email: string | null; phone: string | null; raw_email: string | null; raw_phone: string | null } | null;
 }
 
 export type ReportType = "new_leads" | "leads_by_source";

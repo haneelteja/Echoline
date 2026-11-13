@@ -97,6 +97,11 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
     const phone = normPhone(body.phone) || null;
     const category = body.category?.trim() || null;
     const area = body.area?.trim() || null;
+    // Diagnostic only, never used for sending — keeps what was actually
+    // sent visible when it fails validation, instead of just vanishing into
+    // a null column with nothing to show for it later.
+    const rawEmail = !email && body.email?.trim() ? body.email.trim() : null;
+    const rawPhone = !phone && body.phone?.trim() ? body.phone.trim() : null;
     // Optional — a sender that tracks its own stable per-lead ID (e.g. a
     // spreadsheet's own Lead ID column) can pass it so a later resync with a
     // *changed* email/phone updates this same contact instead of the
@@ -113,7 +118,7 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
       if (byExternalId) {
         const { error: updateErr } = await db
           .from("contacts")
-          .update({ name, email, phone, category, area })
+          .update({ name, email, phone, category, area, raw_email: rawEmail, raw_phone: rawPhone })
           .eq("id", (byExternalId as { id: string }).id);
         await db
           .from("lead_sources")
@@ -157,6 +162,8 @@ export const intakeRoutes: FastifyPluginAsync = async (app) => {
         area,
         email,
         phone,
+        raw_email: rawEmail,
+        raw_phone: rawPhone,
         external_id: leadId,
         source: s.name,
         em_status: "not_contacted",

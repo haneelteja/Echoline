@@ -123,11 +123,24 @@ const EMPTY_FILTERS: Record<ColumnKey, string> = { occurred_at: "", channel: "",
 
 /** The address a given event actually went to — the contact's email for an
  * email event, their WhatsApp number for a WhatsApp event. A contact can
- * have both on file, so this can't just be "whichever one is set". */
+ * have both on file, so this can't just be "whichever one is set". Falls
+ * back to raw_email/raw_phone (whatever was actually sent, kept around
+ * even though it failed validEmail()/normPhone() at contact-creation time —
+ * see intake.ts/sourceSync.ts) so an "Invalid" event isn't just a dead end
+ * with nothing to show for it. */
 function contactTarget(ev: MessageEventRow): string {
-  if (ev.channel === "em") return ev.contacts?.email ?? "";
-  if (ev.channel === "wa") return ev.contacts?.phone ?? "";
+  if (ev.channel === "em") return ev.contacts?.email || ev.contacts?.raw_email || "";
+  if (ev.channel === "wa") return ev.contacts?.phone || ev.contacts?.raw_phone || "";
   return "";
+}
+
+/** True when contactTarget() is showing the raw, invalid-format fallback
+ * rather than a real validated value — used to style it distinctly so it
+ * doesn't read as a legitimate sendable address. */
+function contactTargetIsInvalid(ev: MessageEventRow): boolean {
+  if (ev.channel === "em") return !ev.contacts?.email && !!ev.contacts?.raw_email;
+  if (ev.channel === "wa") return !ev.contacts?.phone && !!ev.contacts?.raw_phone;
+  return false;
 }
 
 function sortValue(ev: MessageEventRow, key: ColumnKey): string {
@@ -404,7 +417,12 @@ export default function ActivityPage() {
                   <ChannelBadge channel={ev.channel} />
                 </TableCell>
                 <TableCell className="font-medium text-foreground">{ev.contacts?.name ?? "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{contactTarget(ev) || "—"}</TableCell>
+                <TableCell
+                  className={cn("text-muted-foreground", contactTargetIsInvalid(ev) && "italic")}
+                  title={contactTargetIsInvalid(ev) ? "Invalid format — not used for sending" : undefined}
+                >
+                  {contactTarget(ev) || "—"}
+                </TableCell>
                 <TableCell>
                   <EventBadge eventType={ev.event_type} />
                 </TableCell>
