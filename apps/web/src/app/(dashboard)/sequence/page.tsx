@@ -169,6 +169,13 @@ export default function SequencePage() {
   // with no edits doesn't interrupt the user for nothing.
   const isTplDirty = !!editing && !!draftTpl && JSON.stringify(draftTpl) !== JSON.stringify(toDraft(editing));
 
+  // Required, not just recommended — leaving an email step's From unset is
+  // exactly what caused a real outage (every send for that step throws
+  // "ambiguous" the moment more than one email connection is connected; see
+  // emailWorker.ts's from-connection resolution), so the editor can't save
+  // an email template without one chosen.
+  const fromMissing = !!editing && !!draftTpl && editing.channel === "email" && !draftTpl.fromConnectionId;
+
   function requestCloseEditor() {
     if (isTplDirty) setShowUnsavedConfirm(true);
     else setEditing(null);
@@ -849,7 +856,10 @@ export default function SequencePage() {
                   )}
                   {editing.channel === "email" && (
                     <div className="field">
-                      <label htmlFor="tfrom">From</label>
+                      <label htmlFor="tfrom">
+                        From
+                        <span className="text-destructive"> *</span>
+                      </label>
                       <select
                         id="tfrom"
                         value={draftTpl.fromConnectionId ? fromOptionValue(draftTpl.fromConnectionId, draftTpl.fromEmail) : ""}
@@ -886,13 +896,16 @@ export default function SequencePage() {
                       </select>
                       <p className="hint">
                         {connectedEmailConnections.length > 1
-                          ? "Which connected email address this step sends from — required once more than one is connected."
+                          ? "Which connected email address this step sends from."
                           : connectedEmailConnections.length === 1
-                            ? "This step currently sends from your only connected email account — go to Organization to connect another or add more From addresses to it."
+                            ? "Your only connected email account — go to Organization to connect another or add more From addresses to it."
                             : emailConnections.length > 0
                               ? "None of your configured email connections are connected yet — test one on the Organization page to enable sending (greyed-out addresses below belong to those)."
                               : "Connect an email provider on the Organization page before this step can send."}
                       </p>
+                      {fromMissing && (
+                        <p className="text-sm text-destructive">Required — this step can&apos;t be saved without a From address chosen.</p>
+                      )}
                     </div>
                   )}
                   {editing.channel === "email" && (
@@ -1230,7 +1243,7 @@ export default function SequencePage() {
                 <Button variant="outline" onClick={requestCloseEditor}>
                   Cancel
                 </Button>
-                <Button onClick={saveTemplate} disabled={busy}>
+                <Button onClick={saveTemplate} disabled={busy || fromMissing} title={fromMissing ? "Choose a From address first" : undefined}>
                   {busy ? "Saving…" : "Save"}
                 </Button>
               </DialogFooter>
@@ -1261,7 +1274,8 @@ export default function SequencePage() {
                 setShowUnsavedConfirm(false);
                 if (ok) setEditing(null);
               }}
-              disabled={busy}
+              disabled={busy || fromMissing}
+              title={fromMissing ? "Choose a From address first" : undefined}
             >
               {busy ? "Saving…" : "Save & close"}
             </Button>
