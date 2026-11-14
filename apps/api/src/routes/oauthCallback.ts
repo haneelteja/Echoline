@@ -87,12 +87,16 @@ export const oauthCallbackRoutes: FastifyPluginAsync = async (app) => {
       const connectedByEmail = userData.user?.email ?? null;
 
       // Only one *connected* provider per (org, kind) — replace, don't
-      // stack (e.g. re-running the Gmail OAuth flow shouldn't leave two
-      // "connected" email providers for the worker to trip over). The one
-      // exception: google_sheets with a resolved account email only replaces
-      // a previous connection for that *same* email, so a second Google
-      // account can be connected alongside the first instead of evicting it.
-      if (testResult.ok) {
+      // stack (e.g. re-running the Outlook OAuth flow shouldn't leave two
+      // "connected" OneDrive providers for Sources to trip over). Two
+      // exceptions: google_sheets with a resolved account email only
+      // replaces a previous connection for that *same* email, so a second
+      // Google account can be connected alongside the first instead of
+      // evicting it; and email, which (same as connections.ts's
+      // demoteSiblingConnections) now allows multiple simultaneously
+      // connected providers so templates can each pick their own From
+      // identity — reconnecting Gmail here must not evict Resend/Outlook.
+      if (testResult.ok && kind !== "email") {
         let disconnectQuery = supabase
           .from("provider_connections")
           .update({ status: "disconnected" })
