@@ -123,18 +123,24 @@ export default function SequencePage() {
 
   // For the template editor's From picker — connections are org-shared
   // (not project-scoped), so fetched here keyed on org_id, same source
-  // organization/page.tsx uses.
-  const [emailConnections, setEmailConnections] = useState<ConnectionRow[]>([]);
+  // organization/page.tsx uses. One fetch, split by kind, since both email
+  // and whatsapp templates now need their own From picker (see
+  // emailWorker.ts/whatsappWorker.ts — neither channel assumes exactly one
+  // connected connection any more).
+  const [orgConnections, setOrgConnections] = useState<ConnectionRow[]>([]);
   useEffect(() => {
     if (!project?.org_id) return;
     apiFetch<ConnectionRow[]>(`/v1/orgs/${project.org_id}/connections`)
       // Not status-filtered — a not-yet-connected connection's configured
       // From addresses still show up (disabled), so they're visible instead
       // of silently missing; see the picker below for the status check.
-      .then((conns) => setEmailConnections(conns.filter((c) => c.kind === "email")))
-      .catch(() => setEmailConnections([]));
+      .then(setOrgConnections)
+      .catch(() => setOrgConnections([]));
   }, [project?.org_id]);
+  const emailConnections = orgConnections.filter((c) => c.kind === "email");
   const connectedEmailConnections = emailConnections.filter((c) => c.status === "connected");
+  const waConnections = orgConnections.filter((c) => c.kind === "whatsapp");
+  const connectedWaConnections = waConnections.filter((c) => c.status === "connected");
 
   const [editing, setEditing] = useState<TemplateRow | null>(null);
   const [draftTpl, setDraftTpl] = useState<TemplateDraft | null>(null);
@@ -173,8 +179,10 @@ export default function SequencePage() {
   // exactly what caused a real outage (every send for that step throws
   // "ambiguous" the moment more than one email connection is connected; see
   // emailWorker.ts's from-connection resolution), so the editor can't save
-  // an email template without one chosen.
-  const fromMissing = !!editing && !!draftTpl && editing.channel === "email" && !draftTpl.fromConnectionId;
+  // an email or whatsapp template without one chosen — whatsappWorker.ts
+  // has the identical ambiguity failure mode now that it too allows more
+  // than one connected connection.
+  const fromMissing = !!editing && !!draftTpl && (editing.channel === "email" || editing.channel === "whatsapp") && !draftTpl.fromConnectionId;
 
   function requestCloseEditor() {
     if (isTplDirty) setShowUnsavedConfirm(true);
@@ -848,6 +856,52 @@ export default function SequencePage() {
                     <label htmlFor="tn">Name</label>
                     <input id="tn" value={draftTpl.name} onChange={(e) => setDraftTpl({ ...draftTpl, name: e.target.value })} />
                   </div>
+                  {editing.channel === "whatsapp" && (
+                    <div className="field">
+                      <label htmlFor="tfromwa">
+                        From account
+                        <span className="text-destructive"> *</span>
+                      </label>
+                      <select
+                        id="tfromwa"
+                        value={draftTpl.fromConnectionId ?? ""}
+                        onChange={(e) => setDraftTpl({ ...draftTpl, fromConnectionId: e.target.value || null, fromEmail: null })}
+                      >
+                        <option value="">
+                          {connectedWaConnections.length > 1
+                            ? "Choose a From account…"
+                            : connectedWaConnections.length === 1
+                              ? `Default — ${
+                                  connectedWaConnections[0].account_label ||
+                                  providerInfo(connectedWaConnections[0].provider)?.label ||
+                                  connectedWaConnections[0].provider
+                                }`
+                              : "No connection is currently connected"}
+                        </option>
+                        {waConnections.map((c) => {
+                          const disabled = c.status !== "connected";
+                          const suffix = disabled ? " (not connected)" : "";
+                          return (
+                            <option key={c.id} value={c.id} disabled={disabled}>
+                              {(c.account_label || providerInfo(c.provider)?.label || c.provider) + suffix}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <p className="hint">
+                        {connectedWaConnections.length > 1
+                          ? "Which connected WhatsApp account this step sends from."
+                          : connectedWaConnections.length === 1
+                            ? "Your only connected WhatsApp account — go to Organization to connect another."
+                            : waConnections.length > 0
+                              ? "None of your configured WhatsApp connections are connected yet — test one on the Organization page to enable sending."
+                              : "Connect a WhatsApp provider on the Organization page before this step can send."}
+                      </p>
+                      {fromMissing && (
+                        <p className="text-sm text-destructive">Required — this step can&apos;t be saved without a From account chosen.</p>
+                      )}
+                    </div>
+                  )}
                   {editing.channel === "email" && (
                     <div className="field">
                       <label htmlFor="ts">Subject</label>

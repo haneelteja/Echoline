@@ -476,10 +476,14 @@ export default function OrganizationPage() {
                 </TableHeader>
                 <TableBody>
                   {conns.map((c) => {
-                    // email no longer replaces a sibling when connected —
-                    // multiple can stay connected at once (each template
-                    // picks its own From connection, see sequence/page.tsx).
-                    const activeSibling = kind !== "ai" && kind !== "email" ? conns.find((other) => other.id !== c.id && other.status === "connected") : undefined;
+                    // email/whatsapp no longer replace a sibling when
+                    // connected — multiple can stay connected at once (each
+                    // template picks its own From connection, see
+                    // sequence/page.tsx).
+                    const activeSibling =
+                      kind !== "ai" && kind !== "email" && kind !== "whatsapp"
+                        ? conns.find((other) => other.id !== c.id && other.status === "connected")
+                        : undefined;
                     const willSwitchActive = c.status !== "connected" && !!activeSibling;
                     return (
                     <TableRow key={c.id}>

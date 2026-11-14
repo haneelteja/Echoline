@@ -57,18 +57,17 @@ function masterKey() {
  * waQualityPoll.ts (a different app) each have their own fetch+write, since
  * both also do a different DB write shape around the fetch. */
 // Shared by /test, /test-send-email and /test-send-whatsapp — each of those
-// can flip a previously-"disconnected" row back to "connected" (that's how a
-// user picks a new "active" WhatsApp provider without re-entering
-// credentials: test the one you want active). Without this, two rows of the
-// same (org, kind) could end up "connected" at once, which breaks any code
-// path that assumes at most one — still true for whatsapp/email_imap
-// (whatsappWorker.ts's .maybeSingle() lookup). AI and email are both
-// exempt — multiple AI connections, and multiple email connections (one per
-// template's own From choice, see templates.from_connection_id), may
-// usefully stay "connected" at once; emailWorker.ts/sendNow.ts/
-// templateTestSend.ts no longer assume exactly one.
+// can flip a previously-"disconnected" row back to "connected". Without
+// this, two rows of the same (org, kind) could end up "connected" at once,
+// which breaks any code path that assumes at most one — still true for
+// email_imap. AI, email, and whatsapp are all exempt — multiple AI
+// connections, multiple email connections, and now multiple WhatsApp
+// connections (one per template's own From choice, see
+// templates.from_connection_id) may usefully stay "connected" at once;
+// emailWorker.ts/whatsappWorker.ts/sendNow.ts/templateTestSend.ts no longer
+// assume exactly one for either channel.
 async function demoteSiblingConnections(supabase: any, orgId: string, kind: string, keepConnId?: string): Promise<void> {
-  if (kind === "ai" || kind === "email") return;
+  if (kind === "ai" || kind === "email" || kind === "whatsapp") return;
   let query = supabase.from("provider_connections").update({ status: "disconnected", webhook_warning: null }).eq("org_id", orgId).eq("kind", kind).eq("status", "connected");
   // The create route calls this before the new row exists yet (nothing to
   // exclude); /test calls it on an existing row it wants to keep connected.

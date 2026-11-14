@@ -270,27 +270,22 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
     const channelKind: "em" | "wa" = body.channel === "email" ? "em" : "wa";
 
     const kind = body.channel === "email" ? "email" : "whatsapp";
-    // email is no longer limited to one connected row per org (see
-    // templates.from_connection_id) — fetched as a list for both kinds;
-    // whatsapp still only ever has one connected row, so candidates[0] is
-    // equivalent to the old .maybeSingle() for it.
+    // Neither email nor whatsapp is limited to one connected row per org any
+    // more (see templates.from_connection_id) — fetched as a list for both.
     const { data: conns, error: connErr } = await db.from("provider_connections").select("*").eq("org_id", p.org_id).eq("kind", kind).eq("status", "connected");
     if (connErr) return sendDbError(reply, connErr);
     const candidates = (conns as any[]) ?? [];
-    const conn =
-      kind === "email"
-        ? t.from_connection_id
-          ? candidates.find((x) => x.id === t.from_connection_id)
-          : candidates.length === 1
-            ? candidates[0]
-            : undefined
-        : candidates[0];
+    const conn = t.from_connection_id
+      ? candidates.find((x) => x.id === t.from_connection_id)
+      : candidates.length === 1
+        ? candidates[0]
+        : undefined;
     if (!conn) {
       return reply.code(400).send({
         error: "no_connection",
         message:
-          kind === "email" && candidates.length > 1 && !t.from_connection_id
-            ? "Multiple email connections are active for this organization — this template needs a From connection set"
+          candidates.length > 1 && !t.from_connection_id
+            ? `Multiple ${kind} connections are active for this organization — this template needs a From connection set`
             : `No connected ${kind} provider for this organization`,
       });
     }

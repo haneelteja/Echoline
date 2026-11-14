@@ -82,23 +82,38 @@ async function processWhatsAppJob(job: Job<SendJobData>): Promise<void> {
   }
 
   try {
-    const [{ data: contact }, { data: project }, { data: template }, { data: seq }, { data: conn }] = await Promise.all([
+    const [{ data: contact }, { data: project }, { data: template }, { data: seq }, { data: connections }] = await Promise.all([
       db.from("contacts").select("*").eq("id", contactId).single(),
       db.from("projects").select("*").eq("id", projectId).single(),
       db.from("templates").select("*").eq("project_id", projectId).eq("channel", "whatsapp").eq("step", step).maybeSingle(),
       db.from("sequence_settings").select("wa").eq("project_id", projectId).single(),
-      db.from("provider_connections").select("*").eq("org_id", orgId).eq("kind", "whatsapp").eq("status", "connected").maybeSingle(),
+      // whatsapp is no longer limited to one connected row per org (see
+      // templates.from_connection_id) — not .maybeSingle() any more.
+      db.from("provider_connections").select("*").eq("org_id", orgId).eq("kind", "whatsapp").eq("status", "connected"),
     ]);
 
     const c = contact as ContactRow | null;
     const phone = normPhone(c?.phone ?? null);
     if (!c || !phone) throw new Error("Contact has no valid WhatsApp number");
-    if (!conn) throw new Error("No connected WhatsApp provider for this organization");
 
     const t = template as TemplateRow | null;
     if (!t) {
       await fail("No WhatsApp template configured for this step", "blocked");
       return;
+    }
+
+    const candidates = (connections as any[]) ?? [];
+    const conn = t.from_connection_id
+      ? candidates.find((x) => x.id === t.from_connection_id)
+      : candidates.length === 1
+        ? candidates[0]
+        : undefined;
+    if (!conn) {
+      throw new Error(
+        t.from_connection_id
+          ? "This template's From connection isn't connected"
+          : "Multiple WhatsApp connections are active for this organization — this template needs a From connection set"
+      );
     }
 
     // Checked after claiming (not before) so a rate-limit hit goes through
