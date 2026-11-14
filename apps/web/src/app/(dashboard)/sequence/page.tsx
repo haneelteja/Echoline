@@ -771,8 +771,12 @@ export default function SequencePage() {
       <div className="top">
         <div>
           <h1>Sequence &amp; Templates</h1>
-          <p>When each message goes out, and what it says. Email and WhatsApp run independently.</p>
-          <p className="hint" style={{ marginTop: 4 }}>
+          {/* .top p's global 56ch cap (globals.css) is meant for a short
+              one-liner — this page's two longer paragraphs wrap into 3-4
+              lines even on a wide screen with that fixed cap, instead of
+              using the width actually available. */}
+          <p style={{ maxWidth: "none" }}>When each message goes out, and what it says. Email and WhatsApp run independently.</p>
+          <p className="hint" style={{ marginTop: 4, maxWidth: "none" }}>
             Follow-up waits add days + minutes + seconds together. The scheduler checks for due sends every ~5
             minutes, so very short waits (seconds, low minutes) won&apos;t fire instantly — useful for quick
             testing, not sub-5-minute precision.
