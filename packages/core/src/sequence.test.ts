@@ -82,6 +82,21 @@ describe("dueList", () => {
     expect(result.map((d) => d.contactId)).toContain("due");
     expect(result.map((d) => d.contactId)).not.toContain("future");
   });
+
+  it("prioritizes a due follow-up (later step) ahead of a brand-new lead (step 0)", () => {
+    const emOnly: SequenceSettings = { ...seq, wa: { ...seq.wa, enabled: false } };
+    const newLead = makeContact({ id: "new-lead" });
+    const followUp = makeContact({
+      id: "follow-up",
+      em_stage: 1,
+      em_status: "initial_sent",
+      em_last: new Date(0).toISOString(),
+    });
+    // Order given to dueList shouldn't matter — the new lead comes first in
+    // the input array, but the follow-up (step 1) must still come first out.
+    const result = dueList([newLead, followUp], emOnly);
+    expect(result.map((d) => d.contactId)).toEqual(["follow-up", "new-lead"]);
+  });
 });
 
 describe("isWithinSendWindow", () => {
