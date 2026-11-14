@@ -29,6 +29,7 @@ const SENT_CHANNEL: Record<"emails_sent" | "whatsapp_sent", "em" | "wa"> = { ema
 
 interface SentEventContactJoin {
   occurred_at: string;
+  payload: Record<string, unknown> | null;
   contacts: { name: string; email: string | null; phone: string | null; area: string | null; source: string | null; raw_email: string | null; raw_phone: string | null } | null;
 }
 
@@ -36,7 +37,8 @@ function toSentEventRows(events: SentEventContactJoin[], channel: "em" | "wa"): 
   return events.map((ev) => {
     const c = ev.contacts;
     const to = channel === "em" ? c?.email || c?.raw_email || "" : c?.phone || c?.raw_phone || "";
-    return { contactName: c?.name ?? "", to, area: c?.area ?? null, source: c?.source ?? null, occurredAt: ev.occurred_at };
+    const from = channel === "em" && typeof ev.payload?.from === "string" ? ev.payload.from : null;
+    return { contactName: c?.name ?? "", to, area: c?.area ?? null, source: c?.source ?? null, occurredAt: ev.occurred_at, from };
   });
 }
 
@@ -137,7 +139,7 @@ export const reportConfigRoutes: FastifyPluginAsync = async (app) => {
       const channel = SENT_CHANNEL[reportType];
       let eventsQuery = req.supabase
         .from("message_events")
-        .select("occurred_at, contacts(name, email, phone, area, source, raw_email, raw_phone)")
+        .select("occurred_at, payload, contacts(name, email, phone, area, source, raw_email, raw_phone)")
         .eq("project_id", projectId)
         .eq("event_type", "sent")
         .eq("channel", channel);
@@ -150,7 +152,7 @@ export const reportConfigRoutes: FastifyPluginAsync = async (app) => {
       let rawEvents = (events ?? []) as unknown as SentEventContactJoin[];
       if (!useExplicitRange) rawEvents = rawEvents.filter((ev) => localDate(ev.occurred_at, timezone) === today);
       const rows = toSentEventRows(rawEvents, channel);
-      table = buildSentMessagesReport(rows);
+      table = buildSentMessagesReport(rows, channel);
       rowCount = rows.length;
     } else {
       let contactsQuery = req.supabase.from("contacts").select("name, email, phone, category, area, source, created_at").eq("project_id", projectId);

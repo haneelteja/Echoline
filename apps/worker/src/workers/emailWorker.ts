@@ -272,7 +272,7 @@ async function processEmailJob(job: Job<SendJobData>): Promise<void> {
         contact_id: contactId,
         channel: "em",
         event_type: "sent",
-        payload: { step, providerMessageId: result.providerMessageId, test: testMode },
+        payload: { step, providerMessageId: result.providerMessageId, test: testMode, from: fromEmail },
       }),
     ]);
     log.info({ messageId, contactId, step }, "email sent");

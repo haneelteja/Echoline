@@ -123,8 +123,16 @@ function ChannelBadge({ channel }: { channel: "em" | "wa" | null }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-type ColumnKey = "occurred_at" | "channel" | "contact" | "to" | "event_type" | "detail";
-const EMPTY_FILTERS: Record<ColumnKey, string> = { occurred_at: "", channel: "", contact: "", to: "", event_type: "", detail: "" };
+type ColumnKey = "occurred_at" | "channel" | "contact" | "from" | "to" | "event_type" | "detail";
+const EMPTY_FILTERS: Record<ColumnKey, string> = { occurred_at: "", channel: "", contact: "", from: "", to: "", event_type: "", detail: "" };
+
+/** The From address resolved at send time for an email "sent" event — see
+ * emailWorker.ts/sendNow.ts's from-email precedence, recorded on the
+ * event's payload. No equivalent exists for WhatsApp or for non-"sent"
+ * events (deliveries/opens/bounces don't re-resolve a sender). */
+function fromAddress(ev: MessageEventRow): string {
+  return ev.channel === "em" && typeof ev.payload?.from === "string" ? ev.payload.from : "";
+}
 
 /** The address a given event actually went to — the contact's email for an
  * email event, their WhatsApp number for a WhatsApp event. A contact can
@@ -152,6 +160,7 @@ function sortValue(ev: MessageEventRow, key: ColumnKey): string {
   if (key === "occurred_at") return ev.occurred_at;
   if (key === "channel") return ev.channel === "em" ? "Email" : ev.channel === "wa" ? "WhatsApp" : "";
   if (key === "contact") return ev.contacts?.name ?? "";
+  if (key === "from") return fromAddress(ev);
   if (key === "to") return contactTarget(ev);
   if (key === "event_type") return eventLabel(ev.event_type);
   return eventSummary(ev) ?? "";
@@ -163,7 +172,7 @@ function csvCell(v: string): string {
 }
 
 function exportCsv(rows: MessageEventRow[]) {
-  const header = ["When", "Channel", "Contact", "To", "Event", "Detail"];
+  const header = ["When", "Channel", "Contact", "From", "To", "Event", "Detail"];
   const lines = [header.join(",")];
   for (const ev of rows) {
     lines.push(
@@ -171,6 +180,7 @@ function exportCsv(rows: MessageEventRow[]) {
         new Date(ev.occurred_at).toLocaleString(),
         ev.channel === "em" ? "Email" : ev.channel === "wa" ? "WhatsApp" : "",
         ev.contacts?.name ?? "",
+        fromAddress(ev),
         contactTarget(ev),
         eventLabel(ev.event_type),
         eventSummary(ev) ?? "",
@@ -326,12 +336,14 @@ export default function ActivityPage() {
         if (label !== columnFilters.channel) return false;
       }
       if (columnFilters.contact && !(ev.contacts?.name ?? "").toLowerCase().includes(columnFilters.contact.toLowerCase())) return false;
+      if (columnFilters.from && !fromAddress(ev).toLowerCase().includes(columnFilters.from.toLowerCase())) return false;
       if (columnFilters.to && !contactTarget(ev).toLowerCase().includes(columnFilters.to.toLowerCase())) return false;
       if (columnFilters.event_type && eventLabel(ev.event_type) !== columnFilters.event_type) return false;
       if (columnFilters.detail && !(eventSummary(ev) ?? "").toLowerCase().includes(columnFilters.detail.toLowerCase())) return false;
       if (!q) return true;
       return (
         (ev.contacts?.name ?? "").toLowerCase().includes(q) ||
+        fromAddress(ev).toLowerCase().includes(q) ||
         contactTarget(ev).toLowerCase().includes(q) ||
         eventLabel(ev.event_type).toLowerCase().includes(q) ||
         (eventSummary(ev) ?? "").toLowerCase().includes(q)
@@ -409,6 +421,7 @@ export default function ActivityPage() {
                 onSortChange={setColumnSort}
               />
               <ColumnHead columnKey="contact" label="Contact" sort={sort} filterValue={columnFilters.contact} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
+              <ColumnHead columnKey="from" label="From" sort={sort} filterValue={columnFilters.from} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
               <ColumnHead columnKey="to" label="To" sort={sort} filterValue={columnFilters.to} onFilterChange={setColumnFilter} onSortChange={setColumnSort} />
               <ColumnHead
                 columnKey="event_type"
@@ -436,6 +449,7 @@ export default function ActivityPage() {
                   <ChannelBadge channel={ev.channel} />
                 </TableCell>
                 <TableCell className="font-medium text-foreground">{ev.contacts?.name ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{fromAddress(ev) || "—"}</TableCell>
                 <TableCell
                   className={cn("text-muted-foreground", contactTargetIsInvalid(ev) && "italic")}
                   title={contactTargetIsInvalid(ev) ? "Invalid format — not used for sending" : undefined}

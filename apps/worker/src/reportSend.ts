@@ -26,6 +26,7 @@ const SENT_CHANNEL: Record<string, "em" | "wa"> = { emails_sent: "em", whatsapp_
 
 interface SentEventContactJoin {
   occurred_at: string;
+  payload: Record<string, unknown> | null;
   contacts: { name: string; email: string | null; phone: string | null; area: string | null; source: string | null; raw_email: string | null; raw_phone: string | null } | null;
 }
 
@@ -33,7 +34,8 @@ function toSentEventRows(events: SentEventContactJoin[], channel: "em" | "wa"): 
   return events.map((ev) => {
     const c = ev.contacts;
     const to = channel === "em" ? c?.email || c?.raw_email || "" : c?.phone || c?.raw_phone || "";
-    return { contactName: c?.name ?? "", to, area: c?.area ?? null, source: c?.source ?? null, occurredAt: ev.occurred_at };
+    const from = channel === "em" && typeof ev.payload?.from === "string" ? ev.payload.from : null;
+    return { contactName: c?.name ?? "", to, area: c?.area ?? null, source: c?.source ?? null, occurredAt: ev.occurred_at, from };
   });
 }
 
@@ -51,13 +53,13 @@ async function sendOneReport(
     const channel = SENT_CHANNEL[config.report_type];
     const { data: events, error } = await db
       .from("message_events")
-      .select("occurred_at, contacts(name, email, phone, area, source, raw_email, raw_phone)")
+      .select("occurred_at, payload, contacts(name, email, phone, area, source, raw_email, raw_phone)")
       .eq("project_id", config.project_id)
       .eq("event_type", "sent")
       .eq("channel", channel);
     if (error) throw error;
     const todaysEvents = ((events as unknown as SentEventContactJoin[]) ?? []).filter((ev) => localDate(ev.occurred_at, timezone) === today);
-    table = buildSentMessagesReport(toSentEventRows(todaysEvents, channel));
+    table = buildSentMessagesReport(toSentEventRows(todaysEvents, channel), channel);
     rowCount = todaysEvents.length;
   } else {
     const { data: contacts, error } = await db

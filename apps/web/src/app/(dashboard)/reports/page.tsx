@@ -26,7 +26,7 @@ function csvCell(v: string): string {
 }
 
 type SentChannel = "em" | "wa";
-type SentColumnKey = "occurred_at" | "contact" | "to" | "area" | "source";
+type SentColumnKey = "occurred_at" | "contact" | "from" | "to" | "area" | "source";
 
 /** Whichever address a send actually used — falls back to raw_email/
  * raw_phone the same way the Activity log does, so an "invalid format" send
@@ -36,9 +36,17 @@ function sentTo(ev: MessageEventRow, channel: SentChannel): string {
   return channel === "em" ? c?.email || c?.raw_email || "" : c?.phone || c?.raw_phone || "";
 }
 
+/** The From address resolved at send time (see emailWorker.ts/sendNow.ts's
+ * from-email precedence), recorded on the "sent" message_event's payload.
+ * Only meaningful for email — WhatsApp has no per-send sender identity. */
+function sentFrom(ev: MessageEventRow): string {
+  return typeof ev.payload?.from === "string" ? ev.payload.from : "";
+}
+
 function sentSortValue(ev: MessageEventRow, channel: SentChannel, key: SentColumnKey): string {
   if (key === "occurred_at") return ev.occurred_at;
   if (key === "contact") return ev.contacts?.name ?? "";
+  if (key === "from") return sentFrom(ev);
   if (key === "to") return sentTo(ev, channel);
   if (key === "area") return ev.contacts?.area ?? "";
   return ev.contacts?.source ?? "";
@@ -219,7 +227,9 @@ export default function ReportsPage() {
         ? ["Name", "Email", "Phone", "Category", "Area", "Source", "Added"]
         : tab === "leads_by_source"
           ? ["Source", "Leads"]
-          : ["Contact", "To", "Area", "Source", "Sent at"];
+          : tab === "emails_sent"
+            ? ["Contact", "From", "To", "Area", "Source", "Sent at"]
+            : ["Contact", "To", "Area", "Source", "Sent at"];
     const lines = [header.join(",")];
     if (tab === "new_leads") {
       for (const c of filtered) {
@@ -231,11 +241,18 @@ export default function ReportsPage() {
       }
     } else if (tab === "leads_by_source") {
       for (const [source, count] of bySource) lines.push([source, String(count)].map(csvCell).join(","));
-    } else {
-      const channel: SentChannel = tab === "emails_sent" ? "em" : "wa";
-      for (const ev of tab === "emails_sent" ? emailsSent : whatsappSent) {
+    } else if (tab === "emails_sent") {
+      for (const ev of emailsSent) {
         lines.push(
-          [ev.contacts?.name ?? "", sentTo(ev, channel), ev.contacts?.area ?? "", ev.contacts?.source ?? "", new Date(ev.occurred_at).toLocaleString()]
+          [ev.contacts?.name ?? "", sentFrom(ev), sentTo(ev, "em"), ev.contacts?.area ?? "", ev.contacts?.source ?? "", new Date(ev.occurred_at).toLocaleString()]
+            .map(csvCell)
+            .join(",")
+        );
+      }
+    } else {
+      for (const ev of whatsappSent) {
+        lines.push(
+          [ev.contacts?.name ?? "", sentTo(ev, "wa"), ev.contacts?.area ?? "", ev.contacts?.source ?? "", new Date(ev.occurred_at).toLocaleString()]
             .map(csvCell)
             .join(",")
         );
@@ -392,6 +409,9 @@ export default function ReportsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead label="Contact" active={sentSort.key === "contact" ? sentSort.dir : null} onClick={() => toggleSentSort("contact")} />
+              {tab === "emails_sent" && (
+                <SortableHead label="From" active={sentSort.key === "from" ? sentSort.dir : null} onClick={() => toggleSentSort("from")} />
+              )}
               <SortableHead label={tab === "emails_sent" ? "Email" : "Phone"} active={sentSort.key === "to" ? sentSort.dir : null} onClick={() => toggleSentSort("to")} />
               <SortableHead label="Area" active={sentSort.key === "area" ? sentSort.dir : null} onClick={() => toggleSentSort("area")} />
               <SortableHead label="Source" active={sentSort.key === "source" ? sentSort.dir : null} onClick={() => toggleSentSort("source")} />
@@ -402,6 +422,7 @@ export default function ReportsPage() {
             {(tab === "emails_sent" ? pagedEmailsSent : pagedWhatsappSent).map((ev) => (
               <TableRow key={ev.id}>
                 <TableCell className="font-medium text-foreground">{ev.contacts?.name ?? "—"}</TableCell>
+                {tab === "emails_sent" && <TableCell className="text-muted-foreground">{sentFrom(ev) || "—"}</TableCell>}
                 <TableCell className="text-muted-foreground">{sentTo(ev, tab === "emails_sent" ? "em" : "wa") || "—"}</TableCell>
                 <TableCell className="text-muted-foreground">{ev.contacts?.area || "—"}</TableCell>
                 <TableCell className="text-muted-foreground">{ev.contacts?.source || "—"}</TableCell>

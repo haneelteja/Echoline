@@ -176,6 +176,7 @@ async function markSent(
     projectId: string;
     templateId: string;
     testMode: boolean;
+    fromEmail?: string;
   }
 ): Promise<void> {
   const newStage = opts.step + 1;
@@ -204,7 +205,7 @@ async function markSent(
       contact_id: opts.contactId,
       channel: opts.channel,
       event_type: "sent",
-      payload: { manual: true, templateId: opts.templateId, step: opts.step, providerMessageId: opts.providerMessageId, test: opts.testMode },
+      payload: { manual: true, templateId: opts.templateId, step: opts.step, providerMessageId: opts.providerMessageId, test: opts.testMode, from: opts.fromEmail },
     }),
   ]);
 }
@@ -388,6 +389,7 @@ export const sendNowRoutes: FastifyPluginAsync = async (app) => {
           projectId,
           templateId: body.templateId,
           testMode,
+          fromEmail,
         });
         return { ok: true };
       }

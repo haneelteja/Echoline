@@ -80,9 +80,20 @@ export interface ReportSentEventRow {
   area: string | null;
   source: string | null;
   occurredAt: string;
+  /** The From address actually used for this send — only meaningful for the
+   * email channel (resolved at send time from the template/connection
+   * precedence chain, see emailWorker.ts/sendNow.ts). Always null for
+   * WhatsApp, which has no equivalent per-send identity to report. */
+  from?: string | null;
 }
 
-export function buildSentMessagesReport(rows: ReportSentEventRow[]): ReportTable {
+export function buildSentMessagesReport(rows: ReportSentEventRow[], channel: "em" | "wa"): ReportTable {
+  if (channel === "em") {
+    return {
+      headers: ["Contact", "From", "To", "Area", "Source", "Sent at"],
+      rows: rows.map((r) => [r.contactName, r.from ?? "", r.to, r.area ?? "", r.source ?? "", new Date(r.occurredAt).toLocaleString()]),
+    };
+  }
   return {
     headers: ["Contact", "To", "Area", "Source", "Sent at"],
     rows: rows.map((r) => [r.contactName, r.to, r.area ?? "", r.source ?? "", new Date(r.occurredAt).toLocaleString()]),
